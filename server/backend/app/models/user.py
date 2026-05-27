@@ -16,10 +16,10 @@ if TYPE_CHECKING:
     from app.models.audit_log import AuditLog
     from app.models.conversation import Conversation
     from app.models.conversation_member import ConversationMember
+    from app.models.device_key import DeviceKey
     from app.models.message import Message
-    from app.models.message_recipient import MessageRecipient
+    from app.models.one_time_prekey import OneTimePreKey
     from app.models.refresh_session import RefreshSession
-    from app.models.user_key_bundle import UserKeyBundle
 
 
 class User(Base):
@@ -66,9 +66,12 @@ class User(Base):
         onupdate=func.now(),
     )
 
-    key_bundles: Mapped[list["UserKeyBundle"]] = relationship(
-        "UserKeyBundle",
+    device_keys: Mapped[list["DeviceKey"]] = relationship(
+        "DeviceKey",
         back_populates="user",
+    )
+    one_time_prekeys: Mapped[list["OneTimePreKey"]] = relationship(
+        "OneTimePreKey",
     )
     refresh_sessions: Mapped[list["RefreshSession"]] = relationship(
         "RefreshSession",
@@ -87,11 +90,12 @@ class User(Base):
     sent_messages: Mapped[list["Message"]] = relationship(
         "Message",
         back_populates="sender",
-        foreign_keys="Message.sender_id",
+        foreign_keys="Message.sender_user_id",
     )
-    message_recipients: Mapped[list["MessageRecipient"]] = relationship(
-        "MessageRecipient",
+    received_messages: Mapped[list["Message"]] = relationship(
+        "Message",
         back_populates="recipient",
+        foreign_keys="Message.recipient_user_id",
     )
     audit_logs: Mapped[list["AuditLog"]] = relationship(
         "AuditLog",
