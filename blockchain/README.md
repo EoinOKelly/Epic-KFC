@@ -24,6 +24,8 @@ npm run serve:fidelity
 
 Paste `fidelity-ui/deployment.json` values into the UI (or load from file if served locally).
 
+Project-wide architecture and crypto integration: [../docs/README.md](../docs/README.md).
+
 ## Integration for backend / client teams
 
 | Function | Purpose |

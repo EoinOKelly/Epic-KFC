@@ -8,7 +8,7 @@
     "build": "tsc",
     "prepare": "npm run build"
   },
-  "keywords": ["cryptography", "argon2", "hkdf", "aead", "hpke"],
+  "keywords": ["cryptography", "argon2", "hkdf", "aead", "hpke", "signal-protocol"],
   "license": "UNLICENSED",
   "engines": {
     "node": ">=18.0.0"
