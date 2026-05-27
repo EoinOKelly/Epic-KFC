@@ -1,0 +1,21 @@
+# Dependencies & build output
+node_modules/
+dist/
+artifacts/
+cache/
+typechain-types/
+coverage/
+coverage.json
+
+# Secrets & local env
+.env
+.env.local
+*.pem
+*.key
+
+# OS & editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

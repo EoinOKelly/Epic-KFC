@@ -1,0 +1,7 @@
+[
+  "event HashAnchored(bytes32 indexed recordId, bytes32 contentHash, uint256 anchoredAt)",
+  "error RecordNotFound(bytes32 recordId)",
+  "function getHash(bytes32 recordId) view returns (bytes32 contentHash, uint256 anchoredAt)",
+  "function hasRecord(bytes32 recordId) view returns (bool)",
+  "function storeHash(bytes32 recordId, bytes32 contentHash)"
+]

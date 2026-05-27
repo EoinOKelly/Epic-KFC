@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Message Fidelity Checker</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="card">
+    <header>
+      <h1>Message Fidelity</h1>
+      <p class="subtitle">
+        Compare a locally computed <code>keccak256</code> digest with the value anchored on Sepolia.
+      </p>
+    </header>
+
+    <section class="field">
+      <label for="rpcUrl">Sepolia RPC URL</label>
+      <input id="rpcUrl" type="url" placeholder="https://sepolia.infura.io/v3/..." />
+      <span class="hint">Public RPC or your Infura/Alchemy endpoint (read-only is enough).</span>
+    </section>
+
+    <section class="field">
+      <label for="contractAddress">Contract address</label>
+      <input id="contractAddress" type="text" placeholder="0x..." spellcheck="false" />
+    </section>
+
+    <section class="field">
+      <label for="recordLabel">Record ID label</label>
+      <input id="recordLabel" type="text" placeholder="conversation:alice-bob" />
+      <span class="hint">Hashed to <code>bytes32</code> via <code>keccak256(utf8Bytes(label))</code> (ethers <code>id()</code>).</span>
+    </section>
+
+    <section class="field">
+      <label for="messageText">Message text (local digest)</label>
+      <textarea id="messageText" rows="5" placeholder="Paste message plaintext to hash locally…"></textarea>
+    </section>
+
+    <div class="actions">
+      <button type="button" id="loadDeployment" class="secondary">Load deployment.json</button>
+      <button type="button" id="verifyBtn">Verify fidelity</button>
+    </div>
+
+    <output id="result" class="result hidden" aria-live="polite"></output>
+
+    <details class="debug">
+      <summary>Technical details</summary>
+      <pre id="debugOut"></pre>
+    </details>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.umd.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "network": "sepolia",
+  "chainId": 11155111,
+  "contractAddress": "",
+  "note": "Run npm run deploy:sepolia to populate contractAddress"
+}

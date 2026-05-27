@@ -1,0 +1,21 @@
+# Project Context
+We are building a secure messaging application for a university project (CS4455). 
+My specific roles are the Blockchain and Cryptography modules. Other teammates are handling the C++ client and Backend/DB. My code needs to be modular so they can integrate it later.
+
+# Cryptography Strict Rules (Mandatory)
+1. AEAD ONLY: For message payloads, use ONLY AES-256-GCM or ChaCha20-Poly1305. Encrypt-and-MAC or custom constructions are strictly forbidden.
+2. Key Derivation: Use HKDF with explicit info and salt.
+3. Password Hashing: Use Argon2id (memory-hard function).
+4. Key Establishment: Use HPKE Mode_Auth (RFC 9180) concepts. 
+5. Trust Model: Implement logic for Trust On First Use (TOFU) with public key pinning.
+6. Local Keys: Local private keys must be encrypted at rest using a separately derived key.
+
+# Blockchain Strict Rules (Mandatory)
+1. Must demonstrate tamper-evident integrity verification of messaging data.
+2. Store `keccak256` hashes of message conversation digests alongside block timestamps.
+3. Network: Target Ethereum Sepolia testnet.
+4. Smart contracts must be written in Solidity, optimized for gas where appropriate.
+
+# General Rules
+- Write clean, heavily commented code explaining *why* cryptographic choices were made.
+- Output modular utility files (e.g., TypeScript/Node.js or Python, whichever is preferred for the crypto utils) that expose clear functions for the backend/client teams to call.
