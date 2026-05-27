@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+pydantic-settings
+sqlalchemy>=2.0
+alembic
+asyncpg
+greenlet
+python-dotenv
+pytest
+pytest-asyncio
+httpx
+argon2-cffi
+pytest-cov
+ruff
+bandit
+pip-audit
