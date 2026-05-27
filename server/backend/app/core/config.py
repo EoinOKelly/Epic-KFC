@@ -20,6 +20,11 @@ class Settings(BaseSettings):
         description="Async SQLAlchemy database URL for tests.",
     )
     log_level: str = "INFO"
+    jwt_secret_key: str | None = None
+    refresh_token_hash_secret: str | None = None
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 15
+    refresh_token_expire_days: int = 7
 
     model_config = SettingsConfigDict(
         env_file=(".env", "backend/.env"),
