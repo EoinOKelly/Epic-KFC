@@ -15,6 +15,10 @@ class Settings(BaseSettings):
         default=None,
         description="Async SQLAlchemy database URL.",
     )
+    test_database_url: str | None = Field(
+        default=None,
+        description="Async SQLAlchemy database URL for tests.",
+    )
     log_level: str = "INFO"
 
     model_config = SettingsConfigDict(

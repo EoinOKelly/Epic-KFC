@@ -10,6 +10,9 @@ from ..core.config import settings
 if not settings.database_url:
     raise RuntimeError("DATABASE_URL must be set before database sessions can be used.")
 
+if not settings.database_url.startswith("postgresql+asyncpg://"):
+    raise RuntimeError("DATABASE_URL must use the postgresql+asyncpg scheme.")
+
 
 engine = create_async_engine(
     settings.database_url,
