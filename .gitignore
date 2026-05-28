@@ -6,16 +6,53 @@ cache/
 typechain-types/
 coverage/
 coverage.json
+.venv/
+venv/
+env/
+.tox/
+*.egg-info/
+pip-wheel-metadata/
 
 # Secrets & local env
 .env
 .env.local
+.env.*
+!.env.example
 *.pem
 *.key
+*.crt
+*.p12
+
+# Python caches, tests, and local reports
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyre/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+junit.xml
+
+# Local databases, dumps, and logs
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.bak
+*.log
+logs/
+pgdata/
+.postgres/
 
 # OS & editor
 .DS_Store
 Thumbs.db
 *.swp
+*.swo
 .idea/
 .vscode/
