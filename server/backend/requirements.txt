@@ -16,3 +16,4 @@ pytest-cov
 ruff
 bandit
 pip-audit
+pytest-asyncio
