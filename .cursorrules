@@ -19,3 +19,10 @@ My specific roles are the Blockchain and Cryptography modules. Other teammates a
 # General Rules
 - Write clean, heavily commented code explaining *why* cryptographic choices were made.
 - Output modular utility files (e.g., TypeScript/Node.js or Python, whichever is preferred for the crypto utils) that expose clear functions for the backend/client teams to call.
+
+# Library-first policy (mandatory)
+- Prefer vetted standard libraries over hand-rolled protocol or primitive code.
+- Allowed: Node crypto, argon2, libsodium, hpke-js, @signalapp/libsignal-client, OpenSSL (C++), Web Crypto API.
+- Do not implement custom AES, Argon2, curve math, or full protocol state machines when a maintained library already provides them.
+- Thin wrappers (parameters, wire format, DB types) are fine; reimplementing X3DH/Double Ratchet from scratch is a last resort and must be documented.
+- If the brief (e.g. AEAD-only) conflicts with a library default cipher, prefer library with pluggable AEAD, then documented deviation—not an unaudited full protocol rewrite.

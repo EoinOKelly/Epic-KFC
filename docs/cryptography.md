@@ -2,6 +2,22 @@
 
 Package: `cryptography/` (`@epic-messaging/cryptography`).
 
+## Library-first policy
+
+**Default:** use a standard, audited library for anything security-critical.
+
+| Area | Preferred | Current repo |
+|------|-----------|--------------|
+| Password hashing | `argon2` | `argon2` |
+| HKDF, AES-GCM, X25519, Ed25519 | Node `crypto` | Node `crypto` |
+| E2EE session (X3DH + ratchet) | `@signalapp/libsignal-client` or maintained TS port | `@privacyresearch/libsignal-protocol-typescript` via `signal/` |
+| HPKE (if required literally) | `hpke-js` / `@hpke/core` | X3DH used for same role |
+| C++ client | OpenSSL 3 / libsodium | Team to align with wire format |
+
+**In this repo:** session setup and ratcheting are delegated to the TS port. **We keep:** Argon2 / HKDF / at-rest GCM (`cryptoEngine.ts`), wire format + DB types, TOFU helpers. **We do not** maintain a hand-rolled double ratchet.
+
+**Cipher note:** the privacyresearch port uses Signal’s default **AES-256-CBC + HMAC** for transport internals. To keep CS4455 AEAD compliance, `encryptForRecipient` wraps the user message payload in an explicit **AES-256-GCM** envelope before passing bytes into the ratchet.
+
 ## Two layers
 
 ### 1. `cryptoEngine.ts` — primitives (server + client)
@@ -16,27 +32,31 @@ Package: `cryptography/` (`@epic-messaging/cryptography`).
 
 Uses **Node `crypto`** and **`argon2`** — not custom implementations of AES or Argon2.
 
-### 2. `signal/` — E2EE sessions
+### 2. `signal/` — E2EE sessions (library-backed)
 
-| Piece | Spec basis |
-|-------|------------|
-| X3DH | [Signal X3DH](https://signal.org/docs/specifications/x3dh/) |
-| Double Ratchet | [Signal Double Ratchet](https://signal.org/docs/specifications/doubleratchet/) |
-| Payload cipher | **AES-256-GCM** (CS4455 AEAD rule; Signal uses AES-CBC+HMAC) |
+| Piece | Implementation |
+|-------|----------------|
+| X3DH + Double Ratchet | `@privacyresearch/libsignal-protocol-typescript` |
+| Wire envelope | `libsignal-v1` JSON (`LibSignalWireMessage`) |
+| TOFU | `verifyIdentityTofu` / `pinIdentity` (our code) |
 
 High-level API:
 
 ```typescript
 import {
-  buildPreKeyBundle,
-  createInitiatorSession,
-  createResponderSession,
-  signalEncrypt,
-  signalDecrypt,
+  generateDevice,
+  deviceToPublicBundle,
+  establishSession,
+  encryptForRecipient,
+  decryptFromSender,
   serializeWireMessage,
   deserializeWireMessage,
+  verifyIdentityTofu,
+  pinIdentity,
 } from "@epic-messaging/cryptography";
 ```
+
+Smoke test: `cd cryptography && npm run smoke:signal`.
 
 ## X3DH + ratchet (conceptual)
 
@@ -51,8 +71,8 @@ flowchart LR
   subgraph ratchet [Every message]
     CK[Chain keys via KDF_CK]
     MK[Message key]
-    GCM[AES-256-GCM]
-    CK --> MK --> GCM
+    ENC[Library message cipher]
+    CK --> MK --> ENC
     DH[DH ratchet steps]
     DH --> CK
   end
@@ -84,6 +104,6 @@ Types: `storageSchema.ts`, `wireFormat.ts`.
 - **AES-256**: acceptable symmetric layer for PQ threat models (with Grover caveat).
 - **X25519 / Ed25519**: **not** post-quantum; PQXDH would be needed for PQ session setup (Signal roadmap).
 
-## Known gap vs production Signal
+## Future: `@signalapp/libsignal-client`
 
-Ratchet **state machine** is maintained in this repo, not **libsignal**. Fine for CS4455 with spec citations and documented limitations; production would prefer audited libsignal for the protocol layer.
+Official libsignal adds **PQXDH (Kyber)** and matches production Signal. `DeviceKeysRow` reserves optional `kyber_prekey_*` columns for that migration. Classic X3DH in the current port does not populate them.

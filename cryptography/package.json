@@ -6,14 +6,25 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "smoke:signal": "npm run build && node scripts/smoke-signal.js",
+    "smoke:signal:verbose": "npm run build && node scripts/smoke-signal.js --verbose",
+    "demo:signal": "npm run build && node scripts/demo-signal.js"
   },
-  "keywords": ["cryptography", "argon2", "hkdf", "aead", "hpke", "signal-protocol"],
+  "keywords": [
+    "cryptography",
+    "argon2",
+    "hkdf",
+    "aead",
+    "hpke",
+    "signal-protocol"
+  ],
   "license": "UNLICENSED",
   "engines": {
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "@privacyresearch/libsignal-protocol-typescript": "^0.0.16",
     "argon2": "^0.43.0"
   },
   "devDependencies": {

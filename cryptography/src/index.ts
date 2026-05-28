@@ -29,11 +29,12 @@ export {
   serializeWireMessage,
   deserializeWireMessage,
 } from "./wireFormat";
-export type { StoredWireMessage } from "./wireFormat";
+export type { SignalWireMessage } from "./wireFormat";
 
 export type {
   UserAuthRow,
   DeviceKeysRow,
+  StoredDeviceKeysRow,
   OneTimePreKeyRow,
   MessageRow,
   MessageMetadata,
