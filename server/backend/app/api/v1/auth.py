@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +18,7 @@ from app.schemas.auth import (
     UserResponse,
 )
 from app.schemas.common import SuccessResponse
-from app.services import auth_service
+from app.services import audit_service, auth_service
 from app.services.auth_service import AuthError, DuplicateUserError
 
 
@@ -31,6 +32,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 )
 async def register(
     request: RegisterRequest,
+    http_request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserResponse:
     """Register a user without issuing login tokens."""
@@ -42,11 +44,27 @@ async def register(
             password=request.password.get_secret_value(),
         )
     except DuplicateUserError as exc:
+        await _record_audit_event(
+            db,
+            http_request,
+            event_type="auth.register_duplicate_rejected",
+            success=False,
+            details={"reason": "duplicate_user"},
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Username or email is unavailable",
         ) from exc
 
+    await _record_audit_event(
+        db,
+        http_request,
+        event_type="auth.register_success",
+        actor_user_id=user.id,
+        success=True,
+        resource_type="user",
+        resource_id=user.id,
+    )
     return UserResponse.model_validate(user)
 
 
@@ -63,6 +81,13 @@ async def login(
         password=request.password.get_secret_value(),
     )
     if user is None:
+        await _record_audit_event(
+            db,
+            http_request,
+            event_type="auth.login_failed",
+            success=False,
+            details={"reason": "invalid_credentials"},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
@@ -73,6 +98,15 @@ async def login(
         user,
         ip_address=_get_client_ip(http_request),
         user_agent=_get_user_agent(http_request),
+    )
+    await _record_audit_event(
+        db,
+        http_request,
+        event_type="auth.login_success",
+        actor_user_id=user.id,
+        success=True,
+        resource_type="user",
+        resource_id=user.id,
     )
     return TokenResponse.model_validate(token_result)
 
@@ -92,21 +126,41 @@ async def refresh(
             user_agent=_get_user_agent(http_request),
         )
     except AuthError as exc:
+        await _record_audit_event(
+            db,
+            http_request,
+            event_type="auth.refresh_failed",
+            success=False,
+            details={"reason": "invalid_refresh_token"},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token",
         ) from exc
 
+    await _record_audit_event(
+        db,
+        http_request,
+        event_type="auth.refresh_success",
+        success=True,
+    )
     return TokenResponse.model_validate(token_result)
 
 
 @router.post("/logout", response_model=SuccessResponse)
 async def logout(
     request: RefreshTokenRequest,
+    http_request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SuccessResponse:
     """Revoke a refresh token without revealing whether it was valid."""
     await auth_service.logout(db, request.refresh_token.get_secret_value())
+    await _record_audit_event(
+        db,
+        http_request,
+        event_type="auth.logout",
+        success=True,
+    )
     return SuccessResponse(message="Logged out")
 
 
@@ -128,3 +182,27 @@ def _get_client_ip(request: Request) -> str | None:
 def _get_user_agent(request: Request) -> str | None:
     """Return the user-agent header without proxy-aware parsing."""
     return request.headers.get("user-agent")
+
+
+async def _record_audit_event(
+    db: AsyncSession,
+    request: Request,
+    event_type: str,
+    success: bool,
+    actor_user_id: UUID | None = None,
+    resource_type: str | None = None,
+    resource_id: UUID | None = None,
+    details: dict[str, object] | None = None,
+) -> None:
+    """Record an auth audit event without changing public route behavior."""
+    await audit_service.record_audit_event_best_effort(
+        db,
+        actor_user_id=actor_user_id,
+        event_type=event_type,
+        success=success,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        ip_address=_get_client_ip(request),
+        user_agent=_get_user_agent(request),
+        details=details,
+    )

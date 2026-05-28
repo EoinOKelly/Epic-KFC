@@ -5,8 +5,6 @@ Importing these models registers their tables with Base.metadata for Alembic.
 
 from app.models.audit_log import AuditLog
 from app.models.blockchain_anchor import BlockchainAnchor
-from app.models.conversation import Conversation
-from app.models.conversation_member import ConversationMember
 from app.models.device_key import DeviceKey
 from app.models.message import Message
 from app.models.one_time_prekey import OneTimePreKey
@@ -16,8 +14,6 @@ from app.models.user import User
 __all__ = [
     "AuditLog",
     "BlockchainAnchor",
-    "Conversation",
-    "ConversationMember",
     "DeviceKey",
     "Message",
     "OneTimePreKey",

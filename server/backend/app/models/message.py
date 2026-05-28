@@ -14,7 +14,6 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.blockchain_anchor import BlockchainAnchor
-    from app.models.conversation import Conversation
     from app.models.user import User
 
 
@@ -34,7 +33,6 @@ class Message(Base):
             "created_at",
         ),
         Index("ix_messages_sender_user_id_created_at", "sender_user_id", "created_at"),
-        Index("ix_messages_conversation_id", "conversation_id"),
         Index("ix_messages_access_revoked_at", "access_revoked_at"),
         Index("ix_messages_sender_deleted_at", "sender_deleted_at"),
         Index("ix_messages_recipient_deleted_at", "recipient_deleted_at"),
@@ -58,11 +56,6 @@ class Message(Base):
         nullable=False,
     )
     recipient_device_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    conversation_id: Mapped[UUID | None] = mapped_column(
-        PgUUID(as_uuid=True),
-        ForeignKey("conversations.id"),
-        nullable=True,
-    )
     wire_payload_json: Mapped[str] = mapped_column(Text, nullable=False)
     consumed_one_time_prekey_id: Mapped[int | None] = mapped_column(
         Integer,
@@ -99,10 +92,6 @@ class Message(Base):
         "User",
         back_populates="received_messages",
         foreign_keys=[recipient_user_id],
-    )
-    conversation: Mapped["Conversation | None"] = relationship(
-        "Conversation",
-        back_populates="messages",
     )
     blockchain_anchors: Mapped[list["BlockchainAnchor"]] = relationship(
         "BlockchainAnchor",

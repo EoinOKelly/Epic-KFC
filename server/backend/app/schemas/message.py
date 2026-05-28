@@ -16,12 +16,11 @@ from app.schemas.common import (
 
 
 class MessageCreateRequest(StrictRequestModel):
-    """Create an opaque relay message for a recipient device."""
+    """Create a direct 1:1 opaque relay message for a recipient device."""
 
     sender_device_id: int = Field(gt=0)
     recipient_user_id: UUID
     recipient_device_id: int = Field(gt=0)
-    conversation_id: UUID | None = None
     wire_payload_json: str = Field(min_length=2, max_length=MAX_WIRE_PAYLOAD_BYTES)
     consumed_one_time_prekey_id: int | None = Field(default=None, gt=0)
 
@@ -32,6 +31,14 @@ class MessageCreateRequest(StrictRequestModel):
         return validate_wire_payload_json(value)
 
 
+class DirectMessageCreateRequest(MessageCreateRequest):
+    """Create a direct 1:1 opaque relay message for a recipient device."""
+
+
+class DirectMessageForwardRequest(DirectMessageCreateRequest):
+    """Forward a direct message using a newly encrypted opaque payload."""
+
+
 class MessageResponse(ORMResponseModel):
     """Stored opaque relay message response."""
 
@@ -40,7 +47,6 @@ class MessageResponse(ORMResponseModel):
     sender_device_id: int
     recipient_user_id: UUID
     recipient_device_id: int
-    conversation_id: UUID | None
     wire_payload_json: str
     consumed_one_time_prekey_id: int | None
     created_at: datetime
@@ -56,7 +62,6 @@ class InboxMessageResponse(ORMResponseModel):
     id: UUID
     sender_user_id: UUID
     sender_device_id: int
-    conversation_id: UUID | None
     wire_payload_json: str
     created_at: datetime
     access_revoked_at: datetime | None

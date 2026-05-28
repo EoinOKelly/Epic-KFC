@@ -20,7 +20,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    """Create the initial relay-oriented secure messaging schema."""
+    """Create the direct 1:1 relay-oriented secure messaging schema."""
     op.create_table(
         "users",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -84,40 +84,6 @@ def upgrade() -> None:
         unique=False,
     )
     op.create_index("ix_audit_logs_success", "audit_logs", ["success"], unique=False)
-
-    op.create_table(
-        "conversations",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("created_by", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("title", sa.String(length=120), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["created_by"], ["users.id"]),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(
-        "ix_conversations_created_by",
-        "conversations",
-        ["created_by"],
-        unique=False,
-    )
-    op.create_index(
-        "ix_conversations_deleted_at",
-        "conversations",
-        ["deleted_at"],
-        unique=False,
-    )
 
     op.create_table(
         "device_keys",
@@ -236,69 +202,13 @@ def upgrade() -> None:
     )
 
     op.create_table(
-        "conversation_members",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("conversation_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column(
-            "member_role",
-            sa.String(length=30),
-            server_default="member",
-            nullable=False,
-        ),
-        sa.Column("added_by", postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column(
-            "added_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("is_active", sa.Boolean(), server_default="true", nullable=False),
-        sa.ForeignKeyConstraint(["added_by"], ["users.id"]),
-        sa.ForeignKeyConstraint(["conversation_id"], ["conversations.id"]),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "conversation_id",
-            "user_id",
-            name="uq_conversation_members_conversation_id_user_id",
-        ),
-    )
-    op.create_index(
-        "ix_conversation_members_conversation_id",
-        "conversation_members",
-        ["conversation_id"],
-        unique=False,
-    )
-    op.create_index(
-        "ix_conversation_members_conversation_id_is_active",
-        "conversation_members",
-        ["conversation_id", "is_active"],
-        unique=False,
-    )
-    op.create_index(
-        "ix_conversation_members_revoked_at",
-        "conversation_members",
-        ["revoked_at"],
-        unique=False,
-    )
-    op.create_index(
-        "ix_conversation_members_user_id",
-        "conversation_members",
-        ["user_id"],
-        unique=False,
-    )
-
-    op.create_table(
         "messages",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("sender_user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("sender_device_id", sa.Integer(), nullable=False),
         sa.Column("recipient_user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("recipient_device_id", sa.Integer(), nullable=False),
-        sa.Column("conversation_id", postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column("wire_payload_json", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("wire_payload_json", sa.Text(), nullable=False),
         sa.Column("consumed_one_time_prekey_id", sa.Integer(), nullable=True),
         sa.Column(
             "created_at",
@@ -306,23 +216,37 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
+        sa.Column("access_revoked_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("sender_deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("recipient_deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["conversation_id"], ["conversations.id"]),
         sa.ForeignKeyConstraint(["recipient_user_id"], ["users.id"]),
         sa.ForeignKeyConstraint(["sender_user_id"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        "ix_messages_conversation_id",
+        "ix_messages_access_revoked_at",
         "messages",
-        ["conversation_id"],
+        ["access_revoked_at"],
         unique=False,
     )
     op.create_index("ix_messages_deleted_at", "messages", ["deleted_at"], unique=False)
     op.create_index(
+        "ix_messages_recipient_deleted_at",
+        "messages",
+        ["recipient_deleted_at"],
+        unique=False,
+    )
+    op.create_index(
         "ix_messages_recipient_user_id_device_id_created_at",
         "messages",
         ["recipient_user_id", "recipient_device_id", "created_at"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_messages_sender_deleted_at",
+        "messages",
+        ["sender_deleted_at"],
         unique=False,
     )
     op.create_index(
@@ -335,8 +259,7 @@ def upgrade() -> None:
     op.create_table(
         "blockchain_anchors",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("message_id", postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column("conversation_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("message_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("digest", sa.String(length=128), nullable=False),
         sa.Column("transaction_hash", sa.String(length=255), nullable=True),
         sa.Column("contract_address", sa.String(length=255), nullable=True),
@@ -349,19 +272,8 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("anchored_at", sa.DateTime(timezone=True), nullable=True),
-        sa.CheckConstraint(
-            "message_id IS NOT NULL OR conversation_id IS NOT NULL",
-            name="ck_blockchain_anchors_message_or_conversation",
-        ),
-        sa.ForeignKeyConstraint(["conversation_id"], ["conversations.id"]),
         sa.ForeignKeyConstraint(["message_id"], ["messages.id"]),
         sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(
-        "ix_blockchain_anchors_conversation_id",
-        "blockchain_anchors",
-        ["conversation_id"],
-        unique=False,
     )
     op.create_index(
         "ix_blockchain_anchors_digest",
@@ -390,7 +302,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Drop the initial relay-oriented secure messaging schema."""
+    """Drop the direct 1:1 relay-oriented secure messaging schema."""
     op.drop_index(
         "ix_blockchain_anchors_transaction_hash",
         table_name="blockchain_anchors",
@@ -398,32 +310,18 @@ def downgrade() -> None:
     op.drop_index("ix_blockchain_anchors_status", table_name="blockchain_anchors")
     op.drop_index("ix_blockchain_anchors_message_id", table_name="blockchain_anchors")
     op.drop_index("ix_blockchain_anchors_digest", table_name="blockchain_anchors")
-    op.drop_index(
-        "ix_blockchain_anchors_conversation_id",
-        table_name="blockchain_anchors",
-    )
     op.drop_table("blockchain_anchors")
 
     op.drop_index("ix_messages_sender_user_id_created_at", table_name="messages")
+    op.drop_index("ix_messages_sender_deleted_at", table_name="messages")
     op.drop_index(
         "ix_messages_recipient_user_id_device_id_created_at",
         table_name="messages",
     )
+    op.drop_index("ix_messages_recipient_deleted_at", table_name="messages")
     op.drop_index("ix_messages_deleted_at", table_name="messages")
-    op.drop_index("ix_messages_conversation_id", table_name="messages")
+    op.drop_index("ix_messages_access_revoked_at", table_name="messages")
     op.drop_table("messages")
-
-    op.drop_index("ix_conversation_members_user_id", table_name="conversation_members")
-    op.drop_index("ix_conversation_members_revoked_at", table_name="conversation_members")
-    op.drop_index(
-        "ix_conversation_members_conversation_id_is_active",
-        table_name="conversation_members",
-    )
-    op.drop_index(
-        "ix_conversation_members_conversation_id",
-        table_name="conversation_members",
-    )
-    op.drop_table("conversation_members")
 
     op.drop_index("ix_refresh_sessions_user_id", table_name="refresh_sessions")
     op.drop_index("ix_refresh_sessions_revoked_at", table_name="refresh_sessions")
@@ -444,10 +342,6 @@ def downgrade() -> None:
     op.drop_index("ix_device_keys_user_id", table_name="device_keys")
     op.drop_index("ix_device_keys_revoked_at", table_name="device_keys")
     op.drop_table("device_keys")
-
-    op.drop_index("ix_conversations_deleted_at", table_name="conversations")
-    op.drop_index("ix_conversations_created_by", table_name="conversations")
-    op.drop_table("conversations")
 
     op.drop_index("ix_audit_logs_success", table_name="audit_logs")
     op.drop_index("ix_audit_logs_resource_type_resource_id", table_name="audit_logs")

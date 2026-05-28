@@ -14,8 +14,6 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.audit_log import AuditLog
-    from app.models.conversation import Conversation
-    from app.models.conversation_member import ConversationMember
     from app.models.device_key import DeviceKey
     from app.models.message import Message
     from app.models.one_time_prekey import OneTimePreKey
@@ -76,16 +74,6 @@ class User(Base):
     refresh_sessions: Mapped[list["RefreshSession"]] = relationship(
         "RefreshSession",
         back_populates="user",
-    )
-    created_conversations: Mapped[list["Conversation"]] = relationship(
-        "Conversation",
-        back_populates="creator",
-        foreign_keys="Conversation.created_by",
-    )
-    conversation_memberships: Mapped[list["ConversationMember"]] = relationship(
-        "ConversationMember",
-        back_populates="user",
-        foreign_keys="ConversationMember.user_id",
     )
     sent_messages: Mapped[list["Message"]] = relationship(
         "Message",

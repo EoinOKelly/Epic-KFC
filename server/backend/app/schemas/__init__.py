@@ -20,11 +20,6 @@ from app.schemas.common import (
     TimestampedResponse,
     UUIDResponse,
 )
-from app.schemas.conversation import (
-    ConversationCreateRequest,
-    ConversationMemberResponse,
-    ConversationResponse,
-)
 from app.schemas.device_key import (
     DeviceKeyResponse,
     DeviceKeyUploadRequest,
@@ -45,9 +40,6 @@ __all__ = [
     "AuditLogResponse",
     "BlockchainAnchorCreateRequest",
     "BlockchainAnchorResponse",
-    "ConversationCreateRequest",
-    "ConversationMemberResponse",
-    "ConversationResponse",
     "DeviceKeyResponse",
     "DeviceKeyUploadRequest",
     "ErrorResponse",

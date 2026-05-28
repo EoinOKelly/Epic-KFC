@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Self
+from typing import Literal
 from uuid import UUID
 
-from pydantic import field_validator, model_validator
+from pydantic import field_validator
 
 from app.schemas.common import (
     ORMResponseModel,
@@ -19,21 +19,13 @@ from app.schemas.common import (
 class BlockchainAnchorCreateRequest(StrictRequestModel):
     """Create blockchain digest/transaction metadata."""
 
-    message_id: UUID | None = None
-    conversation_id: UUID | None = None
+    message_id: UUID
     digest: str
     transaction_hash: str | None = None
     contract_address: str | None = None
     chain: Literal["sepolia"]
     status: Literal["pending", "confirmed", "failed"]
     anchored_at: datetime | None = None
-
-    @model_validator(mode="after")
-    def validate_anchor_target(self) -> Self:
-        """Require at least one anchored resource identifier."""
-        if self.message_id is None and self.conversation_id is None:
-            raise ValueError("At least one of message_id or conversation_id is required.")
-        return self
 
     @field_validator("digest")
     @classmethod
@@ -62,8 +54,7 @@ class BlockchainAnchorResponse(ORMResponseModel):
     """Blockchain anchor metadata response."""
 
     id: UUID
-    message_id: UUID | None
-    conversation_id: UUID | None
+    message_id: UUID
     digest: str
     transaction_hash: str | None
     contract_address: str | None
