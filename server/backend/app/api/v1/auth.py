@@ -7,7 +7,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
+from app.api.deps import get_current_user, get_db
+from app.models.user import User
 from app.schemas.auth import (
     LoginRequest,
     RefreshTokenRequest,
@@ -107,6 +108,14 @@ async def logout(
     """Revoke a refresh token without revealing whether it was valid."""
     await auth_service.logout(db, request.refresh_token.get_secret_value())
     return SuccessResponse(message="Logged out")
+
+
+@router.get("/me", response_model=UserResponse)
+async def read_current_user(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> UserResponse:
+    """Return the authenticated user's safe profile."""
+    return UserResponse.model_validate(current_user)
 
 
 def _get_client_ip(request: Request) -> str | None:
