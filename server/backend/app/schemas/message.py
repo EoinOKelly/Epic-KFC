@@ -44,6 +44,9 @@ class MessageResponse(ORMResponseModel):
     wire_payload_json: str
     consumed_one_time_prekey_id: int | None
     created_at: datetime
+    access_revoked_at: datetime | None
+    sender_deleted_at: datetime | None
+    recipient_deleted_at: datetime | None
     deleted_at: datetime | None
 
 
@@ -56,3 +59,5 @@ class InboxMessageResponse(ORMResponseModel):
     conversation_id: UUID | None
     wire_payload_json: str
     created_at: datetime
+    access_revoked_at: datetime | None
+    recipient_deleted_at: datetime | None

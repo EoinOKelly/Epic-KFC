@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -36,6 +35,9 @@ class Message(Base):
         ),
         Index("ix_messages_sender_user_id_created_at", "sender_user_id", "created_at"),
         Index("ix_messages_conversation_id", "conversation_id"),
+        Index("ix_messages_access_revoked_at", "access_revoked_at"),
+        Index("ix_messages_sender_deleted_at", "sender_deleted_at"),
+        Index("ix_messages_recipient_deleted_at", "recipient_deleted_at"),
         Index("ix_messages_deleted_at", "deleted_at"),
     )
 
@@ -61,7 +63,7 @@ class Message(Base):
         ForeignKey("conversations.id"),
         nullable=True,
     )
-    wire_payload_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    wire_payload_json: Mapped[str] = mapped_column(Text, nullable=False)
     consumed_one_time_prekey_id: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
@@ -70,6 +72,18 @@ class Message(Base):
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
+    )
+    access_revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    sender_deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    recipient_deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
