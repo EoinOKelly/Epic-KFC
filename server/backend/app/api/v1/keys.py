@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import enforce_user_rate_limit, get_current_user, get_db
+from app.core import rate_limit
 from app.models.user import User
 from app.repositories import device_key_repository, one_time_prekey_repository
 from app.schemas.device_key import (
@@ -39,6 +40,11 @@ async def upsert_device_key(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> DeviceKeyResponse:
     """Register or update public device key material for the current user."""
+    await enforce_user_rate_limit(
+        current_user.id,
+        "keys.device_upsert",
+        rate_limit.DEVICE_KEY_UPLOAD_RATE_LIMIT,
+    )
     if device_id != request.device_id:
         raise _device_id_mismatch_error()
 
@@ -82,6 +88,11 @@ async def upload_one_time_prekeys(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[OneTimePreKeyResponse]:
     """Upload public one-time prekeys for the current user's device."""
+    await enforce_user_rate_limit(
+        current_user.id,
+        "keys.one_time_prekey_upload",
+        rate_limit.ONE_TIME_PREKEY_UPLOAD_RATE_LIMIT,
+    )
     if any(prekey.device_id != device_id for prekey in request.prekeys):
         raise _device_id_mismatch_error()
 
@@ -125,6 +136,11 @@ async def get_prekey_bundle(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PreKeyBundleResponse:
     """Return public prekey bundle material for session setup."""
+    await enforce_user_rate_limit(
+        current_user.id,
+        "keys.prekey_bundle_fetch",
+        rate_limit.PREKEY_BUNDLE_FETCH_RATE_LIMIT,
+    )
     device_key = await device_key_repository.get_active_by_user_and_device(
         db,
         user_id,

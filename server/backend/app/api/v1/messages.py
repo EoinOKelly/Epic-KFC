@@ -8,7 +8,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import enforce_user_rate_limit, get_current_user, get_db
+from app.core import rate_limit
 from app.models.user import User
 from app.schemas.common import PaginationParams, SuccessResponse
 from app.schemas.message import (
@@ -41,6 +42,11 @@ async def send_message(
 ) -> MessageResponse:
     """Create a direct 1:1 encrypted relay message."""
     actor_user_id = current_user.id
+    await enforce_user_rate_limit(
+        actor_user_id,
+        "messages.send",
+        rate_limit.MESSAGE_SEND_RATE_LIMIT,
+    )
     try:
         message = await message_service.send_message(db, current_user, request)
     except RecipientNotFoundError as exc:
@@ -62,11 +68,18 @@ async def send_message(
 
 @router.get("/received", response_model=list[MessageResponse])
 async def list_received_messages(
+    http_request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends()],
 ) -> list[MessageResponse]:
     """List direct messages visible to the current user as recipient."""
+    _ = http_request
+    await enforce_user_rate_limit(
+        current_user.id,
+        "messages.list_received",
+        rate_limit.MESSAGE_READ_RATE_LIMIT,
+    )
     messages = await message_service.list_received_messages(
         db,
         current_user,
@@ -77,11 +90,18 @@ async def list_received_messages(
 
 @router.get("/sent", response_model=list[MessageResponse])
 async def list_sent_messages(
+    http_request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends()],
 ) -> list[MessageResponse]:
     """List direct messages visible to the current user as sender."""
+    _ = http_request
+    await enforce_user_rate_limit(
+        current_user.id,
+        "messages.list_sent",
+        rate_limit.MESSAGE_READ_RATE_LIMIT,
+    )
     messages = await message_service.list_sent_messages(db, current_user, pagination)
     return [MessageResponse.model_validate(message) for message in messages]
 
@@ -95,6 +115,11 @@ async def get_message(
 ) -> MessageResponse:
     """Return a direct message only if the current user can access it."""
     actor_user_id = current_user.id
+    await enforce_user_rate_limit(
+        actor_user_id,
+        "messages.fetch",
+        rate_limit.MESSAGE_READ_RATE_LIMIT,
+    )
     try:
         message = await message_service.get_message_for_user(
             db,
@@ -140,6 +165,11 @@ async def forward_message(
 ) -> MessageResponse:
     """Forward a message by storing a newly encrypted opaque payload."""
     actor_user_id = current_user.id
+    await enforce_user_rate_limit(
+        actor_user_id,
+        "messages.forward",
+        rate_limit.MESSAGE_FORWARD_RATE_LIMIT,
+    )
     try:
         message = await message_service.forward_message(
             db,
@@ -205,6 +235,11 @@ async def revoke_message(
 ) -> MessageResponse:
     """Revoke recipient access to a sender-owned message."""
     actor_user_id = current_user.id
+    await enforce_user_rate_limit(
+        actor_user_id,
+        "messages.revoke",
+        rate_limit.MESSAGE_READ_RATE_LIMIT,
+    )
     try:
         message = await message_service.revoke_message_access(
             db,
@@ -245,6 +280,11 @@ async def delete_message(
 ) -> SuccessResponse:
     """Hide a direct message from the current user without hard deletion."""
     actor_user_id = current_user.id
+    await enforce_user_rate_limit(
+        actor_user_id,
+        "messages.delete",
+        rate_limit.MESSAGE_READ_RATE_LIMIT,
+    )
     try:
         message = await message_service.delete_message_for_user(
             db,

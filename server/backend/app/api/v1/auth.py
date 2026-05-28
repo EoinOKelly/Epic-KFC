@@ -8,7 +8,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import enforce_ip_rate_limit, get_current_user, get_db
+from app.core import rate_limit
 from app.models.user import User
 from app.schemas.auth import (
     LoginRequest,
@@ -36,6 +37,11 @@ async def register(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserResponse:
     """Register a user without issuing login tokens."""
+    await enforce_ip_rate_limit(
+        http_request,
+        "auth.register",
+        rate_limit.REGISTER_RATE_LIMIT,
+    )
     try:
         user = await auth_service.register_user(
             db,
@@ -75,6 +81,11 @@ async def login(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
     """Authenticate a user and issue access and refresh tokens."""
+    await enforce_ip_rate_limit(
+        http_request,
+        "auth.login",
+        rate_limit.LOGIN_RATE_LIMIT,
+    )
     user = await auth_service.authenticate_user(
         db,
         username_or_email=request.username_or_email,
@@ -118,6 +129,11 @@ async def refresh(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
     """Rotate a refresh token and issue a new access token."""
+    await enforce_ip_rate_limit(
+        http_request,
+        "auth.refresh",
+        rate_limit.REFRESH_RATE_LIMIT,
+    )
     try:
         token_result = await auth_service.refresh_access_token(
             db,

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 import app.models  # noqa: F401
 from app.core.config import settings
+from app.core.rate_limit import GLOBAL_RATE_LIMITER
 from app.db.base import Base
 
 
@@ -64,3 +65,11 @@ async def integration_db() -> AsyncGenerator[AsyncSession, None]:
                 await db.rollback()
     finally:
         await engine.dispose()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def clear_rate_limiter_state() -> AsyncGenerator[None, None]:
+    """Keep in-memory rate-limit counters isolated between tests."""
+    await GLOBAL_RATE_LIMITER.clear()
+    yield
+    await GLOBAL_RATE_LIMITER.clear()
