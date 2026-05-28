@@ -1,1 +1,1 @@
-"""Future service-layer package."""
+"""Service-layer package."""

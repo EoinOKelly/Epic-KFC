@@ -36,15 +36,19 @@ async def create_refresh_session(
 async def get_active_by_hash(
     db: AsyncSession,
     refresh_token_hash: str,
+    *,
+    for_update: bool = False,
 ) -> RefreshSession | None:
     """Return an active refresh session by token hash."""
-    result = await db.execute(
-        select(RefreshSession).where(
-            RefreshSession.refresh_token_hash == refresh_token_hash,
-            RefreshSession.revoked_at.is_(None),
-            RefreshSession.expires_at > datetime.now(UTC),
-        )
+    statement = select(RefreshSession).where(
+        RefreshSession.refresh_token_hash == refresh_token_hash,
+        RefreshSession.revoked_at.is_(None),
+        RefreshSession.expires_at > datetime.now(UTC),
     )
+    if for_update:
+        statement = statement.with_for_update()
+
+    result = await db.execute(statement)
     return result.scalar_one_or_none()
 
 
