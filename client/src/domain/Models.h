@@ -55,6 +55,8 @@ enum class MessageDirection {
     Received
 };
 
+inline constexpr int DefaultDeviceId = 1;
+
 struct ClientError {
     ErrorCode code{ErrorCode::OperationFailed};
     QString message;
@@ -63,7 +65,7 @@ struct ClientError {
 struct StartupConfig {
     ClientMode mode{ClientMode::Mock};
     QString apiUrl;
-    int deviceId{1};
+    int deviceId{DefaultDeviceId};
     QString statePath;
 };
 
@@ -93,7 +95,7 @@ struct AuthSession {
 };
 
 struct DeviceKeyMaterial {
-    int deviceId{1};
+    int deviceId{DefaultDeviceId};
     int registrationId{0};
     QString identityKey;
     QString identityPrivateKey;
@@ -106,7 +108,7 @@ struct DeviceKeyMaterial {
 };
 
 struct OneTimePreKey {
-    int deviceId{1};
+    int deviceId{DefaultDeviceId};
     int preKeyId{0};
     QString publicKey;
     QString privateKey;
@@ -116,7 +118,7 @@ struct OneTimePreKey {
 struct PreKeyBundle {
     QString userId;
     int registrationId{0};
-    int deviceId{1};
+    int deviceId{DefaultDeviceId};
     QString identityKey;
     QString identitySigningKey;
     int signedPreKeyId{0};
@@ -128,7 +130,7 @@ struct PreKeyBundle {
 
 struct TrustPin {
     QString userId;
-    int deviceId{1};
+    int deviceId{DefaultDeviceId};
     QString identityKey;
     QDateTime firstSeenAt;
 };
@@ -141,9 +143,9 @@ struct EncryptedPayload {
 struct LocalMessage {
     QString id;
     QString senderUserId;
-    int senderDeviceId{1};
+    int senderDeviceId{DefaultDeviceId};
     QString recipientUserId;
-    int recipientDeviceId{1};
+    int recipientDeviceId{DefaultDeviceId};
     QString wirePayloadJson;
     std::optional<int> consumedOneTimePreKeyId;
     QDateTime createdAt;
@@ -156,7 +158,7 @@ struct LocalMessage {
 
 struct ConversationSummary {
     QString peerUserId;
-    int peerDeviceId{1};
+    int peerDeviceId{DefaultDeviceId};
     int messageCount{0};
     QDateTime latestMessageAt;
 };
