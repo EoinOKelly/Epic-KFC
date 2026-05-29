@@ -8,6 +8,8 @@
 #include <QMessageAuthenticationCode>
 #include <QRandomGenerator>
 
+#include <optional>
+
 #if CLIENT_HAS_OPENSSL
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
@@ -30,6 +32,11 @@ bool isValidBase64(const QString& value) {
 }
 
 #if CLIENT_HAS_OPENSSL
+struct AeadResult {
+    QByteArray ciphertext;
+    QByteArray authTag;
+};
+
 struct RawKeyPair {
     QByteArray publicKey;
     QByteArray privateKey;
@@ -128,6 +135,49 @@ QByteArray hkdfSha256(const QByteArray& ikm, const QByteArray& salt, const QByte
     output.resize(static_cast<qsizetype>(outputLength));
     EVP_PKEY_CTX_free(context);
     return output;
+}
+
+std::optional<AeadResult> aesGcmEncrypt(const QByteArray& plaintext, const QByteArray& key, const QByteArray& iv, const QByteArray& aad) {
+    EVP_CIPHER_CTX* context = EVP_CIPHER_CTX_new();
+    QByteArray ciphertext(plaintext.size(), Qt::Uninitialized);
+    QByteArray tag(CryptoText::AuthTagBytes, Qt::Uninitialized);
+    int outputLength = 0;
+    int finalLength = 0;
+    const bool ok = context != nullptr
+        && EVP_EncryptInit_ex(context, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) == 1
+        && EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_SET_IVLEN, iv.size(), nullptr) == 1
+        && EVP_EncryptInit_ex(context, nullptr, nullptr, reinterpret_cast<const unsigned char*>(key.constData()), reinterpret_cast<const unsigned char*>(iv.constData())) == 1
+        && (aad.isEmpty() || EVP_EncryptUpdate(context, nullptr, &outputLength, reinterpret_cast<const unsigned char*>(aad.constData()), aad.size()) == 1)
+        && EVP_EncryptUpdate(context, reinterpret_cast<unsigned char*>(ciphertext.data()), &outputLength, reinterpret_cast<const unsigned char*>(plaintext.constData()), plaintext.size()) == 1
+        && EVP_EncryptFinal_ex(context, reinterpret_cast<unsigned char*>(ciphertext.data()) + outputLength, &finalLength) == 1
+        && EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_GET_TAG, tag.size(), tag.data()) == 1;
+    EVP_CIPHER_CTX_free(context);
+    if (!ok) {
+        return std::nullopt;
+    }
+    ciphertext.resize(outputLength + finalLength);
+    return AeadResult{ciphertext, tag};
+}
+
+std::optional<QByteArray> aesGcmDecrypt(const QByteArray& ciphertext, const QByteArray& key, const QByteArray& iv, const QByteArray& aad, const QByteArray& tag) {
+    EVP_CIPHER_CTX* context = EVP_CIPHER_CTX_new();
+    QByteArray plaintext(ciphertext.size(), Qt::Uninitialized);
+    int outputLength = 0;
+    int finalLength = 0;
+    const bool initialized = context != nullptr
+        && EVP_DecryptInit_ex(context, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) == 1
+        && EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_SET_IVLEN, iv.size(), nullptr) == 1
+        && EVP_DecryptInit_ex(context, nullptr, nullptr, reinterpret_cast<const unsigned char*>(key.constData()), reinterpret_cast<const unsigned char*>(iv.constData())) == 1
+        && (aad.isEmpty() || EVP_DecryptUpdate(context, nullptr, &outputLength, reinterpret_cast<const unsigned char*>(aad.constData()), aad.size()) == 1)
+        && EVP_DecryptUpdate(context, reinterpret_cast<unsigned char*>(plaintext.data()), &outputLength, reinterpret_cast<const unsigned char*>(ciphertext.constData()), ciphertext.size()) == 1
+        && EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_SET_TAG, tag.size(), const_cast<char*>(tag.constData())) == 1;
+    const bool finalized = initialized && EVP_DecryptFinal_ex(context, reinterpret_cast<unsigned char*>(plaintext.data()) + outputLength, &finalLength) == 1;
+    EVP_CIPHER_CTX_free(context);
+    if (!finalized) {
+        return std::nullopt;
+    }
+    plaintext.resize(outputLength + finalLength);
+    return plaintext;
 }
 #endif
 }
@@ -248,8 +298,17 @@ Result<EncryptedPayload> NativeSignalCryptoProvider::encrypt(
 #endif
     const QByteArray iv = randomBytes(CryptoText::IvBytes);
     const QByteArray aad = aadFor(counter, previousCounter, ratchetPublicKey);
+#if CLIENT_HAS_OPENSSL
+    const auto encrypted = aesGcmEncrypt(plaintext.toUtf8(), key, iv, aad);
+    if (!encrypted.has_value()) {
+        return Result<EncryptedPayload>::failure({ErrorCode::CryptoError, "AES-256-GCM encryption failed."});
+    }
+    const QByteArray ciphertext = encrypted->ciphertext;
+    const QByteArray tag = encrypted->authTag;
+#else
     const QByteArray ciphertext = cryptWithKeystream(plaintext.toUtf8(), key, iv);
     const QByteArray tag = hmac(key, aad + ciphertext).left(CryptoText::AuthTagBytes);
+#endif
 
     QJsonObject root{
         {CryptoText::WireCounter, counter},
@@ -299,6 +358,13 @@ Result<QString> NativeSignalCryptoProvider::decrypt(const QString& currentUserId
         remoteIdentityKey,
         QByteArray(CryptoText::X3dhInfo.toUtf8()));
     const QByteArray aad = aadFor(counter, previousCounter, ratchetPublicKey);
+#if CLIENT_HAS_OPENSSL
+    const auto plaintext = aesGcmDecrypt(ciphertext, key, iv, aad, receivedTag);
+    if (!plaintext.has_value()) {
+        return Result<QString>::failure({ErrorCode::CryptoError, "Message authentication failed."});
+    }
+    return Result<QString>::success(QString::fromUtf8(*plaintext));
+#else
     const QByteArray expectedTag = hmac(key, aad + ciphertext).left(CryptoText::AuthTagBytes);
     if (receivedTag != expectedTag) {
         return Result<QString>::failure({ErrorCode::CryptoError, "Message authentication failed."});
@@ -306,6 +372,7 @@ Result<QString> NativeSignalCryptoProvider::decrypt(const QString& currentUserId
 
     const QByteArray plaintext = cryptWithKeystream(ciphertext, key, iv);
     return Result<QString>::success(QString::fromUtf8(plaintext));
+#endif
 }
 
 QByteArray NativeSignalCryptoProvider::randomBytes(qsizetype size) const {
