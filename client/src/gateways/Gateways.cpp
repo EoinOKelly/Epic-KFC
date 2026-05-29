@@ -147,6 +147,7 @@ void MockMessageGateway::sendMessage(const QString& accessToken, const LocalMess
             return;
         }
         LocalMessage saved = withServerFields(draft);
+        saved.consumedOneTimePreKeyId = consumedPreKeyId;
         saved.direction = MessageDirection::Sent;
         m_messages.push_back(saved);
         callback(Result<LocalMessage>::success(saved));

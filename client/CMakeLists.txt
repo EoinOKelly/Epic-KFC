@@ -33,6 +33,8 @@ set(CLIENT_CORE_SOURCES
     src/console/ConsoleInputWorker.h
     src/console/ConsolePresenter.cpp
     src/console/ConsolePresenter.h
+    src/crypto/MockCryptoProvider.cpp
+    src/crypto/MockCryptoProvider.h
     src/crypto/NativeSignalCryptoProvider.cpp
     src/crypto/NativeSignalCryptoProvider.h
     src/domain/Models.cpp
@@ -73,6 +75,11 @@ if(OpenSSL_FOUND)
     target_compile_definitions(client_core
         PUBLIC
             CLIENT_HAS_OPENSSL=1
+    )
+else()
+    target_compile_definitions(client_core
+        PUBLIC
+            CLIENT_HAS_OPENSSL=0
     )
 endif()
 

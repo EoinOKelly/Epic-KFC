@@ -1,5 +1,6 @@
 #include "app/StartupConfig.h"
 #include "app/SlashCommandParser.h"
+#include "crypto/MockCryptoProvider.h"
 #include "crypto/NativeSignalCryptoProvider.h"
 #include "domain/Models.h"
 
@@ -47,6 +48,7 @@ void testStartupConfig() {
 
 void testCryptoWireShape() {
     NativeSignalCryptoProvider crypto;
+#if CLIENT_HAS_OPENSSL
     const auto alice = crypto.loadOrCreateDevice({}, 1);
     const auto bob = crypto.loadOrCreateDevice({}, 1);
     expect(alice.succeeded() && bob.succeeded(), "crypto creates device key material");
@@ -73,6 +75,72 @@ void testCryptoWireShape() {
     const QJsonObject wire = QJsonDocument::fromJson(encrypted.value().wirePayloadJson.toUtf8()).object();
     expect(wire.contains("counter") && wire.contains("previousCounter") && wire.contains("ciphertext")
         && wire.contains("iv") && wire.contains("authTag"), "crypto emits required wire json fields");
+
+    LocalMessage received{
+        "message-1",
+        "alice",
+        alice.value().deviceId,
+        "bob",
+        bob.value().deviceId,
+        encrypted.value().wirePayloadJson,
+        encrypted.value().consumedOneTimePreKeyId,
+        QDateTime::currentDateTimeUtc(),
+        {},
+        {},
+        {},
+        {},
+        MessageDirection::Received
+    };
+    const auto decrypted = crypto.decrypt("bob", bob.value(), received, std::nullopt);
+    expect(decrypted.succeeded() && decrypted.value() == "hello", "crypto decrypts first X3DH message");
+
+    QJsonObject tampered = wire;
+    tampered.insert("authTag", QString::fromLatin1(QByteArray("tampered-auth-tag").toBase64()));
+    received.wirePayloadJson = QString::fromUtf8(QJsonDocument(tampered).toJson(QJsonDocument::Compact));
+    const auto rejected = crypto.decrypt("bob", bob.value(), received, std::nullopt);
+    expect(rejected.failed(), "crypto rejects tampered AES-GCM payload");
+#else
+    expect(!crypto.isAvailable(), "native crypto reports unavailable without OpenSSL");
+#endif
+}
+
+void testMockCrypto() {
+    MockCryptoProvider crypto;
+    const auto alice = crypto.loadOrCreateDevice({}, 1);
+    const auto bob = crypto.loadOrCreateDevice({}, 1);
+    expect(alice.succeeded() && bob.succeeded(), "mock crypto creates device key material");
+
+    PreKeyBundle bundle{
+        "bob",
+        bob.value().registrationId,
+        bob.value().deviceId,
+        bob.value().identityKey,
+        bob.value().identitySigningKey,
+        bob.value().signedPreKeyId,
+        bob.value().signedPreKey,
+        bob.value().signedPreKeySignature,
+        std::nullopt,
+        {}
+    };
+
+    const auto encrypted = crypto.encrypt("alice", alice.value(), bundle, "mock hello");
+    LocalMessage received{
+        "message-1",
+        "alice",
+        alice.value().deviceId,
+        "bob",
+        bob.value().deviceId,
+        encrypted.value().wirePayloadJson,
+        encrypted.value().consumedOneTimePreKeyId,
+        QDateTime::currentDateTimeUtc(),
+        {},
+        {},
+        {},
+        {},
+        MessageDirection::Received
+    };
+    const auto decrypted = crypto.decrypt("bob", bob.value(), received, std::nullopt);
+    expect(decrypted.succeeded() && decrypted.value() == "mock hello", "mock crypto decrypts demo payloads");
 }
 }
 
@@ -83,6 +151,7 @@ int main(int argc, char* argv[]) {
     testParser();
     testStartupConfig();
     testCryptoWireShape();
+    testMockCrypto();
 
     return failures == 0 ? 0 : 1;
 }

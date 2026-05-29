@@ -182,31 +182,45 @@ std::optional<QByteArray> aesGcmDecrypt(const QByteArray& ciphertext, const QByt
 #endif
 }
 
+bool NativeSignalCryptoProvider::isAvailable() const {
+#if CLIENT_HAS_OPENSSL
+    return true;
+#else
+    return false;
+#endif
+}
+
 Result<DeviceKeyMaterial> NativeSignalCryptoProvider::loadOrCreateDevice(DeviceKeyMaterial existing, int deviceId) {
+#if !CLIENT_HAS_OPENSSL
+    Q_UNUSED(existing)
+    Q_UNUSED(deviceId)
+    return Result<DeviceKeyMaterial>::failure({ErrorCode::CryptoError, AppText::NativeCryptoUnavailable});
+#else
     if (!existing.identityKey.isEmpty()) {
         return Result<DeviceKeyMaterial>::success(existing);
     }
 
-#if CLIENT_HAS_OPENSSL
     const RawKeyPair identity = generateRawKeyPair(EVP_PKEY_X25519);
     const RawKeyPair signing = generateRawKeyPair(EVP_PKEY_ED25519);
     const RawKeyPair signedPreKey = generateRawKeyPair(EVP_PKEY_X25519);
     const QByteArray signature = ed25519Sign(signing.privateKey, signedPreKey.publicKey);
+    const bool keyGenerationFailed = identity.publicKey.size() != CryptoText::KeyBytes
+        || identity.privateKey.size() != CryptoText::KeyBytes
+        || signing.publicKey.size() != CryptoText::KeyBytes
+        || signing.privateKey.size() != CryptoText::KeyBytes
+        || signedPreKey.publicKey.size() != CryptoText::KeyBytes
+        || signedPreKey.privateKey.size() != CryptoText::KeyBytes
+        || signature.isEmpty();
+    if (keyGenerationFailed) {
+        return Result<DeviceKeyMaterial>::failure({ErrorCode::CryptoError, "OpenSSL key generation failed."});
+    }
+
     const QByteArray identityPublic = identity.publicKey;
     const QByteArray identityPrivate = identity.privateKey;
     const QByteArray signingPublic = signing.publicKey;
     const QByteArray signingPrivate = signing.privateKey;
     const QByteArray signedPreKeyPublic = signedPreKey.publicKey;
     const QByteArray signedPreKeyPrivate = signedPreKey.privateKey;
-#else
-    const QByteArray identityPrivate = randomBytes(CryptoText::KeyBytes);
-    const QByteArray signingPrivate = randomBytes(CryptoText::KeyBytes);
-    const QByteArray signedPreKeyPrivate = randomBytes(CryptoText::KeyBytes);
-    const QByteArray identityPublic = identityPrivate;
-    const QByteArray signingPublic = signingPrivate;
-    const QByteArray signedPreKeyPublic = signedPreKeyPrivate;
-    const QByteArray signature = hmac(signingPublic, signedPreKeyPublic);
-#endif
     const int registrationId = CryptoText::DefaultRegistrationIdMinimum
         + static_cast<int>(QRandomGenerator::global()->bounded(CryptoText::DefaultRegistrationIdRange));
 
@@ -222,19 +236,23 @@ Result<DeviceKeyMaterial> NativeSignalCryptoProvider::loadOrCreateDevice(DeviceK
         toBase64(signedPreKeyPrivate),
         toBase64(signature)
     });
+#endif
 }
 
 Result<QList<OneTimePreKey>> NativeSignalCryptoProvider::createOneTimePreKeys(int deviceId, int count) {
+#if !CLIENT_HAS_OPENSSL
+    Q_UNUSED(deviceId)
+    Q_UNUSED(count)
+    return Result<QList<OneTimePreKey>>::failure({ErrorCode::CryptoError, AppText::NativeCryptoUnavailable});
+#else
     QList<OneTimePreKey> preKeys;
     for (int index = 0; index < count; ++index) {
-#if CLIENT_HAS_OPENSSL
         const RawKeyPair keyPair = generateRawKeyPair(EVP_PKEY_X25519);
+        if (keyPair.publicKey.size() != CryptoText::KeyBytes || keyPair.privateKey.size() != CryptoText::KeyBytes) {
+            return Result<QList<OneTimePreKey>>::failure({ErrorCode::CryptoError, "OpenSSL one-time pre-key generation failed."});
+        }
         const QByteArray publicKey = keyPair.publicKey;
         const QByteArray privateKey = keyPair.privateKey;
-#else
-        const QByteArray privateKey = randomBytes(CryptoText::KeyBytes);
-        const QByteArray publicKey = privateKey;
-#endif
         preKeys.push_back({
             deviceId,
             CryptoText::FirstPreKeyId + index,
@@ -244,9 +262,14 @@ Result<QList<OneTimePreKey>> NativeSignalCryptoProvider::createOneTimePreKeys(in
         });
     }
     return Result<QList<OneTimePreKey>>::success(preKeys);
+#endif
 }
 
 Result<bool> NativeSignalCryptoProvider::verifySignedPreKey(const PreKeyBundle& bundle) {
+#if !CLIENT_HAS_OPENSSL
+    Q_UNUSED(bundle)
+    return Result<bool>::failure({ErrorCode::CryptoError, AppText::NativeCryptoUnavailable});
+#else
     const bool hasRequiredFields = isValidBase64(bundle.identityKey)
         && isValidBase64(bundle.identitySigningKey)
         && isValidBase64(bundle.signedPreKey)
@@ -254,13 +277,12 @@ Result<bool> NativeSignalCryptoProvider::verifySignedPreKey(const PreKeyBundle& 
     if (!hasRequiredFields) {
         return Result<bool>::failure({ErrorCode::CryptoError, "Pre-key bundle contains invalid base64 fields."});
     }
-#if CLIENT_HAS_OPENSSL
     const bool signatureValid = ed25519Verify(fromBase64(bundle.identitySigningKey), fromBase64(bundle.signedPreKey), fromBase64(bundle.signedPreKeySignature));
     if (!signatureValid) {
         return Result<bool>::failure({ErrorCode::CryptoError, "Pre-key bundle signature is invalid."});
     }
-#endif
     return Result<bool>::success(true);
+#endif
 }
 
 Result<EncryptedPayload> NativeSignalCryptoProvider::encrypt(
@@ -268,15 +290,25 @@ Result<EncryptedPayload> NativeSignalCryptoProvider::encrypt(
     const DeviceKeyMaterial& senderDevice,
     const PreKeyBundle& recipientBundle,
     const QString& plaintext) {
+    Q_UNUSED(senderUserId)
+#if !CLIENT_HAS_OPENSSL
+    Q_UNUSED(senderDevice)
+    Q_UNUSED(recipientBundle)
+    Q_UNUSED(plaintext)
+    return Result<EncryptedPayload>::failure({ErrorCode::CryptoError, AppText::NativeCryptoUnavailable});
+#else
     if (plaintext.trimmed().isEmpty()) {
         return Result<EncryptedPayload>::failure({ErrorCode::CryptoError, AppText::EmptyMessage});
     }
 
     const int counter = nextCounter(recipientBundle.userId, recipientBundle.deviceId);
     const int previousCounter = 0;
-#if CLIENT_HAS_OPENSSL
     const RawKeyPair ratchetKey = generateRawKeyPair(EVP_PKEY_X25519);
     const RawKeyPair ephemeralKey = generateRawKeyPair(EVP_PKEY_X25519);
+    if (ratchetKey.publicKey.size() != CryptoText::KeyBytes || ephemeralKey.publicKey.size() != CryptoText::KeyBytes) {
+        return Result<EncryptedPayload>::failure({ErrorCode::CryptoError, "OpenSSL ratchet key generation failed."});
+    }
+
     const QByteArray dh1 = x25519Dh(fromBase64(senderDevice.identityPrivateKey), fromBase64(recipientBundle.signedPreKey));
     const QByteArray dh2 = x25519Dh(ephemeralKey.privateKey, fromBase64(recipientBundle.identityKey));
     const QByteArray dh3 = x25519Dh(ephemeralKey.privateKey, fromBase64(recipientBundle.signedPreKey));
@@ -284,31 +316,21 @@ Result<EncryptedPayload> NativeSignalCryptoProvider::encrypt(
     if (!recipientBundle.oneTimePreKey.isEmpty()) {
         dhOutputs += x25519Dh(ephemeralKey.privateKey, fromBase64(recipientBundle.oneTimePreKey));
     }
-    const QByteArray sharedSecret = hkdfSha256(dhOutputs, QByteArray(CryptoText::KeyBytes, 0), CryptoText::X3dhInfo.toUtf8(), CryptoText::KeyBytes);
-    const QByteArray rootOut = hkdfSha256(x25519Dh(ratchetKey.privateKey, fromBase64(recipientBundle.signedPreKey)), sharedSecret, {}, CryptoText::KeyBytes * 2);
-    const QByteArray chainKey = rootOut.mid(CryptoText::KeyBytes, CryptoText::KeyBytes);
-    const QByteArray key = hmac(chainKey, QByteArray(1, char(0x01)));
+    const QByteArray sharedSecret = kdfX3dh(dhOutputs);
+    const QByteArray key = firstRatchetMessageKey(sharedSecret, ratchetKey.privateKey, fromBase64(recipientBundle.signedPreKey));
     const QByteArray ratchetPublicKey = ratchetKey.publicKey;
-#else
-    const QByteArray ratchetPublicKey = fromBase64(senderDevice.signedPreKey);
-    const QByteArray key = deriveMessageKey(
-        fromBase64(senderDevice.identityPrivateKey),
-        fromBase64(recipientBundle.identityKey),
-        QByteArray(CryptoText::X3dhInfo.toUtf8()));
-#endif
+    if (key.size() != CryptoText::KeyBytes) {
+        return Result<EncryptedPayload>::failure({ErrorCode::CryptoError, "Could not derive message key."});
+    }
+
     const QByteArray iv = randomBytes(CryptoText::IvBytes);
     const QByteArray aad = aadFor(counter, previousCounter, ratchetPublicKey);
-#if CLIENT_HAS_OPENSSL
     const auto encrypted = aesGcmEncrypt(plaintext.toUtf8(), key, iv, aad);
     if (!encrypted.has_value()) {
         return Result<EncryptedPayload>::failure({ErrorCode::CryptoError, "AES-256-GCM encryption failed."});
     }
     const QByteArray ciphertext = encrypted->ciphertext;
     const QByteArray tag = encrypted->authTag;
-#else
-    const QByteArray ciphertext = cryptWithKeystream(plaintext.toUtf8(), key, iv);
-    const QByteArray tag = hmac(key, aad + ciphertext).left(CryptoText::AuthTagBytes);
-#endif
 
     QJsonObject root{
         {CryptoText::WireCounter, counter},
@@ -320,11 +342,7 @@ Result<EncryptedPayload> NativeSignalCryptoProvider::encrypt(
     };
 
     if (counter == 0) {
-#if CLIENT_HAS_OPENSSL
         const QByteArray ephemeral = ephemeralKey.publicKey;
-#else
-        const QByteArray ephemeral = randomBytes(CryptoText::KeyBytes);
-#endif
         root.insert(CryptoText::WireX3dh, QJsonObject{
             {CryptoText::WireIdentityKey, senderDevice.identityKey},
             {CryptoText::WireEphemeralKey, toBase64(ephemeral)}
@@ -335,43 +353,57 @@ Result<EncryptedPayload> NativeSignalCryptoProvider::encrypt(
         QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)),
         recipientBundle.oneTimePreKeyId
     });
+#endif
 }
 
-Result<QString> NativeSignalCryptoProvider::decrypt(const QString& currentUserId, const DeviceKeyMaterial& currentDevice, const LocalMessage& message) {
+Result<QString> NativeSignalCryptoProvider::decrypt(
+    const QString& currentUserId,
+    const DeviceKeyMaterial& currentDevice,
+    const LocalMessage& message,
+    const std::optional<OneTimePreKey>& oneTimePreKey) {
     Q_UNUSED(currentUserId)
+#if !CLIENT_HAS_OPENSSL
+    Q_UNUSED(currentDevice)
+    Q_UNUSED(message)
+    Q_UNUSED(oneTimePreKey)
+    return Result<QString>::failure({ErrorCode::CryptoError, AppText::NativeCryptoUnavailable});
+#else
     const QJsonObject root = QJsonDocument::fromJson(message.wirePayloadJson.toUtf8()).object();
     const int counter = root.value(CryptoText::WireCounter).toInt();
     const int previousCounter = root.value(CryptoText::WirePreviousCounter).toInt();
     const QByteArray ratchetPublicKey = fromBase64(root.value(CryptoText::WireRatchetPublicKey).toString());
-    QByteArray remoteIdentityKey = ratchetPublicKey;
-
     const QJsonObject x3dh = root.value(CryptoText::WireX3dh).toObject();
-    if (x3dh.contains(CryptoText::WireIdentityKey)) {
-        remoteIdentityKey = fromBase64(x3dh.value(CryptoText::WireIdentityKey).toString());
+    if (x3dh.isEmpty()) {
+        return Result<QString>::failure({ErrorCode::CryptoError, "Ratchet session state is not available for this message yet."});
     }
 
+    const QByteArray remoteIdentityKey = fromBase64(x3dh.value(CryptoText::WireIdentityKey).toString());
+    const QByteArray remoteEphemeralKey = fromBase64(x3dh.value(CryptoText::WireEphemeralKey).toString());
+    const QByteArray dh1 = x25519Dh(fromBase64(currentDevice.signedPreKeyPrivate), remoteIdentityKey);
+    const QByteArray dh2 = x25519Dh(fromBase64(currentDevice.identityPrivateKey), remoteEphemeralKey);
+    const QByteArray dh3 = x25519Dh(fromBase64(currentDevice.signedPreKeyPrivate), remoteEphemeralKey);
+    QByteArray dhOutputs = dh1 + dh2 + dh3;
+    if (message.consumedOneTimePreKeyId.has_value()) {
+        if (!oneTimePreKey.has_value()) {
+            return Result<QString>::failure({ErrorCode::CryptoError, "Required one-time pre-key private material is unavailable."});
+        }
+        dhOutputs += x25519Dh(fromBase64(oneTimePreKey->privateKey), remoteEphemeralKey);
+    }
+
+    const QByteArray sharedSecret = kdfX3dh(dhOutputs);
+    const QByteArray key = firstRatchetMessageKey(sharedSecret, fromBase64(currentDevice.signedPreKeyPrivate), ratchetPublicKey);
+    if (key.size() != CryptoText::KeyBytes) {
+        return Result<QString>::failure({ErrorCode::CryptoError, "Could not derive message key."});
+    }
     const QByteArray iv = fromBase64(root.value(CryptoText::WireIv).toString());
     const QByteArray ciphertext = fromBase64(root.value(CryptoText::WireCiphertext).toString());
     const QByteArray receivedTag = fromBase64(root.value(CryptoText::WireAuthTag).toString());
-    const QByteArray key = deriveMessageKey(
-        fromBase64(currentDevice.identityPrivateKey),
-        remoteIdentityKey,
-        QByteArray(CryptoText::X3dhInfo.toUtf8()));
     const QByteArray aad = aadFor(counter, previousCounter, ratchetPublicKey);
-#if CLIENT_HAS_OPENSSL
     const auto plaintext = aesGcmDecrypt(ciphertext, key, iv, aad, receivedTag);
     if (!plaintext.has_value()) {
         return Result<QString>::failure({ErrorCode::CryptoError, "Message authentication failed."});
     }
     return Result<QString>::success(QString::fromUtf8(*plaintext));
-#else
-    const QByteArray expectedTag = hmac(key, aad + ciphertext).left(CryptoText::AuthTagBytes);
-    if (receivedTag != expectedTag) {
-        return Result<QString>::failure({ErrorCode::CryptoError, "Message authentication failed."});
-    }
-
-    const QByteArray plaintext = cryptWithKeystream(ciphertext, key, iv);
-    return Result<QString>::success(QString::fromUtf8(plaintext));
 #endif
 }
 
@@ -425,6 +457,29 @@ QByteArray NativeSignalCryptoProvider::deriveMessageKey(const QByteArray& localP
         std::swap(left, right);
     }
     return hmac(salt, left + right + QByteArray(CryptoText::Protocol.toUtf8()));
+}
+
+QByteArray NativeSignalCryptoProvider::kdfX3dh(const QByteArray& dhOutputs) const {
+#if CLIENT_HAS_OPENSSL
+    return hkdfSha256(dhOutputs, QByteArray(CryptoText::KeyBytes, 0), CryptoText::X3dhInfo.toUtf8(), CryptoText::KeyBytes);
+#else
+    Q_UNUSED(dhOutputs)
+    return {};
+#endif
+}
+
+QByteArray NativeSignalCryptoProvider::firstRatchetMessageKey(const QByteArray& rootKey, const QByteArray& localRatchetPrivateKey, const QByteArray& remoteRatchetPublicKey) const {
+#if CLIENT_HAS_OPENSSL
+    const QByteArray dhOutput = x25519Dh(localRatchetPrivateKey, remoteRatchetPublicKey);
+    const QByteArray rootOut = hkdfSha256(dhOutput, rootKey, {}, CryptoText::KeyBytes * 2);
+    const QByteArray chainKey = rootOut.mid(CryptoText::KeyBytes, CryptoText::KeyBytes);
+    return hmac(chainKey, QByteArray(1, char(0x01))).left(CryptoText::KeyBytes);
+#else
+    Q_UNUSED(rootKey)
+    Q_UNUSED(localRatchetPrivateKey)
+    Q_UNUSED(remoteRatchetPublicKey)
+    return {};
+#endif
 }
 
 QByteArray NativeSignalCryptoProvider::cryptWithKeystream(const QByteArray& input, const QByteArray& key, const QByteArray& iv) const {

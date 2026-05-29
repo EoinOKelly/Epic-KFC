@@ -5,6 +5,8 @@
 #include <QFile>
 #include <QTextStream>
 
+#include <algorithm>
+
 SessionService::SessionService(EventBus& events, IAuthGateway& authGateway, JsonLocalStore& store, QObject* parent)
     : QObject(parent)
     , m_events(events)
@@ -288,7 +290,7 @@ void MessageService::read(const QString& messageId) {
             emit m_events.commandFailed(device.error());
             return;
         }
-        const auto plaintext = m_cryptoProvider.decrypt(m_sessionService.currentUserId(), device.value(), *found.value());
+        const auto plaintext = m_cryptoProvider.decrypt(m_sessionService.currentUserId(), device.value(), *found.value(), oneTimePreKeyFor(*found.value()));
         if (plaintext.failed()) {
             emit m_events.cryptoOperationFailed(plaintext.error());
             return;
@@ -318,7 +320,7 @@ void MessageService::forward(const QString& messageId, const QString& recipientU
         emit m_events.commandFailed(device.error());
         return;
     }
-    const auto plaintext = m_cryptoProvider.decrypt(m_sessionService.currentUserId(), device.value(), *found.value());
+    const auto plaintext = m_cryptoProvider.decrypt(m_sessionService.currentUserId(), device.value(), *found.value(), oneTimePreKeyFor(*found.value()));
     if (plaintext.failed()) {
         emit m_events.cryptoOperationFailed(plaintext.error());
         return;
@@ -376,7 +378,7 @@ void MessageService::download(const QString& messageId, const QString& path) {
         emit m_events.commandFailed(device.error());
         return;
     }
-    const auto plaintext = m_cryptoProvider.decrypt(m_sessionService.currentUserId(), device.value(), *found.value());
+    const auto plaintext = m_cryptoProvider.decrypt(m_sessionService.currentUserId(), device.value(), *found.value(), oneTimePreKeyFor(*found.value()));
     if (plaintext.failed()) {
         emit m_events.cryptoOperationFailed(plaintext.error());
         return;
@@ -403,6 +405,26 @@ bool MessageService::requireSession() {
     return false;
 }
 
+std::optional<OneTimePreKey> MessageService::oneTimePreKeyFor(const LocalMessage& message) const {
+    if (!message.consumedOneTimePreKeyId.has_value()) {
+        return std::nullopt;
+    }
+
+    const auto loaded = m_store.loadOneTimePreKeys(m_deviceId);
+    if (loaded.failed()) {
+        return std::nullopt;
+    }
+
+    const int preKeyId = *message.consumedOneTimePreKeyId;
+    const auto it = std::find_if(loaded.value().cbegin(), loaded.value().cend(), [preKeyId](const OneTimePreKey& preKey) {
+        return preKey.preKeyId == preKeyId;
+    });
+    if (it == loaded.value().cend()) {
+        return std::nullopt;
+    }
+    return *it;
+}
+
 void MessageService::saveAndEmitList(const MessageList& messages) {
     for (const auto& message : messages) {
         m_store.saveMessage(message);
@@ -418,6 +440,7 @@ LocalMessage MessageService::draftFor(const QString& recipientUserId, int recipi
         recipientUserId,
         recipientDeviceId,
         wirePayloadJson,
+        std::nullopt,
         {},
         {},
         {},

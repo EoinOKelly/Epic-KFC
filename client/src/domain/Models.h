@@ -145,6 +145,7 @@ struct LocalMessage {
     QString recipientUserId;
     int recipientDeviceId{1};
     QString wirePayloadJson;
+    std::optional<int> consumedOneTimePreKeyId;
     QDateTime createdAt;
     QString accessRevokedAt;
     QString senderDeletedAt;

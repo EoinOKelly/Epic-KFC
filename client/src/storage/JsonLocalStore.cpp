@@ -125,6 +125,7 @@ QJsonObject messageToJson(const LocalMessage& message) {
         {StorageKeys::RecipientUserId, message.recipientUserId},
         {StorageKeys::RecipientDeviceId, message.recipientDeviceId},
         {StorageKeys::WirePayloadJson, message.wirePayloadJson},
+        {StorageKeys::ConsumedOneTimePreKeyId, message.consumedOneTimePreKeyId.has_value() ? QJsonValue(*message.consumedOneTimePreKeyId) : QJsonValue::Null},
         {StorageKeys::CreatedAt, message.createdAt.toUTC().toString(Qt::ISODateWithMs)},
         {StorageKeys::AccessRevokedAt, message.accessRevokedAt},
         {StorageKeys::SenderDeletedAt, message.senderDeletedAt},
@@ -142,6 +143,9 @@ LocalMessage messageFromJson(const QJsonObject& object) {
         object.value(StorageKeys::RecipientUserId).toString(),
         object.value(StorageKeys::RecipientDeviceId).toInt(),
         object.value(StorageKeys::WirePayloadJson).toString(),
+        object.value(StorageKeys::ConsumedOneTimePreKeyId).isDouble()
+            ? std::optional<int>(object.value(StorageKeys::ConsumedOneTimePreKeyId).toInt())
+            : std::nullopt,
         QDateTime::fromString(object.value(StorageKeys::CreatedAt).toString(), Qt::ISODateWithMs),
         object.value(StorageKeys::AccessRevokedAt).toString(),
         object.value(StorageKeys::SenderDeletedAt).toString(),
