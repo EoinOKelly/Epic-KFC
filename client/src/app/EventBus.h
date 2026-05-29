@@ -11,6 +11,7 @@ public:
     explicit EventBus(QObject* parent = nullptr);
 
 signals:
+    void slashCommandReceived(SlashCommand command);
     void statusMessage(QString message);
     void commandFailed(ClientError error);
     void sessionStarted(UserProfile user);

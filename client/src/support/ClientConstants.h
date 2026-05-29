@@ -101,6 +101,7 @@ inline const QString UnclosedQuote = "Quoted argument is missing its closing quo
 inline const QString ArgumentCount = "/%1 expects %2.";
 inline const QString AtLeast = "at least %1 argument(s)";
 inline const QString Exactly = "%1 argument(s)";
+inline const QString PositiveDeviceId = "/%1 expects deviceId to be a positive integer.";
 }
 
 namespace CommandNames {

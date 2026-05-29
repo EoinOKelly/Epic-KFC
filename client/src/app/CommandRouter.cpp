@@ -35,6 +35,7 @@ void CommandRouter::handleCommandMode(const QString& line) {
     }
 
     const SlashCommand command = parsed.value();
+    emit m_events.slashCommandReceived(command);
     switch (command.type) {
     case CommandType::Register:
         if (commandHasArgumentCount(command, 2, 2)) {
@@ -52,14 +53,51 @@ void CommandRouter::handleCommandMode(const QString& line) {
         }
         return;
     case CommandType::Send:
-        if (commandHasArgumentCount(command, 1, 2)) {
+        if (commandHasArgumentCount(command, 1, 2) && commandHasValidDeviceId(command, 1)) {
             m_compositionRecipientUserId = command.arguments.at(0);
             m_compositionRecipientDeviceId = command.arguments.size() == 2
                 ? command.arguments.at(1).toInt()
-                : 1;
+                : DefaultDeviceId;
             m_compositionLines.clear();
             m_inputMode = InputMode::MessageComposition;
             m_controller.beginMessageComposition(m_compositionRecipientUserId, m_compositionRecipientDeviceId);
+        }
+        return;
+    case CommandType::Help:
+    case CommandType::Logout:
+    case CommandType::Whoami:
+    case CommandType::Status:
+    case CommandType::Conversations:
+    case CommandType::Inbox:
+    case CommandType::Sent:
+    case CommandType::Sync:
+    case CommandType::Cancel:
+    case CommandType::Exit:
+        if (commandHasArgumentCount(command, 0, 0)) {
+            m_controller.handleCommand(command);
+        }
+        return;
+    case CommandType::Read:
+    case CommandType::Revoke:
+    case CommandType::DeleteMessage:
+    case CommandType::Verify:
+        if (commandHasArgumentCount(command, 1, 1)) {
+            m_controller.handleCommand(command);
+        }
+        return;
+    case CommandType::Forward:
+        if (commandHasArgumentCount(command, 2, 3) && commandHasValidDeviceId(command, 2)) {
+            m_controller.handleCommand(command);
+        }
+        return;
+    case CommandType::Download:
+        if (commandHasArgumentCount(command, 2, 2)) {
+            m_controller.handleCommand(command);
+        }
+        return;
+    case CommandType::Trust:
+        if (commandHasArgumentCount(command, 1, 2) && commandHasValidDeviceId(command, 1)) {
+            m_controller.handleCommand(command);
         }
         return;
     default:
@@ -130,6 +168,21 @@ bool CommandRouter::commandHasArgumentCount(const SlashCommand& command, int min
     return false;
 }
 
-QString CommandRouter::joinedArguments(const QStringList& arguments, int startIndex) const {
-    return arguments.mid(startIndex).join(CommandText::Space);
+bool CommandRouter::commandHasValidDeviceId(const SlashCommand& command, int argumentIndex) {
+    if (argumentIndex >= command.arguments.size()) {
+        return true;
+    }
+
+    bool parsed = false;
+    const int deviceId = command.arguments.at(argumentIndex).toInt(&parsed);
+    const bool validDeviceId = parsed && deviceId > 0;
+    if (validDeviceId) {
+        return true;
+    }
+
+    emit m_events.commandFailed({
+        ErrorCode::InvalidCommand,
+        QString(CommandText::PositiveDeviceId).arg(command.name)
+    });
+    return false;
 }
