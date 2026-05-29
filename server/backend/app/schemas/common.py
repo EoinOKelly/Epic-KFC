@@ -22,9 +22,8 @@ USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 ETH_HASH_PATTERN = re.compile(r"^0x[a-fA-F0-9]{64}$")
 ETH_ADDRESS_PATTERN = re.compile(r"^0x[a-fA-F0-9]{40}$")
 
-WIRE_REQUIRED_KEYS = {"counter", "previousCounter", "ciphertext", "iv", "authTag"}
-WIRE_BASE64_KEYS = {"ciphertext", "iv", "authTag", "ratchetPublicKey"}
-X3DH_BASE64_KEYS = {"identityKey", "ephemeralKey"}
+LIBSIGNAL_WIRE_FORMAT = "libsignal-v1"
+LIBSIGNAL_ALLOWED_MESSAGE_TYPES = {1, 3}
 
 FORBIDDEN_INPUT_KEYS = {
     "aeskey",
@@ -146,7 +145,11 @@ def validate_eth_address(value: str) -> str:
 
 
 def validate_wire_payload_json(value: str) -> str:
-    """Validate relay wire payload structure while returning the original string."""
+    """Validate relay wire payload structure while returning the original string.
+
+    Contract: ``cryptography/`` ``serializeWireMessage()`` output (libsignal-v1).
+    The server stores opaque JSON only; encrypt/decrypt runs on the client.
+    """
     if len(value.encode("utf-8")) > MAX_WIRE_PAYLOAD_BYTES:
         raise ValueError("wire_payload_json exceeds the maximum allowed size.")
 
@@ -159,42 +162,38 @@ def validate_wire_payload_json(value: str) -> str:
         raise ValueError("wire_payload_json must contain a JSON object.")
 
     _reject_forbidden_payload_keys(payload)
-
-    missing_keys = WIRE_REQUIRED_KEYS.difference(payload)
-    if missing_keys:
-        missing = ", ".join(sorted(missing_keys))
-        raise ValueError(f"wire_payload_json is missing required keys: {missing}.")
-
-    for counter_key in ("counter", "previousCounter"):
-        counter_value = payload[counter_key]
-        if isinstance(counter_value, bool) or not isinstance(counter_value, int):
-            raise ValueError(f"{counter_key} must be a non-negative integer.")
-        if counter_value < 0:
-            raise ValueError(f"{counter_key} must be a non-negative integer.")
-
-    for base64_key in WIRE_BASE64_KEYS:
-        if base64_key in payload:
-            if not isinstance(payload[base64_key], str):
-                raise ValueError(f"{base64_key} must be a base64 string.")
-            validate_base64(
-                payload[base64_key],
-                max_length=MAX_WIRE_PAYLOAD_BYTES,
-            )
-
-    x3dh = payload.get("x3dh")
-    if x3dh is not None:
-        if not isinstance(x3dh, dict):
-            raise ValueError("x3dh must be an object when present.")
-        for base64_key in X3DH_BASE64_KEYS:
-            if base64_key in x3dh:
-                if not isinstance(x3dh[base64_key], str):
-                    raise ValueError(f"x3dh.{base64_key} must be a base64 string.")
-                validate_base64(
-                    x3dh[base64_key],
-                    max_length=MAX_BASE64_FIELD_LENGTH,
-                )
+    _validate_libsignal_wire_payload(payload)
 
     return value
+
+
+def _validate_libsignal_wire_payload(payload: dict[str, Any]) -> None:
+    """Validate ``LibSignalWireMessage`` shape from @epic-messaging/cryptography."""
+    wire_format = payload.get("format")
+    if wire_format != LIBSIGNAL_WIRE_FORMAT:
+        raise ValueError(
+            f'wire_payload_json format must be "{LIBSIGNAL_WIRE_FORMAT}".'
+        )
+
+    message_type = payload.get("type")
+    if isinstance(message_type, bool) or not isinstance(message_type, int):
+        raise ValueError("type must be an integer.")
+    if message_type not in LIBSIGNAL_ALLOWED_MESSAGE_TYPES:
+        raise ValueError("type must be 1 (WhisperMessage) or 3 (PreKeyWhisperMessage).")
+
+    body_b64 = payload.get("bodyB64")
+    if not isinstance(body_b64, str):
+        raise ValueError("bodyB64 must be a base64 string.")
+    validate_base64(body_b64, max_length=MAX_WIRE_PAYLOAD_BYTES)
+
+    registration_id = payload.get("registrationId")
+    if registration_id is None:
+        return
+
+    if isinstance(registration_id, bool) or not isinstance(registration_id, int):
+        raise ValueError("registrationId must be an integer when present.")
+    if registration_id <= 0:
+        raise ValueError("registrationId must be a positive integer when present.")
 
 
 def _reject_forbidden_payload_keys(value: Any) -> None:

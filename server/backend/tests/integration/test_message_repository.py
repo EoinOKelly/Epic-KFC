@@ -14,15 +14,9 @@ from app.schemas.common import PaginationParams
 
 pytestmark = pytest.mark.asyncio
 
+from tests.fixtures.wire_payloads import ALT_WIRE_PAYLOAD, WIRE_PAYLOAD
+
 PASSWORD_HASH = "$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$cGFzc3dvcmQ"
-WIRE_PAYLOAD = (
-    '{"counter":0,"previousCounter":0,"ciphertext":"Y2lwaGVy",'
-    '"iv":"aXY=","authTag":"dGFn"}'
-)
-ALT_WIRE_PAYLOAD = (
-    '{ "counter": 1, "previousCounter": 0, "ciphertext": "bmV3", '
-    '"iv": "aXY=", "authTag": "dGFn" }'
-)
 
 
 async def test_create_message_stores_opaque_wire_payload_unchanged(

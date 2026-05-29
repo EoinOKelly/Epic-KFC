@@ -9,7 +9,8 @@
     "prepare": "npm run build",
     "smoke:signal": "npm run build && node scripts/smoke-signal.js",
     "smoke:signal:verbose": "npm run build && node scripts/smoke-signal.js --verbose",
-    "demo:signal": "npm run build && node scripts/demo-signal.js"
+    "demo:signal": "npm run build && node scripts/demo-signal.js",
+    "e2e:backend": "npm run build && node scripts/e2e-with-backend.js"
   },
   "keywords": [
     "cryptography",

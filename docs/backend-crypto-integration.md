@@ -300,6 +300,21 @@ Export surface: `cryptography/src/index.ts`.
 
 ---
 
+## Verification checklist (crypto owner)
+
+Run these in order to confirm the contract between `cryptography/` and this backend:
+
+| Step | Command | Proves |
+|------|---------|--------|
+| 1 | `cd cryptography && npm run smoke:signal` | E2EE encrypt/decrypt locally |
+| 2 | `cd cryptography && npm run demo:signal` | Same, with step-by-step logs |
+| 3 | Start API + Postgres, then `npm run e2e:backend` | Real HTTP relay + decrypt round-trip |
+| 4 | `cd server/backend && pytest tests/unit/test_wire_payload_validation.py -v` | Backend accepts `libsignal-v1` wire JSON |
+
+The backend never runs the TypeScript package on requests; step 3 uses Node as a **stand-in client**.
+
+---
+
 ## References
 
 | File | Purpose |
