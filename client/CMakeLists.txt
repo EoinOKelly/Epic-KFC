@@ -9,9 +9,19 @@ find_package(Qt${QT_VERSION_MAJOR}
         Core
         Network
 )
+
+if(MSVC AND OPENSSL_ROOT_DIR MATCHES "mingw")
+    unset(OPENSSL_ROOT_DIR CACHE)
+    unset(OPENSSL_INCLUDE_DIR CACHE)
+    unset(LIB_EAY_DEBUG CACHE)
+    unset(LIB_EAY_RELEASE CACHE)
+    unset(SSL_EAY_DEBUG CACHE)
+    unset(SSL_EAY_RELEASE CACHE)
+endif()
+
 find_package(OpenSSL QUIET)
 
-if(NOT OpenSSL_FOUND AND WIN32 AND EXISTS "C:/Qt/Tools/mingw1310_64/opt")
+if(NOT OpenSSL_FOUND AND MINGW AND EXISTS "C:/Qt/Tools/mingw1310_64/opt")
     set(OPENSSL_ROOT_DIR "C:/Qt/Tools/mingw1310_64/opt" CACHE PATH "OpenSSL root directory")
     find_package(OpenSSL QUIET)
 endif()
