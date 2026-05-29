@@ -3,25 +3,87 @@ project(client LANGUAGES CXX)
 
 include(qt.cmake)
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Network)
 find_package(Qt${QT_VERSION_MAJOR}
     COMPONENTS
         Core
+        Network
 )
-qt_standard_project_setup()
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTOUIC ON)
 
-set(PROJECT_SOURCES
-    main.cpp
+set(CLIENT_CORE_SOURCES
+    src/app/ClientController.cpp
+    src/app/ClientController.h
+    src/app/CommandRouter.cpp
+    src/app/CommandRouter.h
+    src/app/EventBus.cpp
+    src/app/EventBus.h
+    src/app/SlashCommandParser.cpp
+    src/app/SlashCommandParser.h
+    src/app/StartupConfig.cpp
+    src/app/StartupConfig.h
+    src/console/ConsoleInputWorker.cpp
+    src/console/ConsoleInputWorker.h
+    src/console/ConsolePresenter.cpp
+    src/console/ConsolePresenter.h
+    src/crypto/NativeSignalCryptoProvider.cpp
+    src/crypto/NativeSignalCryptoProvider.h
+    src/domain/Models.cpp
+    src/domain/Models.h
+    src/gateways/Gateways.cpp
+    src/gateways/Gateways.h
+    src/gateways/HttpGateways.cpp
+    src/gateways/HttpGateways.h
+    src/services/Services.cpp
+    src/services/Services.h
+    src/storage/JsonLocalStore.cpp
+    src/storage/JsonLocalStore.h
+    src/support/ClientConstants.h
+    src/support/Result.h
 )
 
-qt_add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
-
-target_link_libraries(${PROJECT_NAME}
+add_library(client_core STATIC ${CLIENT_CORE_SOURCES})
+target_compile_options(client_core
+    PUBLIC
+        $<$<CXX_COMPILER_ID:MSVC>:/std:c++20>
+        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-std=c++20>
+)
+target_include_directories(client_core
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_link_libraries(client_core
     PUBLIC
         Qt::Core
+        Qt::Network
 )
+
+add_executable(${PROJECT_NAME}
+    src/main.cpp
+)
+
+target_link_libraries(${PROJECT_NAME}
+    PRIVATE
+        client_core
+        Qt::Core
+        Qt::Network
+)
+
+option(CLIENT_BUILD_TESTS "Build the Qt console client tests" ON)
+
+if(CLIENT_BUILD_TESTS)
+    enable_testing()
+
+    add_executable(client_tests
+        tests/client_tests.cpp
+    )
+    target_link_libraries(client_tests
+        PRIVATE
+            client_core
+            Qt::Core
+            Qt::Network
+    )
+    add_test(NAME client_tests COMMAND client_tests)
+endif()
 
