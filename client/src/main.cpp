@@ -72,6 +72,11 @@ int main(int argc, char* argv[]) {
     }
 
     SessionService sessionService(events, *authGateway, store);
+    if (httpClient) {
+        httpClient->setTokenUpdateHandler([&sessionService](const TokenSet& tokens) {
+            sessionService.updateTokens(tokens);
+        });
+    }
     KeyService keyService(events, *keyGateway, *cryptoProvider, store, sessionService, config.deviceId);
     MessageService messageService(events, *messageGateway, *cryptoProvider, store, sessionService, keyService, config.deviceId);
     ClientController controller(events, config, sessionService, keyService, messageService);

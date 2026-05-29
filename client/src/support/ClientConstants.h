@@ -24,7 +24,7 @@ inline const QString Ipv6LoopbackHost = "::1";
 inline const QString MissingRealApiUrl = "Real mode requires --api-url <https://host/api/v1>.";
 inline const QString InvalidMode = "Mode must be mock or real.";
 inline const QString InvalidDeviceId = "Device id must be a positive integer.";
-inline const QString TlsRequired = "Real mode requires HTTPS except for localhost development URLs.";
+inline const QString TlsRequired = "Real mode requires HTTPS with certificate validation.";
 inline const QString StartupUsage =
     "Usage: client [--mode mock|real] [--api-url https://host/api/v1] [--device-id 1] [--state-path path]";
 inline const QString Prompt = "> ";

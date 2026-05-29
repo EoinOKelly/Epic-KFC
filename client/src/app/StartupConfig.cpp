@@ -15,13 +15,6 @@ QString defaultStatePath() {
     return QDir(basePath).filePath(AppText::DefaultStateFile);
 }
 
-bool isLocalDevelopmentUrl(const QUrl& url) {
-    const QString host = url.host();
-    return host == AppText::LocalhostHost
-        || host == AppText::LoopbackHost
-        || host == AppText::Ipv6LoopbackHost;
-}
-
 QString nextValue(const QStringList& arguments, int index) {
     const int valueIndex = index + 1;
     if (valueIndex >= arguments.size()) {
@@ -90,8 +83,7 @@ Result<StartupConfig> StartupConfigParser::parse(const QStringList& arguments) c
 
         const QUrl url(config.apiUrl);
         const bool tlsProtected = url.scheme() == AppText::HttpsScheme;
-        const bool localDevelopment = isLocalDevelopmentUrl(url);
-        if (!tlsProtected && !localDevelopment) {
+        if (!tlsProtected) {
             return Result<StartupConfig>::failure({ErrorCode::InvalidConfiguration, AppText::TlsRequired});
         }
     }
