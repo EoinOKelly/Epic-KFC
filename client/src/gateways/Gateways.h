@@ -46,7 +46,7 @@ public:
     virtual Result<QList<OneTimePreKey>> createOneTimePreKeys(int deviceId, int count) = 0;
     virtual Result<bool> verifySignedPreKey(const PreKeyBundle& bundle) = 0;
     virtual Result<EncryptedPayload> encrypt(const QString& senderUserId, const DeviceKeyMaterial& senderDevice, const PreKeyBundle& recipientBundle, const QString& plaintext) = 0;
-    virtual Result<QString> decrypt(const QString& currentUserId, const DeviceKeyMaterial& currentDevice, const LocalMessage& message) = 0;
+    virtual Result<QString> decrypt(const QString& currentUserId, const DeviceKeyMaterial& currentDevice, const LocalMessage& message, const std::optional<OneTimePreKey>& oneTimePreKey) = 0;
 };
 
 class MockAuthGateway : public QObject, public IAuthGateway {

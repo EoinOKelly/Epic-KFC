@@ -387,6 +387,9 @@ LocalMessage HttpMessageGateway::messageFromJson(const QJsonObject& object, Mess
         object.value("recipient_user_id").toString(),
         object.value("recipient_device_id").toInt(),
         object.value("wire_payload_json").toString(),
+        object.value("consumed_one_time_prekey_id").isDouble()
+            ? std::optional<int>(object.value("consumed_one_time_prekey_id").toInt())
+            : std::nullopt,
         QDateTime::fromString(object.value("created_at").toString(), Qt::ISODateWithMs),
         object.value("access_revoked_at").toString(),
         object.value("sender_deleted_at").toString(),

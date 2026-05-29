@@ -4,6 +4,7 @@
 #include "app/StartupConfig.h"
 #include "console/ConsoleInputWorker.h"
 #include "console/ConsolePresenter.h"
+#include "crypto/MockCryptoProvider.h"
 #include "crypto/NativeSignalCryptoProvider.h"
 #include "domain/Models.h"
 #include "gateways/Gateways.h"
@@ -33,7 +34,7 @@ int main(int argc, char* argv[]) {
 
     EventBus events;
     JsonLocalStore store(config.statePath);
-    NativeSignalCryptoProvider cryptoProvider;
+    std::unique_ptr<ICryptoProvider> cryptoProvider;
     std::unique_ptr<HttpClient> httpClient;
     std::unique_ptr<IAuthGateway> httpAuthGateway;
     std::unique_ptr<IKeyGateway> httpKeyGateway;
@@ -47,6 +48,12 @@ int main(int argc, char* argv[]) {
     IMessageGateway* messageGateway = nullptr;
 
     if (config.mode == ClientMode::Real) {
+        auto nativeCryptoProvider = std::make_unique<NativeSignalCryptoProvider>();
+        if (!nativeCryptoProvider->isAvailable()) {
+            QTextStream(stderr) << AppText::NativeCryptoUnavailable << '\n';
+            return 1;
+        }
+        cryptoProvider = std::move(nativeCryptoProvider);
         httpClient = std::make_unique<HttpClient>(config.apiUrl);
         httpAuthGateway = std::make_unique<HttpAuthGateway>(*httpClient);
         httpKeyGateway = std::make_unique<HttpKeyGateway>(*httpClient);
@@ -55,6 +62,7 @@ int main(int argc, char* argv[]) {
         keyGateway = httpKeyGateway.get();
         messageGateway = httpMessageGateway.get();
     } else {
+        cryptoProvider = std::make_unique<MockCryptoProvider>();
         mockAuthGateway = std::make_unique<MockAuthGateway>();
         mockKeyGateway = std::make_unique<MockKeyGateway>();
         mockMessageGateway = std::make_unique<MockMessageGateway>();
@@ -64,8 +72,8 @@ int main(int argc, char* argv[]) {
     }
 
     SessionService sessionService(events, *authGateway, store);
-    KeyService keyService(events, *keyGateway, cryptoProvider, store, sessionService, config.deviceId);
-    MessageService messageService(events, *messageGateway, cryptoProvider, store, sessionService, keyService, config.deviceId);
+    KeyService keyService(events, *keyGateway, *cryptoProvider, store, sessionService, config.deviceId);
+    MessageService messageService(events, *messageGateway, *cryptoProvider, store, sessionService, keyService, config.deviceId);
     ClientController controller(events, config, sessionService, keyService, messageService);
     CommandRouter router(events, controller);
     ConsolePresenter presenter(events);

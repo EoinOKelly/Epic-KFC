@@ -71,6 +71,7 @@ public:
 
 private:
     bool requireSession();
+    std::optional<OneTimePreKey> oneTimePreKeyFor(const LocalMessage& message) const;
     void saveAndEmitList(const MessageList& messages);
     LocalMessage draftFor(const QString& recipientUserId, int recipientDeviceId, const QString& wirePayloadJson) const;
 
