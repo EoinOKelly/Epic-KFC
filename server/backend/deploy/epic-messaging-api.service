@@ -1,0 +1,19 @@
+[Unit]
+Description=Epic Messaging FastAPI backend
+Documentation=https://github.com/EoinOKelly/Epic-KFC
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=student
+Group=student
+WorkingDirectory=/home/student/epic_project/Epic-KFC/server/backend
+EnvironmentFile=/home/student/epic_project/Epic-KFC/server/backend/.env
+ExecStart=/home/student/epic_project/Epic-KFC/server/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

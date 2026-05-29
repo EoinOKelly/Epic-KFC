@@ -8,6 +8,11 @@ export function fromBase64(encoded: string): Buffer {
   return Buffer.from(encoded, B64);
 }
 
+/** Copy exact bytes — avoid Node Buffer.pool `.buffer` oversize ArrayBuffer. */
+export function toArrayBuffer(buf: Buffer): ArrayBuffer {
+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+}
+
 export function assertKeyLength(buf: Buffer, bytes: number, label: string): void {
   if (buf.length !== bytes) {
     throw new Error(`${label} must be ${bytes} bytes, got ${buf.length}`);

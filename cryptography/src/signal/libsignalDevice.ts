@@ -4,7 +4,7 @@ import {
   KeyHelper,
   SignedPublicPreKeyType,
 } from "@privacyresearch/libsignal-protocol-typescript";
-import { toBase64 } from "../bufferUtils";
+import { fromBase64, toArrayBuffer, toBase64 } from "../bufferUtils";
 import { DeviceKeysRow, OneTimePreKeyRow, StoredDeviceKeysRow } from "../storageSchema";
 import { InMemoryProtocolStore } from "./signalProtocolStore";
 
@@ -93,18 +93,18 @@ export async function deviceToDbRows(device: GeneratedDevice): Promise<{
 export function publicBundleFromDb(row: StoredDeviceKeysRow): DeviceType {
   const bundle: DeviceType = {
     registrationId: row.registration_id,
-    identityKey: Buffer.from(row.identity_key_public_b64, "base64").buffer,
+    identityKey: toArrayBuffer(fromBase64(row.identity_key_public_b64)),
     signedPreKey: {
       keyId: row.signed_prekey_id,
-      publicKey: Buffer.from(row.signed_prekey_public_b64, "base64").buffer,
-      signature: Buffer.from(row.signed_prekey_signature_b64, "base64").buffer,
+      publicKey: toArrayBuffer(fromBase64(row.signed_prekey_public_b64)),
+      signature: toArrayBuffer(fromBase64(row.signed_prekey_signature_b64)),
     },
   };
 
   if (row.one_time_prekey_id != null && row.one_time_prekey_public_b64) {
     bundle.preKey = {
       keyId: row.one_time_prekey_id,
-      publicKey: Buffer.from(row.one_time_prekey_public_b64, "base64").buffer,
+      publicKey: toArrayBuffer(fromBase64(row.one_time_prekey_public_b64)),
     };
   }
 

@@ -26,9 +26,13 @@ function log(step, message) {
 
 async function api(path, options = {}) {
   const url = `${BASE}/api/v1${path}`;
+  const { headers: optionHeaders, ...rest } = options;
   const res = await fetch(url, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    ...options,
+    ...rest,
+    headers: {
+      "Content-Type": "application/json",
+      ...(optionHeaders || {}),
+    },
   });
   const text = await res.text();
   let body;
