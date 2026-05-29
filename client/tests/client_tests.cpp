@@ -47,6 +47,9 @@ void testStartupConfig() {
 
     const auto invalid = parser.parse({"client", "--mode", "real"});
     expect(invalid.failed(), "startup rejects real mode without api url");
+
+    const auto insecure = parser.parse({"client", "--mode", "real", "--api-url", "http://localhost:8000/api/v1"});
+    expect(insecure.failed(), "startup rejects real mode without HTTPS");
 }
 
 void testCryptoWireShape() {

@@ -44,6 +44,10 @@ void addOptionalString(QJsonObject& object, const QString& key, const QString& v
     }
     object.insert(key, value);
 }
+
+bool isRefreshPath(const QString& path) {
+    return normalizedPath(path) == authPath("/refresh");
+}
 }
 
 HttpClient::HttpClient(QString baseUrl, QObject* parent)
@@ -56,25 +60,37 @@ HttpClient::HttpClient(QString baseUrl, QObject* parent)
 }
 
 void HttpClient::get(const QString& path, const QString& accessToken, GatewayCallback<QJsonDocument> callback) {
-    send("GET", path, accessToken, nullptr, std::move(callback));
+    send("GET", path, accessToken, std::nullopt, std::move(callback));
 }
 
 void HttpClient::post(const QString& path, const QString& accessToken, const QJsonObject& body, GatewayCallback<QJsonDocument> callback) {
-    send("POST", path, accessToken, &body, std::move(callback));
+    send("POST", path, accessToken, body, std::move(callback));
 }
 
 void HttpClient::put(const QString& path, const QString& accessToken, const QJsonObject& body, GatewayCallback<QJsonDocument> callback) {
-    send("PUT", path, accessToken, &body, std::move(callback));
+    send("PUT", path, accessToken, body, std::move(callback));
 }
 
 void HttpClient::deleteResource(const QString& path, const QString& accessToken, GatewayCallback<QJsonDocument> callback) {
-    send("DELETE", path, accessToken, nullptr, std::move(callback));
+    send("DELETE", path, accessToken, std::nullopt, std::move(callback));
 }
 
-void HttpClient::send(const QString& method, const QString& path, const QString& accessToken, const QJsonObject* body, GatewayCallback<QJsonDocument> callback) {
+void HttpClient::setTokens(const TokenSet& tokens) {
+    m_tokens = tokens;
+}
+
+void HttpClient::clearTokens() {
+    m_tokens = {};
+}
+
+void HttpClient::setTokenUpdateHandler(std::function<void(const TokenSet&)> handler) {
+    m_tokenUpdateHandler = std::move(handler);
+}
+
+void HttpClient::send(const QString& method, const QString& path, const QString& accessToken, std::optional<QJsonObject> body, GatewayCallback<QJsonDocument> callback, bool alreadyRetried) {
     QNetworkReply* reply = nullptr;
     QNetworkRequest request = requestFor(path, accessToken);
-    const QByteArray payload = body == nullptr ? QByteArray() : QJsonDocument(*body).toJson(QJsonDocument::Compact);
+    const QByteArray payload = body.has_value() ? QJsonDocument(*body).toJson(QJsonDocument::Compact) : QByteArray();
 
     if (method == "GET") {
         reply = m_network.get(request);
@@ -90,9 +106,27 @@ void HttpClient::send(const QString& method, const QString& path, const QString&
         Q_UNUSED(errors)
     });
 
-    QObject::connect(reply, &QNetworkReply::finished, reply, [this, reply, callback = std::move(callback)]() mutable {
+    QObject::connect(reply, &QNetworkReply::finished, reply, [this, reply, method, path, accessToken, body, alreadyRetried, callback = std::move(callback)]() mutable {
         const QByteArray responseBody = reply->readAll();
         if (reply->error() != QNetworkReply::NoError) {
+            const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            const bool canRefresh = statusCode == 401
+                && !alreadyRetried
+                && !m_tokens.refreshToken.isEmpty()
+                && !isRefreshPath(path);
+            if (canRefresh) {
+                reply->deleteLater();
+                refreshTokens([this, method, path, accessToken, body, callback = std::move(callback)](Result<TokenSet> refreshResult) mutable {
+                    if (refreshResult.failed()) {
+                        callback(Result<QJsonDocument>::failure(refreshResult.error()));
+                        return;
+                    }
+                    const QString retryToken = accessToken.isEmpty() ? QString() : m_tokens.accessToken;
+                    send(method, path, retryToken, body, std::move(callback), true);
+                });
+                return;
+            }
+
             callback(Result<QJsonDocument>::failure(errorForReply(*reply, responseBody)));
             reply->deleteLater();
             return;
@@ -111,6 +145,35 @@ void HttpClient::send(const QString& method, const QString& path, const QString&
     });
 }
 
+void HttpClient::refreshTokens(GatewayCallback<TokenSet> callback) {
+    const QString previousRefreshToken = m_tokens.refreshToken;
+    send("POST", authPath("/refresh"), {}, QJsonObject{{"refresh_token", previousRefreshToken}}, [this, previousRefreshToken, callback = std::move(callback)](Result<QJsonDocument> result) mutable {
+        if (result.failed()) {
+            callback(Result<TokenSet>::failure(result.error()));
+            return;
+        }
+
+        TokenSet tokens = tokensFromJson(result.value().object());
+        if (tokens.refreshToken.isEmpty()) {
+            tokens.refreshToken = previousRefreshToken;
+        }
+        m_tokens = tokens;
+        if (m_tokenUpdateHandler) {
+            m_tokenUpdateHandler(m_tokens);
+        }
+        callback(Result<TokenSet>::success(m_tokens));
+    }, true);
+}
+
+TokenSet HttpClient::tokensFromJson(const QJsonObject& object) const {
+    return {
+        object.value("access_token").toString(),
+        object.value("refresh_token").toString(),
+        object.value("token_type").toString(),
+        object.value("expires_in").toInt()
+    };
+}
+
 QUrl HttpClient::urlFor(const QString& path) const {
     QUrl url = m_baseUrl;
     const QString basePath = withoutTrailingSlash(url.path());
@@ -121,8 +184,11 @@ QUrl HttpClient::urlFor(const QString& path) const {
 QNetworkRequest HttpClient::requestFor(const QString& path, const QString& accessToken) const {
     QNetworkRequest request(urlFor(path));
     request.setHeader(QNetworkRequest::ContentTypeHeader, AppText::JsonContentType);
-    if (!accessToken.isEmpty()) {
-        request.setRawHeader("Authorization", QString(AppText::BearerPrefix + accessToken).toUtf8());
+    const QString effectiveAccessToken = !accessToken.isEmpty() && !m_tokens.accessToken.isEmpty()
+        ? m_tokens.accessToken
+        : accessToken;
+    if (!effectiveAccessToken.isEmpty()) {
+        request.setRawHeader("Authorization", QString(AppText::BearerPrefix + effectiveAccessToken).toUtf8());
     }
     return request;
 }
@@ -136,6 +202,9 @@ ClientError HttpClient::errorForReply(QNetworkReply& reply, const QByteArray& re
     }
     if (reply.error() == QNetworkReply::SslHandshakeFailedError) {
         return {ErrorCode::TlsError, message};
+    }
+    if (statusCode == 401) {
+        return {ErrorCode::AuthRequired, QString("HTTP %1: %2").arg(statusCode).arg(message)};
     }
     if (statusCode > 0) {
         return {ErrorCode::HttpError, QString("HTTP %1: %2").arg(statusCode).arg(message)};
@@ -173,6 +242,7 @@ void HttpAuthGateway::login(const QString& usernameOrEmail, const QString& passw
         }
 
         const TokenSet tokens = tokensFromJson(tokensResult.value().object());
+        m_client.setTokens(tokens);
         m_client.get(authPath("/me"), tokens.accessToken, [this, tokens, callback = std::move(callback)](Result<QJsonDocument> userResult) mutable {
             if (userResult.failed()) {
                 callback(Result<AuthSession>::failure(userResult.error()));
@@ -194,11 +264,12 @@ void HttpAuthGateway::currentUser(const QString& accessToken, GatewayCallback<Us
 }
 
 void HttpAuthGateway::logout(const QString& refreshToken, GatewayCallback<bool> callback) {
-    m_client.post(authPath("/logout"), {}, {{"refresh_token", refreshToken}}, [callback = std::move(callback)](Result<QJsonDocument> result) mutable {
+    m_client.post(authPath("/logout"), {}, {{"refresh_token", refreshToken}}, [this, callback = std::move(callback)](Result<QJsonDocument> result) mutable {
         if (result.failed()) {
             callback(Result<bool>::failure(result.error()));
             return;
         }
+        m_client.clearTokens();
         callback(Result<bool>::success(true));
     });
 }

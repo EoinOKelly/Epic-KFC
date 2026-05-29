@@ -20,6 +20,7 @@ public:
     std::optional<AuthSession> currentSession() const;
     QString accessToken() const;
     QString currentUserId() const;
+    void updateTokens(const TokenSet& tokens);
 
 private:
     EventBus& m_events;

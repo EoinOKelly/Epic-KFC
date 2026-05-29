@@ -91,6 +91,17 @@ QString SessionService::currentUserId() const {
     return m_session->user.id;
 }
 
+void SessionService::updateTokens(const TokenSet& tokens) {
+    if (!m_session.has_value()) {
+        return;
+    }
+    m_session->tokens = tokens;
+    const auto saved = m_store.saveSession(*m_session);
+    if (saved.failed()) {
+        emit m_events.commandFailed(saved.error());
+    }
+}
+
 KeyService::KeyService(EventBus& events, IKeyGateway& keyGateway, ICryptoProvider& cryptoProvider, JsonLocalStore& store, SessionService& sessionService, int deviceId, QObject* parent)
     : QObject(parent)
     , m_events(events)

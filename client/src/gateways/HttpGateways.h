@@ -7,25 +7,35 @@
 #include <QNetworkAccessManager>
 #include <QUrl>
 
+#include <functional>
+#include <optional>
+
 class HttpClient : public QObject {
     Q_OBJECT
 
 public:
     explicit HttpClient(QString baseUrl, QObject* parent = nullptr);
 
+    void setTokens(const TokenSet& tokens);
+    void clearTokens();
+    void setTokenUpdateHandler(std::function<void(const TokenSet&)> handler);
     void get(const QString& path, const QString& accessToken, GatewayCallback<QJsonDocument> callback);
     void post(const QString& path, const QString& accessToken, const QJsonObject& body, GatewayCallback<QJsonDocument> callback);
     void put(const QString& path, const QString& accessToken, const QJsonObject& body, GatewayCallback<QJsonDocument> callback);
     void deleteResource(const QString& path, const QString& accessToken, GatewayCallback<QJsonDocument> callback);
 
 private:
-    void send(const QString& method, const QString& path, const QString& accessToken, const QJsonObject* body, GatewayCallback<QJsonDocument> callback);
+    void send(const QString& method, const QString& path, const QString& accessToken, std::optional<QJsonObject> body, GatewayCallback<QJsonDocument> callback, bool alreadyRetried = false);
+    void refreshTokens(GatewayCallback<TokenSet> callback);
+    TokenSet tokensFromJson(const QJsonObject& object) const;
     QUrl urlFor(const QString& path) const;
     QNetworkRequest requestFor(const QString& path, const QString& accessToken) const;
     ClientError errorForReply(QNetworkReply& reply, const QByteArray& responseBody) const;
 
     QUrl m_baseUrl;
     QNetworkAccessManager m_network;
+    TokenSet m_tokens;
+    std::function<void(const TokenSet&)> m_tokenUpdateHandler;
 };
 
 class HttpAuthGateway : public QObject, public IAuthGateway {
