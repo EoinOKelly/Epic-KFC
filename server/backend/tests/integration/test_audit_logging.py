@@ -23,6 +23,7 @@ from app.repositories import (
 from app.schemas.device_key import DeviceKeyUploadRequest
 from app.schemas.one_time_prekey import OneTimePreKeyUpload
 from app.services import auth_service, token_service
+from tests.fixtures.wire_payloads import WIRE_PAYLOAD
 
 
 pytestmark = pytest.mark.asyncio
@@ -33,10 +34,6 @@ VALID_PASSWORD = "correct-horse-battery-staple"
 WRONG_PASSWORD = "wrong-horse-battery-staple"
 PASSWORD_HASH = "$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$cGFzc3dvcmQ"
 KEY_B64 = "a2V5LW1hdGVyaWFs"
-WIRE_PAYLOAD = (
-    '{"counter":0,"previousCounter":0,"ciphertext":"b3JpZ2luYWw=",'
-    '"iv":"aXY=","authTag":"dGFn"}'
-)
 
 
 @pytest.fixture(autouse=True)

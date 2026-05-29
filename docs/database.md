@@ -21,7 +21,6 @@ erDiagram
     int device_id
     int registration_id
     string identity_key_public_b64
-    string identity_signing_public_b64
     int signed_prekey_id
     string signed_prekey_public_b64
     string signed_prekey_signature_b64
@@ -59,20 +58,20 @@ Do **not** store plaintext passwords. A separate `salt` column is optional (redu
 
 ### `device_keys`
 
-Populated when the client calls `buildPreKeyBundle()` and uploads **public** fields only.
+Populated when the client calls `deviceToPublicBundle()` / `deviceToDbRows()` and uploads **public** fields only. Identity key doubles as signing key in the libsignal-protocol port (no separate `identity_signing_*` column).
 
 Rotate `signed_prekey_*` periodically; old clients may need a bundle refresh.
 
 ### `one_time_prekeys`
 
 - Insert many rows per device (batch upload).
-- When sender’s `createInitiatorSession` returns `consumedOneTimePreKeyId`, set `used_at` on that row (or delete it).
+- When the first `PreKeyWhisperMessage` is consumed (`wire.type === 3`), set `used_at` on the OPK row (client removes locally via `InMemoryProtocolStore.removePreKey`).
 
 ### `messages`
 
 | Column | Content |
 |--------|---------|
-| `wire_payload_json` | Output of `serializeWireMessage(signalEncrypt(...))` |
+| `wire_payload_json` | Output of `serializeWireMessage(encryptForRecipient(...))` — `format: "libsignal-v1"` |
 
 Server cannot decrypt without client private state. Index `recipient_*` for inbox queries.
 

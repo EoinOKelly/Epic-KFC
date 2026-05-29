@@ -64,10 +64,10 @@ One row per `(user_id, device_id)`. Public material only.
 | `device_id` | int | `deviceId` |
 | `registration_id` | int | `registrationId` |
 | `identity_key_public_b64` | text | `identityKey` (standard base64) |
-| `identity_signing_public_b64` | text | `identitySigningKey` |
-| `signed_prekey_id` | int | `signedPreKeyId` |
-| `signed_prekey_public_b64` | text | `signedPreKey` |
-| `signed_prekey_signature_b64` | text | `signedPreKeySignature` |
+| `signed_prekey_id` | int | `signedPreKey.keyId` |
+| `signed_prekey_public_b64` | text | `signedPreKey.publicKey` |
+| `signed_prekey_signature_b64` | text | `signedPreKey.signature` |
+| `kyber_prekey_*` | optional | Reserved for `@signalapp/libsignal-client`; unused in classic X3DH port |
 | `signed_prekey_created_at` | timestamptz | Set on upload |
 
 Unique constraint: `(user_id, device_id)`.
@@ -101,22 +101,19 @@ Optional non-secret columns (from `MessageMetadata`): `conversation_id`, `consum
 
 ## Wire payload format
 
-Clients POST the string returned by `serializeWireMessage()`. The server stores it verbatim. Shape (`StoredWireMessage`):
+Clients POST the string returned by `serializeWireMessage()`. The server stores it verbatim. Shape (`LibSignalWireMessage`):
 
 ```json
 {
-  "counter": 0,
-  "previousCounter": 0,
-  "ciphertext": "<base64>",
-  "iv": "<base64>",
-  "authTag": "<base64>",
-  "ratchetPublicKey": "<base64, optional>",
-  "x3dh": {
-    "identityKey": "<base64>",
-    "ephemeralKey": "<base64>"
-  }
+  "format": "libsignal-v1",
+  "type": 3,
+  "bodyB64": "<base64 serialized PreKeyWhisperMessage or WhisperMessage>",
+  "registrationId": 12345
 }
 ```
+
+- `type === 3`: first message to a device (establishes session; includes X3DH material inside protobuf).
+- `type === 1`: subsequent messages on an established session.
 
 Validation on the server should be **structural only** (required keys present, base64 decodable) — not decryption.
 
@@ -202,12 +199,8 @@ sequenceDiagram
   "registrationId": 12345,
   "deviceId": 1,
   "identityKey": "<base64>",
-  "identitySigningKey": "<base64>",
-  "signedPreKeyId": 1,
-  "signedPreKey": "<base64>",
-  "signedPreKeySignature": "<base64>",
-  "oneTimePreKeyId": 42,
-  "oneTimePreKey": "<base64>"
+  "signedPreKey": { "keyId": 1, "publicKey": "<base64>", "signature": "<base64>" },
+  "preKey": { "keyId": 42, "publicKey": "<base64>" }
 }
 ```
 
@@ -220,9 +213,9 @@ Field names can be camelCase in JSON if documented; DB columns follow `storageSc
 The server does not call Signal APIs. Clients do:
 
 1. **Register / login** — password via API only.
-2. **Generate keys** — `generateKeyPair()`, `buildPreKeyBundle()`, upload public parts.
-3. **First message to a contact** — `GET` bundle → `createInitiatorSession` → `signalEncrypt` → `serializeWireMessage` → `POST /messages` with `consumed_one_time_prekey_id` if returned.
-4. **Reply** — `signalDecrypt` / `signalEncrypt` with local ratchet state → POST next wire payload.
+2. **Generate keys** — `generateDevice(userId, deviceId)` → `deviceToDbRows()` → upload public parts.
+3. **First message to a contact** — `GET` bundle → `establishSession()` → `encryptForRecipient()` → `serializeWireMessage()` → `POST /messages`; mark OPK `used_at` when `type === 3`.
+4. **Reply** — `decryptFromSender` / `encryptForRecipient` with local `InMemoryProtocolStore` session state → POST next wire payload.
 5. **TOFU** — before trusting a bundle, `verifyIdentityTofu`; on `key_changed`, reject send.
 
 Ratchet state and encrypted private keys: **local files only** (`encryptPrivateKeyForStorage`).
@@ -238,7 +231,7 @@ If the current migration uses `user_key_bundles` / split `messages` columns / `m
 | `user_key_bundles` | `device_keys` + `one_time_prekeys` |
 | `messages.encrypted_payload`, `nonce`, `signature` | Single `wire_payload_json` |
 | `message_recipients.encrypted_message_key` | Not used for 1:1 Signal; ratchet handles per-message keys on device |
-| `messages.algorithm` / `encryption_scheme` | Optional constant metadata: `AES-256-GCM` inside ratchet only |
+| `messages.algorithm` / `encryption_scheme` | Optional: `libsignal-v1` (payload wrapped with AES-256-GCM, then transported through Signal session ciphertext) |
 
 `conversations` can remain for threading in the UI; link `conversation_id` on `messages` as optional metadata without changing crypto.
 
@@ -281,10 +274,11 @@ import {
 } from "@epic-messaging/cryptography";
 
 export {
-  buildPreKeyBundle,
-  createInitiatorSession,
-  signalEncrypt,
-  signalDecrypt,
+  generateDevice,
+  establishSession,
+  encryptForRecipient,
+  decryptFromSender,
+  serializeWireMessage,
 } from "@epic-messaging/cryptography";
 ```
 
@@ -303,6 +297,21 @@ Export surface: `cryptography/src/index.ts`.
 - [ ] `blockchain_anchors`: keccak256 + Sepolia metadata conventions
 - [ ] Point all crypto logic at monorepo `cryptography/` (build in CI)
 - [ ] Update backend README to reference this guide
+
+---
+
+## Verification checklist (crypto owner)
+
+Run these in order to confirm the contract between `cryptography/` and this backend:
+
+| Step | Command | Proves |
+|------|---------|--------|
+| 1 | `cd cryptography && npm run smoke:signal` | E2EE encrypt/decrypt locally |
+| 2 | `cd cryptography && npm run demo:signal` | Same, with step-by-step logs |
+| 3 | Start API + Postgres, then `npm run e2e:backend` | Real HTTP relay + decrypt round-trip |
+| 4 | `cd server/backend && pytest tests/unit/test_wire_payload_validation.py -v` | Backend accepts `libsignal-v1` wire JSON |
+
+The backend never runs the TypeScript package on requests; step 3 uses Node as a **stand-in client**.
 
 ---
 

@@ -59,10 +59,10 @@ sequenceDiagram
   B->>S: Login
   B->>S: Upload pre-key bundle (public keys only)
   A->>S: GET Bob pre-key bundle
-  Note over A: createInitiatorSession + signalEncrypt
-  A->>S: POST wire_payload_json (ciphertext)
+  Note over A: establishSession + encryptForRecipient
+  A->>S: POST wire_payload_json (libsignal-v1)
   S->>B: Deliver message (poll/push)
-  Note over B: deserializeWireMessage + signalDecrypt
+  Note over B: deserializeWireMessage + decryptFromSender
   B-->>B: Plaintext in UI
 ```
 

@@ -19,19 +19,12 @@ from app.services.message_service import (
     MessageNotFoundError,
     RecipientNotFoundError,
 )
+from tests.fixtures.wire_payloads import NEW_WIRE_PAYLOAD, WIRE_PAYLOAD
 
 
 pytestmark = pytest.mark.asyncio
 
 PASSWORD_HASH = "$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$cGFzc3dvcmQ"
-WIRE_PAYLOAD = (
-    '{"counter":0,"previousCounter":0,"ciphertext":"b3JpZ2luYWw=",'
-    '"iv":"aXY=","authTag":"dGFn"}'
-)
-NEW_WIRE_PAYLOAD = (
-    '{ "counter": 1, "previousCounter": 0, "ciphertext": "bmV3", '
-    '"iv": "aXY=", "authTag": "dGFn" }'
-)
 KEY_B64 = "a2V5LW1hdGVyaWFs"
 
 

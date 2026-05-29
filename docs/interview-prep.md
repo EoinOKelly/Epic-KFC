@@ -4,7 +4,9 @@ Short answers if the panel pushes hard.
 
 ## “Did you roll your own crypto?”
 
-We use **argon2** and **Node crypto** for primitives. We implemented **Signal’s X3DH and Double Ratchet key schedule** ourselves; message bodies use **AES-256-GCM** per the brief, not Signal’s CBC+HMAC. That protocol wiring is the main custom surface — we cite the Signal specs and document that libsignal would be the production choice.
+**Policy:** use standard libraries wherever they exist (`argon2`, Node `crypto`; production E2EE should be **libsignal**).
+
+**Current state:** primitives follow that policy. **X3DH + Double Ratchet** are hand-wired in `signal/` for the project demo and brief-friendly AES-256-GCM — not ideal vs libsignal. Message bodies use **AES-256-GCM**, not Signal’s CBC+HMAC. We cite Signal specs and list migration to libsignal as the hardening path.
 
 ## “Why not HPKE?”
 

@@ -14,6 +14,7 @@ from app.main import app
 from app.repositories import device_key_repository, user_repository
 from app.schemas.device_key import DeviceKeyUploadRequest
 from app.services import auth_service, token_service
+from tests.fixtures.wire_payloads import WIRE_PAYLOAD
 
 
 pytestmark = pytest.mark.asyncio
@@ -22,10 +23,6 @@ JWT_SECRET = "security-access-jwt-secret-with-at-least-sixty-four-bytes-12345678
 REFRESH_HASH_SECRET = "security-access-refresh-secret-with-at-least-thirty-two"
 PASSWORD_HASH = "$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$cGFzc3dvcmQ"
 KEY_B64 = "a2V5LW1hdGVyaWFs"
-WIRE_PAYLOAD = (
-    '{"counter":0,"previousCounter":0,"ciphertext":"b3JpZ2luYWw=",'
-    '"iv":"aXY=","authTag":"dGFn"}'
-)
 
 
 @pytest.fixture(autouse=True)

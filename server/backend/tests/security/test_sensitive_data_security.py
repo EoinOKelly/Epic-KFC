@@ -16,6 +16,7 @@ from app.models.audit_log import AuditLog
 from app.repositories import audit_log_repository, device_key_repository, user_repository
 from app.schemas.device_key import DeviceKeyUploadRequest
 from app.services import auth_service, token_service
+from tests.fixtures.wire_payloads import FORWARDED_WIRE_PAYLOAD, WIRE_PAYLOAD
 
 
 pytestmark = pytest.mark.asyncio
@@ -26,14 +27,6 @@ PASSWORD = "correct-horse-battery-staple"
 WRONG_PASSWORD = "wrong-horse-battery-staple"
 PASSWORD_HASH = "$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$cGFzc3dvcmQ"
 KEY_B64 = "a2V5LW1hdGVyaWFs"
-WIRE_PAYLOAD = (
-    '{"counter":0,"previousCounter":0,"ciphertext":"b3JpZ2luYWw=",'
-    '"iv":"aXY=","authTag":"dGFn"}'
-)
-FORWARDED_WIRE_PAYLOAD = (
-    '{"counter":1,"previousCounter":0,"ciphertext":"Zm9yd2FyZA==",'
-    '"iv":"aXY=","authTag":"dGFn"}'
-)
 
 
 @pytest.fixture(autouse=True)
