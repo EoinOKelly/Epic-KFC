@@ -9,6 +9,12 @@ find_package(Qt${QT_VERSION_MAJOR}
         Core
         Network
 )
+find_package(OpenSSL QUIET)
+
+if(NOT OpenSSL_FOUND AND WIN32 AND EXISTS "C:/Qt/Tools/mingw1310_64/opt")
+    set(OPENSSL_ROOT_DIR "C:/Qt/Tools/mingw1310_64/opt" CACHE PATH "OpenSSL root directory")
+    find_package(OpenSSL QUIET)
+endif()
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 
@@ -58,6 +64,17 @@ target_link_libraries(client_core
         Qt::Core
         Qt::Network
 )
+
+if(OpenSSL_FOUND)
+    target_link_libraries(client_core
+        PUBLIC
+            OpenSSL::Crypto
+    )
+    target_compile_definitions(client_core
+        PUBLIC
+            CLIENT_HAS_OPENSSL=1
+    )
+endif()
 
 add_executable(${PROJECT_NAME}
     src/main.cpp

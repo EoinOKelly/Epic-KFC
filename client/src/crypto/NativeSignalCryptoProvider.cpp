@@ -8,6 +8,13 @@
 #include <QMessageAuthenticationCode>
 #include <QRandomGenerator>
 
+#if CLIENT_HAS_OPENSSL
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
+#include <openssl/kdf.h>
+#include <openssl/rand.h>
+#endif
+
 namespace {
 QByteArray intToBigEndian(int value) {
     QByteArray bytes(4, Qt::Uninitialized);
@@ -21,6 +28,108 @@ QByteArray intToBigEndian(int value) {
 bool isValidBase64(const QString& value) {
     return !value.isEmpty() && !QByteArray::fromBase64(value.toLatin1()).isEmpty();
 }
+
+#if CLIENT_HAS_OPENSSL
+struct RawKeyPair {
+    QByteArray publicKey;
+    QByteArray privateKey;
+};
+
+RawKeyPair generateRawKeyPair(int keyType) {
+    EVP_PKEY_CTX* context = EVP_PKEY_CTX_new_id(keyType, nullptr);
+    if (context == nullptr || EVP_PKEY_keygen_init(context) <= 0) {
+        EVP_PKEY_CTX_free(context);
+        return {};
+    }
+
+    EVP_PKEY* key = nullptr;
+    if (EVP_PKEY_keygen(context, &key) <= 0) {
+        EVP_PKEY_CTX_free(context);
+        return {};
+    }
+
+    size_t publicLength = CryptoText::KeyBytes;
+    size_t privateLength = CryptoText::KeyBytes;
+    QByteArray publicKey(CryptoText::KeyBytes, Qt::Uninitialized);
+    QByteArray privateKey(CryptoText::KeyBytes, Qt::Uninitialized);
+    EVP_PKEY_get_raw_public_key(key, reinterpret_cast<unsigned char*>(publicKey.data()), &publicLength);
+    EVP_PKEY_get_raw_private_key(key, reinterpret_cast<unsigned char*>(privateKey.data()), &privateLength);
+    publicKey.resize(static_cast<qsizetype>(publicLength));
+    privateKey.resize(static_cast<qsizetype>(privateLength));
+
+    EVP_PKEY_free(key);
+    EVP_PKEY_CTX_free(context);
+    return {publicKey, privateKey};
+}
+
+QByteArray ed25519Sign(const QByteArray& privateKey, const QByteArray& message) {
+    EVP_PKEY* key = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, nullptr, reinterpret_cast<const unsigned char*>(privateKey.constData()), privateKey.size());
+    EVP_MD_CTX* context = EVP_MD_CTX_new();
+    size_t signatureLength = 64;
+    QByteArray signature(static_cast<qsizetype>(signatureLength), Qt::Uninitialized);
+    if (key == nullptr || context == nullptr || EVP_DigestSignInit(context, nullptr, nullptr, nullptr, key) <= 0
+        || EVP_DigestSign(context, reinterpret_cast<unsigned char*>(signature.data()), &signatureLength, reinterpret_cast<const unsigned char*>(message.constData()), message.size()) <= 0) {
+        signature.clear();
+    }
+    signature.resize(static_cast<qsizetype>(signatureLength));
+    EVP_MD_CTX_free(context);
+    EVP_PKEY_free(key);
+    return signature;
+}
+
+bool ed25519Verify(const QByteArray& publicKey, const QByteArray& message, const QByteArray& signature) {
+    EVP_PKEY* key = EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, nullptr, reinterpret_cast<const unsigned char*>(publicKey.constData()), publicKey.size());
+    EVP_MD_CTX* context = EVP_MD_CTX_new();
+    const int ok = key != nullptr && context != nullptr
+        && EVP_DigestVerifyInit(context, nullptr, nullptr, nullptr, key) > 0
+        && EVP_DigestVerify(context, reinterpret_cast<const unsigned char*>(signature.constData()), signature.size(), reinterpret_cast<const unsigned char*>(message.constData()), message.size()) == 1;
+    EVP_MD_CTX_free(context);
+    EVP_PKEY_free(key);
+    return ok;
+}
+
+QByteArray x25519Dh(const QByteArray& privateKey, const QByteArray& publicKey) {
+    EVP_PKEY* local = EVP_PKEY_new_raw_private_key(EVP_PKEY_X25519, nullptr, reinterpret_cast<const unsigned char*>(privateKey.constData()), privateKey.size());
+    EVP_PKEY* remote = EVP_PKEY_new_raw_public_key(EVP_PKEY_X25519, nullptr, reinterpret_cast<const unsigned char*>(publicKey.constData()), publicKey.size());
+    EVP_PKEY_CTX* context = EVP_PKEY_CTX_new(local, nullptr);
+    size_t secretLength = CryptoText::KeyBytes;
+    QByteArray secret(CryptoText::KeyBytes, Qt::Uninitialized);
+    if (local == nullptr || remote == nullptr || context == nullptr
+        || EVP_PKEY_derive_init(context) <= 0
+        || EVP_PKEY_derive_set_peer(context, remote) <= 0
+        || EVP_PKEY_derive(context, reinterpret_cast<unsigned char*>(secret.data()), &secretLength) <= 0) {
+        secret.clear();
+    }
+    secret.resize(static_cast<qsizetype>(secretLength));
+    EVP_PKEY_CTX_free(context);
+    EVP_PKEY_free(remote);
+    EVP_PKEY_free(local);
+    return secret;
+}
+
+QByteArray hkdfSha256(const QByteArray& ikm, const QByteArray& salt, const QByteArray& info, int length) {
+    QByteArray output(length, Qt::Uninitialized);
+    EVP_PKEY_CTX* context = EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, nullptr);
+    if (context == nullptr
+        || EVP_PKEY_derive_init(context) <= 0
+        || EVP_PKEY_CTX_set_hkdf_md(context, EVP_sha256()) <= 0
+        || EVP_PKEY_CTX_set1_hkdf_salt(context, reinterpret_cast<const unsigned char*>(salt.constData()), salt.size()) <= 0
+        || EVP_PKEY_CTX_set1_hkdf_key(context, reinterpret_cast<const unsigned char*>(ikm.constData()), ikm.size()) <= 0
+        || EVP_PKEY_CTX_add1_hkdf_info(context, reinterpret_cast<const unsigned char*>(info.constData()), info.size()) <= 0) {
+        output.clear();
+        EVP_PKEY_CTX_free(context);
+        return output;
+    }
+
+    size_t outputLength = static_cast<size_t>(output.size());
+    if (EVP_PKEY_derive(context, reinterpret_cast<unsigned char*>(output.data()), &outputLength) <= 0) {
+        output.clear();
+    }
+    output.resize(static_cast<qsizetype>(outputLength));
+    EVP_PKEY_CTX_free(context);
+    return output;
+}
+#endif
 }
 
 Result<DeviceKeyMaterial> NativeSignalCryptoProvider::loadOrCreateDevice(DeviceKeyMaterial existing, int deviceId) {
@@ -28,6 +137,18 @@ Result<DeviceKeyMaterial> NativeSignalCryptoProvider::loadOrCreateDevice(DeviceK
         return Result<DeviceKeyMaterial>::success(existing);
     }
 
+#if CLIENT_HAS_OPENSSL
+    const RawKeyPair identity = generateRawKeyPair(EVP_PKEY_X25519);
+    const RawKeyPair signing = generateRawKeyPair(EVP_PKEY_ED25519);
+    const RawKeyPair signedPreKey = generateRawKeyPair(EVP_PKEY_X25519);
+    const QByteArray signature = ed25519Sign(signing.privateKey, signedPreKey.publicKey);
+    const QByteArray identityPublic = identity.publicKey;
+    const QByteArray identityPrivate = identity.privateKey;
+    const QByteArray signingPublic = signing.publicKey;
+    const QByteArray signingPrivate = signing.privateKey;
+    const QByteArray signedPreKeyPublic = signedPreKey.publicKey;
+    const QByteArray signedPreKeyPrivate = signedPreKey.privateKey;
+#else
     const QByteArray identityPrivate = randomBytes(CryptoText::KeyBytes);
     const QByteArray signingPrivate = randomBytes(CryptoText::KeyBytes);
     const QByteArray signedPreKeyPrivate = randomBytes(CryptoText::KeyBytes);
@@ -35,6 +156,7 @@ Result<DeviceKeyMaterial> NativeSignalCryptoProvider::loadOrCreateDevice(DeviceK
     const QByteArray signingPublic = signingPrivate;
     const QByteArray signedPreKeyPublic = signedPreKeyPrivate;
     const QByteArray signature = hmac(signingPublic, signedPreKeyPublic);
+#endif
     const int registrationId = CryptoText::DefaultRegistrationIdMinimum
         + static_cast<int>(QRandomGenerator::global()->bounded(CryptoText::DefaultRegistrationIdRange));
 
@@ -55,11 +177,18 @@ Result<DeviceKeyMaterial> NativeSignalCryptoProvider::loadOrCreateDevice(DeviceK
 Result<QList<OneTimePreKey>> NativeSignalCryptoProvider::createOneTimePreKeys(int deviceId, int count) {
     QList<OneTimePreKey> preKeys;
     for (int index = 0; index < count; ++index) {
+#if CLIENT_HAS_OPENSSL
+        const RawKeyPair keyPair = generateRawKeyPair(EVP_PKEY_X25519);
+        const QByteArray publicKey = keyPair.publicKey;
+        const QByteArray privateKey = keyPair.privateKey;
+#else
         const QByteArray privateKey = randomBytes(CryptoText::KeyBytes);
+        const QByteArray publicKey = privateKey;
+#endif
         preKeys.push_back({
             deviceId,
             CryptoText::FirstPreKeyId + index,
-            toBase64(privateKey),
+            toBase64(publicKey),
             toBase64(privateKey),
             false
         });
@@ -75,6 +204,12 @@ Result<bool> NativeSignalCryptoProvider::verifySignedPreKey(const PreKeyBundle& 
     if (!hasRequiredFields) {
         return Result<bool>::failure({ErrorCode::CryptoError, "Pre-key bundle contains invalid base64 fields."});
     }
+#if CLIENT_HAS_OPENSSL
+    const bool signatureValid = ed25519Verify(fromBase64(bundle.identitySigningKey), fromBase64(bundle.signedPreKey), fromBase64(bundle.signedPreKeySignature));
+    if (!signatureValid) {
+        return Result<bool>::failure({ErrorCode::CryptoError, "Pre-key bundle signature is invalid."});
+    }
+#endif
     return Result<bool>::success(true);
 }
 
@@ -89,12 +224,29 @@ Result<EncryptedPayload> NativeSignalCryptoProvider::encrypt(
 
     const int counter = nextCounter(recipientBundle.userId, recipientBundle.deviceId);
     const int previousCounter = 0;
+#if CLIENT_HAS_OPENSSL
+    const RawKeyPair ratchetKey = generateRawKeyPair(EVP_PKEY_X25519);
+    const RawKeyPair ephemeralKey = generateRawKeyPair(EVP_PKEY_X25519);
+    const QByteArray dh1 = x25519Dh(fromBase64(senderDevice.identityPrivateKey), fromBase64(recipientBundle.signedPreKey));
+    const QByteArray dh2 = x25519Dh(ephemeralKey.privateKey, fromBase64(recipientBundle.identityKey));
+    const QByteArray dh3 = x25519Dh(ephemeralKey.privateKey, fromBase64(recipientBundle.signedPreKey));
+    QByteArray dhOutputs = dh1 + dh2 + dh3;
+    if (!recipientBundle.oneTimePreKey.isEmpty()) {
+        dhOutputs += x25519Dh(ephemeralKey.privateKey, fromBase64(recipientBundle.oneTimePreKey));
+    }
+    const QByteArray sharedSecret = hkdfSha256(dhOutputs, QByteArray(CryptoText::KeyBytes, 0), CryptoText::X3dhInfo.toUtf8(), CryptoText::KeyBytes);
+    const QByteArray rootOut = hkdfSha256(x25519Dh(ratchetKey.privateKey, fromBase64(recipientBundle.signedPreKey)), sharedSecret, {}, CryptoText::KeyBytes * 2);
+    const QByteArray chainKey = rootOut.mid(CryptoText::KeyBytes, CryptoText::KeyBytes);
+    const QByteArray key = hmac(chainKey, QByteArray(1, char(0x01)));
+    const QByteArray ratchetPublicKey = ratchetKey.publicKey;
+#else
     const QByteArray ratchetPublicKey = fromBase64(senderDevice.signedPreKey);
-    const QByteArray iv = randomBytes(CryptoText::IvBytes);
     const QByteArray key = deriveMessageKey(
         fromBase64(senderDevice.identityPrivateKey),
         fromBase64(recipientBundle.identityKey),
         QByteArray(CryptoText::X3dhInfo.toUtf8()));
+#endif
+    const QByteArray iv = randomBytes(CryptoText::IvBytes);
     const QByteArray aad = aadFor(counter, previousCounter, ratchetPublicKey);
     const QByteArray ciphertext = cryptWithKeystream(plaintext.toUtf8(), key, iv);
     const QByteArray tag = hmac(key, aad + ciphertext).left(CryptoText::AuthTagBytes);
@@ -109,7 +261,11 @@ Result<EncryptedPayload> NativeSignalCryptoProvider::encrypt(
     };
 
     if (counter == 0) {
+#if CLIENT_HAS_OPENSSL
+        const QByteArray ephemeral = ephemeralKey.publicKey;
+#else
         const QByteArray ephemeral = randomBytes(CryptoText::KeyBytes);
+#endif
         root.insert(CryptoText::WireX3dh, QJsonObject{
             {CryptoText::WireIdentityKey, senderDevice.identityKey},
             {CryptoText::WireEphemeralKey, toBase64(ephemeral)}
@@ -154,6 +310,11 @@ Result<QString> NativeSignalCryptoProvider::decrypt(const QString& currentUserId
 
 QByteArray NativeSignalCryptoProvider::randomBytes(qsizetype size) const {
     QByteArray bytes(size, Qt::Uninitialized);
+#if CLIENT_HAS_OPENSSL
+    if (RAND_bytes(reinterpret_cast<unsigned char*>(bytes.data()), static_cast<int>(bytes.size())) == 1) {
+        return bytes;
+    }
+#endif
     for (qsizetype index = 0; index < size; ++index) {
         bytes[index] = static_cast<char>(QRandomGenerator::system()->bounded(256));
     }
@@ -173,7 +334,21 @@ QByteArray NativeSignalCryptoProvider::digest(const QByteArray& value) const {
 }
 
 QByteArray NativeSignalCryptoProvider::hmac(const QByteArray& key, const QByteArray& data) const {
+#if CLIENT_HAS_OPENSSL
+    unsigned int length = 0;
+    QByteArray output(EVP_MAX_MD_SIZE, Qt::Uninitialized);
+    HMAC(EVP_sha256(),
+        key.constData(),
+        key.size(),
+        reinterpret_cast<const unsigned char*>(data.constData()),
+        data.size(),
+        reinterpret_cast<unsigned char*>(output.data()),
+        &length);
+    output.resize(static_cast<qsizetype>(length));
+    return output;
+#else
     return QMessageAuthenticationCode::hash(data, key, QCryptographicHash::Sha256);
+#endif
 }
 
 QByteArray NativeSignalCryptoProvider::deriveMessageKey(const QByteArray& localPrivateKey, const QByteArray& remotePublicKey, const QByteArray& salt) const {
