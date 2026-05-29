@@ -29,13 +29,24 @@ void SessionService::registerUser(const QString& username, const QString& email,
 }
 
 void SessionService::login(const QString& usernameOrEmail, const QString& password) {
-    m_authGateway.login(usernameOrEmail, password, [this](Result<AuthSession> result) {
+    m_authGateway.login(usernameOrEmail, password, [this, password](Result<AuthSession> result) {
         if (result.failed()) {
             emit m_events.commandFailed(result.error());
             return;
         }
+        m_store.setSecretPassphrase(password);
+        const auto loadedLocalState = m_store.reload();
+        if (loadedLocalState.failed()) {
+            emit m_events.commandFailed(loadedLocalState.error());
+            return;
+        }
+
         m_session = result.value();
-        m_store.saveSession(*m_session);
+        const auto saved = m_store.saveSession(*m_session);
+        if (saved.failed()) {
+            emit m_events.commandFailed(saved.error());
+            return;
+        }
         emit m_events.sessionStarted(m_session->user);
     });
 }
@@ -48,7 +59,12 @@ void SessionService::logout() {
             return;
         }
         m_session.reset();
-        m_store.clearSession();
+        const auto cleared = m_store.clearSession();
+        if (cleared.failed()) {
+            emit m_events.commandFailed(cleared.error());
+            return;
+        }
+        m_store.clearSecretPassphrase();
         emit m_events.sessionEnded();
     });
 }
@@ -108,7 +124,11 @@ void KeyService::ensureDeviceKeysUploaded() {
         return;
     }
 
-    m_store.saveDeviceKeys(material.value());
+    const auto savedDevice = m_store.saveDeviceKeys(material.value());
+    if (savedDevice.failed()) {
+        emit m_events.commandFailed(savedDevice.error());
+        return;
+    }
     m_keyGateway.upsertDeviceKeys(m_sessionService.accessToken(), material.value(), [this](Result<bool> result) {
         if (result.failed()) {
             emit m_events.commandFailed(result.error());
@@ -127,7 +147,11 @@ void KeyService::uploadOneTimePreKeys() {
             emit m_events.cryptoOperationFailed(created.error());
             return;
         }
-        m_store.saveOneTimePreKeys(created.value());
+        const auto savedPreKeys = m_store.saveOneTimePreKeys(created.value());
+        if (savedPreKeys.failed()) {
+            emit m_events.commandFailed(savedPreKeys.error());
+            return;
+        }
         existing = Result<QList<OneTimePreKey>>::success(created.value());
     }
 
@@ -162,7 +186,11 @@ void KeyService::trustUser(const QString& userId, int deviceId) {
         }
         if (!existing.value().has_value()) {
             TrustPin pin{userId, deviceId, result.value().identityKey, QDateTime::currentDateTimeUtc()};
-            m_store.saveTrustPin(pin);
+            const auto saved = m_store.saveTrustPin(pin);
+            if (saved.failed()) {
+                emit m_events.commandFailed(saved.error());
+                return;
+            }
             m_lastTrustedBundle = result.value();
             emit m_events.trustPinCreated(pin);
             return;
@@ -273,7 +301,11 @@ void MessageService::send(const QString& recipientUserId, int recipientDeviceId,
             emit m_events.commandFailed(result.error());
             return;
         }
-        m_store.saveMessage(result.value());
+        const auto saved = m_store.saveMessage(result.value());
+        if (saved.failed()) {
+            emit m_events.commandFailed(saved.error());
+            return;
+        }
         emit m_events.messageSent(result.value());
     });
 }
@@ -304,7 +336,11 @@ void MessageService::read(const QString& messageId) {
             emit m_events.commandFailed(result.error());
             return;
         }
-        m_store.saveMessage(result.value());
+        const auto saved = m_store.saveMessage(result.value());
+        if (saved.failed()) {
+            emit m_events.commandFailed(saved.error());
+            return;
+        }
         read(result.value().id);
     });
 }
@@ -341,7 +377,11 @@ void MessageService::forward(const QString& messageId, const QString& recipientU
             emit m_events.commandFailed(result.error());
             return;
         }
-        m_store.saveMessage(result.value());
+        const auto saved = m_store.saveMessage(result.value());
+        if (saved.failed()) {
+            emit m_events.commandFailed(saved.error());
+            return;
+        }
         emit m_events.messageForwarded(result.value());
     });
 }
@@ -352,7 +392,11 @@ void MessageService::revoke(const QString& messageId) {
             emit m_events.commandFailed(result.error());
             return;
         }
-        m_store.saveMessage(result.value());
+        const auto saved = m_store.saveMessage(result.value());
+        if (saved.failed()) {
+            emit m_events.commandFailed(saved.error());
+            return;
+        }
         emit m_events.messageRevoked(messageId);
     });
 }
@@ -427,7 +471,11 @@ std::optional<OneTimePreKey> MessageService::oneTimePreKeyFor(const LocalMessage
 
 void MessageService::saveAndEmitList(const MessageList& messages) {
     for (const auto& message : messages) {
-        m_store.saveMessage(message);
+        const auto saved = m_store.saveMessage(message);
+        if (saved.failed()) {
+            emit m_events.commandFailed(saved.error());
+            return;
+        }
     }
     emit m_events.messageListUpdated(messages);
 }

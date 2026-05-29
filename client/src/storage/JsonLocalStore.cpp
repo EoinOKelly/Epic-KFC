@@ -8,11 +8,34 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QStringList>
 
 #include <algorithm>
+#include <optional>
 #include <utility>
 
+#if CLIENT_HAS_OPENSSL
+#include <openssl/evp.h>
+#include <openssl/rand.h>
+#endif
+
 namespace {
+constexpr int SecretBlobVersion = 1;
+constexpr int SecretPbkdf2Iterations = 210000;
+constexpr qsizetype SecretSaltBytes = 16;
+constexpr qsizetype SecretIvBytes = 12;
+constexpr qsizetype SecretTagBytes = 16;
+constexpr qsizetype SecretKeyBytes = 32;
+
+const QString SecretSaltKey = "secretSalt";
+const QString SecretVersionKey = "version";
+const QString SecretKdfKey = "kdf";
+const QString SecretIterationsKey = "iterations";
+const QString SecretIvKey = "iv";
+const QString SecretAuthTagKey = "authTag";
+const QString SecretCiphertextKey = "ciphertext";
+const QString SecretKdfName = "PBKDF2-HMAC-SHA256";
+
 QJsonObject userToJson(const UserProfile& user) {
     return {
         {StorageKeys::Id, user.id},
@@ -154,11 +177,208 @@ LocalMessage messageFromJson(const QJsonObject& object) {
         object.value("direction").toString() == "sent" ? MessageDirection::Sent : MessageDirection::Received
     };
 }
+
+QByteArray base64ToBytes(const QString& value) {
+    return QByteArray::fromBase64(value.toLatin1());
 }
 
-JsonLocalStore::JsonLocalStore(QString path)
-    : m_path(std::move(path)) {
+QString bytesToBase64(const QByteArray& value) {
+    return QString::fromLatin1(value.toBase64());
+}
+
+QByteArray randomBytes(qsizetype size) {
+    QByteArray bytes(size, Qt::Uninitialized);
+#if CLIENT_HAS_OPENSSL
+    if (RAND_bytes(reinterpret_cast<unsigned char*>(bytes.data()), static_cast<int>(bytes.size())) == 1) {
+        return bytes;
+    }
+#endif
+    bytes.clear();
+    return bytes;
+}
+
+#if CLIENT_HAS_OPENSSL
+std::optional<QByteArray> deriveStorageKey(const QString& passphrase, const QByteArray& salt) {
+    QByteArray key(SecretKeyBytes, Qt::Uninitialized);
+    const QByteArray passphraseBytes = passphrase.toUtf8();
+    const int ok = PKCS5_PBKDF2_HMAC(
+        passphraseBytes.constData(),
+        passphraseBytes.size(),
+        reinterpret_cast<const unsigned char*>(salt.constData()),
+        salt.size(),
+        SecretPbkdf2Iterations,
+        EVP_sha256(),
+        key.size(),
+        reinterpret_cast<unsigned char*>(key.data()));
+    if (ok != 1) {
+        return std::nullopt;
+    }
+    return key;
+}
+
+std::optional<QJsonObject> encryptSecretString(const QString& value, const QString& fieldName, const QString& passphrase, const QByteArray& salt) {
+    const auto key = deriveStorageKey(passphrase, salt);
+    if (!key.has_value()) {
+        return std::nullopt;
+    }
+
+    const QByteArray iv = randomBytes(SecretIvBytes);
+    if (iv.size() != SecretIvBytes) {
+        return std::nullopt;
+    }
+
+    const QByteArray plaintext = value.toUtf8();
+    const QByteArray aad = fieldName.toUtf8();
+    QByteArray ciphertext(plaintext.size(), Qt::Uninitialized);
+    QByteArray tag(SecretTagBytes, Qt::Uninitialized);
+    EVP_CIPHER_CTX* context = EVP_CIPHER_CTX_new();
+    int outputLength = 0;
+    int finalLength = 0;
+    const bool ok = context != nullptr
+        && EVP_EncryptInit_ex(context, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) == 1
+        && EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_SET_IVLEN, iv.size(), nullptr) == 1
+        && EVP_EncryptInit_ex(context, nullptr, nullptr, reinterpret_cast<const unsigned char*>(key->constData()), reinterpret_cast<const unsigned char*>(iv.constData())) == 1
+        && EVP_EncryptUpdate(context, nullptr, &outputLength, reinterpret_cast<const unsigned char*>(aad.constData()), aad.size()) == 1
+        && EVP_EncryptUpdate(context, reinterpret_cast<unsigned char*>(ciphertext.data()), &outputLength, reinterpret_cast<const unsigned char*>(plaintext.constData()), plaintext.size()) == 1
+        && EVP_EncryptFinal_ex(context, reinterpret_cast<unsigned char*>(ciphertext.data()) + outputLength, &finalLength) == 1
+        && EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_GET_TAG, tag.size(), tag.data()) == 1;
+    EVP_CIPHER_CTX_free(context);
+    if (!ok) {
+        return std::nullopt;
+    }
+
+    ciphertext.resize(outputLength + finalLength);
+    return QJsonObject{
+        {SecretVersionKey, SecretBlobVersion},
+        {SecretKdfKey, SecretKdfName},
+        {SecretIterationsKey, SecretPbkdf2Iterations},
+        {SecretIvKey, bytesToBase64(iv)},
+        {SecretAuthTagKey, bytesToBase64(tag)},
+        {SecretCiphertextKey, bytesToBase64(ciphertext)}
+    };
+}
+
+std::optional<QString> decryptSecretString(const QJsonObject& blob, const QString& fieldName, const QString& passphrase, const QByteArray& salt) {
+    if (blob.value(SecretVersionKey).toInt() != SecretBlobVersion) {
+        return std::nullopt;
+    }
+
+    const auto key = deriveStorageKey(passphrase, salt);
+    if (!key.has_value()) {
+        return std::nullopt;
+    }
+
+    const QByteArray iv = base64ToBytes(blob.value(SecretIvKey).toString());
+    const QByteArray tag = base64ToBytes(blob.value(SecretAuthTagKey).toString());
+    const QByteArray ciphertext = base64ToBytes(blob.value(SecretCiphertextKey).toString());
+    const QByteArray aad = fieldName.toUtf8();
+    QByteArray plaintext(ciphertext.size(), Qt::Uninitialized);
+    EVP_CIPHER_CTX* context = EVP_CIPHER_CTX_new();
+    int outputLength = 0;
+    int finalLength = 0;
+    const bool initialized = context != nullptr
+        && EVP_DecryptInit_ex(context, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) == 1
+        && EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_SET_IVLEN, iv.size(), nullptr) == 1
+        && EVP_DecryptInit_ex(context, nullptr, nullptr, reinterpret_cast<const unsigned char*>(key->constData()), reinterpret_cast<const unsigned char*>(iv.constData())) == 1
+        && EVP_DecryptUpdate(context, nullptr, &outputLength, reinterpret_cast<const unsigned char*>(aad.constData()), aad.size()) == 1
+        && EVP_DecryptUpdate(context, reinterpret_cast<unsigned char*>(plaintext.data()), &outputLength, reinterpret_cast<const unsigned char*>(ciphertext.constData()), ciphertext.size()) == 1
+        && EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_SET_TAG, tag.size(), const_cast<char*>(tag.constData())) == 1;
+    const bool finalized = initialized && EVP_DecryptFinal_ex(context, reinterpret_cast<unsigned char*>(plaintext.data()) + outputLength, &finalLength) == 1;
+    EVP_CIPHER_CTX_free(context);
+    if (!finalized) {
+        return std::nullopt;
+    }
+
+    plaintext.resize(outputLength + finalLength);
+    return QString::fromUtf8(plaintext);
+}
+#endif
+
+Result<bool> protectString(QJsonObject& object, const QString& key, const QString& passphrase, const QByteArray& salt) {
+#if !CLIENT_HAS_OPENSSL
+    Q_UNUSED(object)
+    Q_UNUSED(key)
+    Q_UNUSED(passphrase)
+    Q_UNUSED(salt)
+    return Result<bool>::failure({ErrorCode::StorageError, AppText::NativeCryptoUnavailable});
+#else
+    const QJsonValue value = object.value(key);
+    if (value.isUndefined() || value.isNull() || value.isObject()) {
+        return Result<bool>::success(true);
+    }
+
+    const auto encrypted = encryptSecretString(value.toString(), key, passphrase, salt);
+    if (!encrypted.has_value()) {
+        return Result<bool>::failure({ErrorCode::StorageError, QString("Could not encrypt local secret field %1.").arg(key)});
+    }
+    object.insert(key, *encrypted);
+    return Result<bool>::success(true);
+#endif
+}
+
+Result<bool> unprotectString(QJsonObject& object, const QString& key, const QString& passphrase, const QByteArray& salt) {
+#if !CLIENT_HAS_OPENSSL
+    Q_UNUSED(object)
+    Q_UNUSED(key)
+    Q_UNUSED(passphrase)
+    Q_UNUSED(salt)
+    return Result<bool>::failure({ErrorCode::StorageError, AppText::NativeCryptoUnavailable});
+#else
+    const QJsonValue value = object.value(key);
+    if (value.isUndefined() || value.isNull() || !value.isObject()) {
+        return Result<bool>::success(true);
+    }
+
+    const auto plaintext = decryptSecretString(value.toObject(), key, passphrase, salt);
+    if (!plaintext.has_value()) {
+        return Result<bool>::failure({ErrorCode::StorageError, QString("Could not decrypt local secret field %1.").arg(key)});
+    }
+    object.insert(key, *plaintext);
+    return Result<bool>::success(true);
+#endif
+}
+
+Result<bool> protectStrings(QJsonObject& object, const QStringList& keys, const QString& passphrase, const QByteArray& salt) {
+    for (const auto& key : keys) {
+        const auto result = protectString(object, key, passphrase, salt);
+        if (result.failed()) {
+            return result;
+        }
+    }
+    return Result<bool>::success(true);
+}
+
+Result<bool> unprotectStrings(QJsonObject& object, const QStringList& keys, const QString& passphrase, const QByteArray& salt) {
+    for (const auto& key : keys) {
+        const auto result = unprotectString(object, key, passphrase, salt);
+        if (result.failed()) {
+            return result;
+        }
+    }
+    return Result<bool>::success(true);
+}
+}
+
+JsonLocalStore::JsonLocalStore(QString path, bool secretProtectionRequired)
+    : m_path(std::move(path))
+    , m_secretProtectionRequired(secretProtectionRequired) {
     load();
+}
+
+void JsonLocalStore::setSecretProtectionRequired(bool required) {
+    m_secretProtectionRequired = required;
+}
+
+void JsonLocalStore::setSecretPassphrase(QString passphrase) {
+    m_secretPassphrase = std::move(passphrase);
+}
+
+void JsonLocalStore::clearSecretPassphrase() {
+    m_secretPassphrase.clear();
+}
+
+Result<bool> JsonLocalStore::reload() {
+    return load();
 }
 
 Result<bool> JsonLocalStore::saveSession(const AuthSession& session) {
@@ -290,6 +510,13 @@ Result<ConversationList> JsonLocalStore::conversationsFor(const QString& current
 }
 
 Result<bool> JsonLocalStore::load() {
+    m_session = {};
+    m_hasSession = false;
+    m_deviceKeys.clear();
+    m_oneTimePreKeys.clear();
+    m_trustPins.clear();
+    m_messages.clear();
+
     QFile file(m_path);
     if (!file.exists()) {
         return Result<bool>::success(true);
@@ -298,7 +525,20 @@ Result<bool> JsonLocalStore::load() {
         return Result<bool>::failure({ErrorCode::StorageError, QString("Could not read %1.").arg(m_path)});
     }
 
-    const QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
+    QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
+    if (root.contains(SecretSaltKey)) {
+        m_secretSalt = base64ToBytes(root.value(SecretSaltKey).toString());
+        if (m_secretPassphrase.isEmpty()) {
+            return Result<bool>::success(true);
+        }
+
+        const auto unprotectedRoot = unprotectSecrets(root);
+        if (unprotectedRoot.failed()) {
+            return Result<bool>::failure(unprotectedRoot.error());
+        }
+        root = unprotectedRoot.value();
+    }
+
     if (root.contains("session")) {
         m_session = sessionFromJson(root.value("session").toObject());
         m_hasSession = !m_session.tokens.accessToken.isEmpty();
@@ -355,10 +595,138 @@ Result<bool> JsonLocalStore::save() const {
     }
     root.insert(StorageKeys::Messages, messages);
 
+    if (m_secretProtectionRequired) {
+        const auto protectedRoot = protectSecrets(root);
+        if (protectedRoot.failed()) {
+            return Result<bool>::failure(protectedRoot.error());
+        }
+        root = protectedRoot.value();
+    }
+
     QFile file(m_path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         return Result<bool>::failure({ErrorCode::StorageError, QString("Could not write %1.").arg(m_path)});
     }
     file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
     return Result<bool>::success(true);
+}
+
+Result<QJsonObject> JsonLocalStore::protectSecrets(QJsonObject root) const {
+    if (m_secretPassphrase.isEmpty()) {
+        return Result<QJsonObject>::failure({ErrorCode::StorageError, "A local state passphrase is required before saving real-mode secrets."});
+    }
+
+    QByteArray salt = m_secretSalt;
+    if (salt.isEmpty()) {
+        salt = randomBytes(SecretSaltBytes);
+    }
+    if (salt.size() != SecretSaltBytes) {
+        return Result<QJsonObject>::failure({ErrorCode::StorageError, "Could not create local state encryption salt."});
+    }
+    root.insert(SecretSaltKey, bytesToBase64(salt));
+
+    if (root.contains("session")) {
+        QJsonObject session = root.value("session").toObject();
+        const auto sessionResult = protectStrings(session, {StorageKeys::AccessToken, StorageKeys::RefreshToken}, m_secretPassphrase, salt);
+        if (sessionResult.failed()) {
+            return Result<QJsonObject>::failure(sessionResult.error());
+        }
+        root.insert("session", session);
+    }
+
+    QJsonArray devices;
+    for (const auto value : root.value(StorageKeys::DeviceKeys).toArray()) {
+        QJsonObject device = value.toObject();
+        const auto deviceResult = protectStrings(device, {
+            StorageKeys::IdentityPrivateKey,
+            StorageKeys::IdentitySigningPrivateKey,
+            StorageKeys::SignedPreKeyPrivate
+        }, m_secretPassphrase, salt);
+        if (deviceResult.failed()) {
+            return Result<QJsonObject>::failure(deviceResult.error());
+        }
+        devices.push_back(device);
+    }
+    root.insert(StorageKeys::DeviceKeys, devices);
+
+    QJsonArray preKeys;
+    for (const auto value : root.value(StorageKeys::OneTimePreKeys).toArray()) {
+        QJsonObject preKey = value.toObject();
+        const auto preKeyResult = protectString(preKey, StorageKeys::PreKeyPrivate, m_secretPassphrase, salt);
+        if (preKeyResult.failed()) {
+            return Result<QJsonObject>::failure(preKeyResult.error());
+        }
+        preKeys.push_back(preKey);
+    }
+    root.insert(StorageKeys::OneTimePreKeys, preKeys);
+
+    QJsonArray trustPins;
+    for (const auto value : root.value(StorageKeys::TrustPins).toArray()) {
+        QJsonObject trustPin = value.toObject();
+        const auto trustResult = protectString(trustPin, StorageKeys::IdentityKey, m_secretPassphrase, salt);
+        if (trustResult.failed()) {
+            return Result<QJsonObject>::failure(trustResult.error());
+        }
+        trustPins.push_back(trustPin);
+    }
+    root.insert(StorageKeys::TrustPins, trustPins);
+
+    return Result<QJsonObject>::success(root);
+}
+
+Result<QJsonObject> JsonLocalStore::unprotectSecrets(QJsonObject root) const {
+    if (m_secretPassphrase.isEmpty()) {
+        return Result<QJsonObject>::failure({ErrorCode::StorageError, "A local state passphrase is required before loading real-mode secrets."});
+    }
+    if (m_secretSalt.size() != SecretSaltBytes) {
+        return Result<QJsonObject>::failure({ErrorCode::StorageError, "Local state encryption salt is invalid."});
+    }
+
+    if (root.contains("session")) {
+        QJsonObject session = root.value("session").toObject();
+        const auto sessionResult = unprotectStrings(session, {StorageKeys::AccessToken, StorageKeys::RefreshToken}, m_secretPassphrase, m_secretSalt);
+        if (sessionResult.failed()) {
+            return Result<QJsonObject>::failure(sessionResult.error());
+        }
+        root.insert("session", session);
+    }
+
+    QJsonArray devices;
+    for (const auto value : root.value(StorageKeys::DeviceKeys).toArray()) {
+        QJsonObject device = value.toObject();
+        const auto deviceResult = unprotectStrings(device, {
+            StorageKeys::IdentityPrivateKey,
+            StorageKeys::IdentitySigningPrivateKey,
+            StorageKeys::SignedPreKeyPrivate
+        }, m_secretPassphrase, m_secretSalt);
+        if (deviceResult.failed()) {
+            return Result<QJsonObject>::failure(deviceResult.error());
+        }
+        devices.push_back(device);
+    }
+    root.insert(StorageKeys::DeviceKeys, devices);
+
+    QJsonArray preKeys;
+    for (const auto value : root.value(StorageKeys::OneTimePreKeys).toArray()) {
+        QJsonObject preKey = value.toObject();
+        const auto preKeyResult = unprotectString(preKey, StorageKeys::PreKeyPrivate, m_secretPassphrase, m_secretSalt);
+        if (preKeyResult.failed()) {
+            return Result<QJsonObject>::failure(preKeyResult.error());
+        }
+        preKeys.push_back(preKey);
+    }
+    root.insert(StorageKeys::OneTimePreKeys, preKeys);
+
+    QJsonArray trustPins;
+    for (const auto value : root.value(StorageKeys::TrustPins).toArray()) {
+        QJsonObject trustPin = value.toObject();
+        const auto trustResult = unprotectString(trustPin, StorageKeys::IdentityKey, m_secretPassphrase, m_secretSalt);
+        if (trustResult.failed()) {
+            return Result<QJsonObject>::failure(trustResult.error());
+        }
+        trustPins.push_back(trustPin);
+    }
+    root.insert(StorageKeys::TrustPins, trustPins);
+
+    return Result<QJsonObject>::success(root);
 }

@@ -3,8 +3,11 @@
 #include "crypto/MockCryptoProvider.h"
 #include "crypto/NativeSignalCryptoProvider.h"
 #include "domain/Models.h"
+#include "storage/JsonLocalStore.h"
 
 #include <QCoreApplication>
+#include <QDir>
+#include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 
@@ -142,6 +145,81 @@ void testMockCrypto() {
     const auto decrypted = crypto.decrypt("bob", bob.value(), received, std::nullopt);
     expect(decrypted.succeeded() && decrypted.value() == "mock hello", "mock crypto decrypts demo payloads");
 }
+
+void testEncryptedLocalStore() {
+#if CLIENT_HAS_OPENSSL
+    const QString stateFileName = "client-test-state.json";
+    const QString path = QDir::current().filePath(stateFileName);
+    QFile::remove(path);
+    const QString passphrase = "local-test-passphrase";
+    JsonLocalStore store(path, true);
+    store.setSecretPassphrase(passphrase);
+
+    const AuthSession session{
+        {"user-1", "alice", "alice@example.test"},
+        {"access-secret-token", "refresh-secret-token", "bearer", 3600}
+    };
+    const DeviceKeyMaterial device{
+        1,
+        12345,
+        "identity-public",
+        "identity-private-secret",
+        "signing-public",
+        "signing-private-secret",
+        1,
+        "signed-pre-key-public",
+        "signed-pre-key-private-secret",
+        "signed-pre-key-signature"
+    };
+    const OneTimePreKey preKey{1, 7, "one-time-public", "one-time-private-secret", false};
+    const TrustPin trustPin{"bob", 1, "trusted-identity-secret", QDateTime::currentDateTimeUtc()};
+
+    const auto savedSession = store.saveSession(session);
+    const auto savedDevice = store.saveDeviceKeys(device);
+    const auto savedPreKey = store.saveOneTimePreKeys({preKey});
+    const auto savedTrustPin = store.saveTrustPin(trustPin);
+    expect(savedSession.succeeded(), "encrypted store saves protected session");
+    expect(savedDevice.succeeded(), "encrypted store saves protected device keys");
+    expect(savedPreKey.succeeded(), "encrypted store saves protected one-time pre-keys");
+    expect(savedTrustPin.succeeded(), "encrypted store saves protected trust pins");
+
+    QFile file(path);
+    file.open(QIODevice::ReadOnly);
+    const QString rawState = QString::fromUtf8(file.readAll());
+    file.close();
+    const bool secretsHidden = !rawState.contains("access-secret-token")
+        && !rawState.contains("refresh-secret-token")
+        && !rawState.contains("identity-private-secret")
+        && !rawState.contains("one-time-private-secret")
+        && !rawState.contains("trusted-identity-secret");
+    expect(secretsHidden, "encrypted store does not write secrets as plaintext");
+
+    JsonLocalStore reloaded(path, true);
+    reloaded.setSecretPassphrase(passphrase);
+    const auto reloadResult = reloaded.reload();
+    const auto loadedSession = reloaded.loadSession();
+    const auto loadedDevice = reloaded.loadDeviceKeys(1);
+    const auto loadedPreKeys = reloaded.loadOneTimePreKeys(1);
+    const auto loadedTrustPin = reloaded.trustPin("bob", 1);
+    const bool loaded = reloadResult.succeeded()
+        && loadedSession.succeeded()
+        && loadedSession.value().has_value()
+        && loadedSession.value()->tokens.refreshToken == "refresh-secret-token"
+        && loadedDevice.succeeded()
+        && loadedDevice.value().has_value()
+        && loadedDevice.value()->identityPrivateKey == "identity-private-secret"
+        && loadedPreKeys.succeeded()
+        && !loadedPreKeys.value().isEmpty()
+        && loadedPreKeys.value().first().privateKey == "one-time-private-secret"
+        && loadedTrustPin.succeeded()
+        && loadedTrustPin.value().has_value()
+        && loadedTrustPin.value()->identityKey == "trusted-identity-secret";
+    expect(loaded, "encrypted store reloads secrets with passphrase");
+    QFile::remove(path);
+#else
+    expect(true, "encrypted store test skipped without OpenSSL");
+#endif
+}
 }
 
 int main(int argc, char* argv[]) {
@@ -152,6 +230,7 @@ int main(int argc, char* argv[]) {
     testStartupConfig();
     testCryptoWireShape();
     testMockCrypto();
+    testEncryptedLocalStore();
 
     return failures == 0 ? 0 : 1;
 }

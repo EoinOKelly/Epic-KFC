@@ -8,7 +8,12 @@
 
 class JsonLocalStore {
 public:
-    explicit JsonLocalStore(QString path);
+    explicit JsonLocalStore(QString path, bool secretProtectionRequired = false);
+
+    void setSecretProtectionRequired(bool required);
+    void setSecretPassphrase(QString passphrase);
+    void clearSecretPassphrase();
+    Result<bool> reload();
 
     Result<bool> saveSession(const AuthSession& session);
     Result<std::optional<AuthSession>> loadSession() const;
@@ -30,8 +35,13 @@ public:
 private:
     Result<bool> load();
     Result<bool> save() const;
+    Result<QJsonObject> protectSecrets(QJsonObject root) const;
+    Result<QJsonObject> unprotectSecrets(QJsonObject root) const;
 
     QString m_path;
+    bool m_secretProtectionRequired{false};
+    QString m_secretPassphrase;
+    QByteArray m_secretSalt;
     AuthSession m_session;
     bool m_hasSession{false};
     QList<DeviceKeyMaterial> m_deviceKeys;

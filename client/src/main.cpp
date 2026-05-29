@@ -33,7 +33,7 @@ int main(int argc, char* argv[]) {
     const StartupConfig config = parsedConfig.value();
 
     EventBus events;
-    JsonLocalStore store(config.statePath);
+    JsonLocalStore store(config.statePath, config.mode == ClientMode::Real);
     std::unique_ptr<ICryptoProvider> cryptoProvider;
     std::unique_ptr<HttpClient> httpClient;
     std::unique_ptr<IAuthGateway> httpAuthGateway;
