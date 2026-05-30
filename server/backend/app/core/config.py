@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 7
     rate_limit_enabled: bool = True
     security_headers_enabled: bool = True
-    allowed_origins: list[str] = Field(default_factory=list)
+    allowed_origins: list[str] | str = Field(default_factory=list)
     cors_allow_credentials: bool = False
 
     model_config = SettingsConfigDict(
