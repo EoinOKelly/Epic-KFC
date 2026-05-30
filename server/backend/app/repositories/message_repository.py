@@ -167,6 +167,7 @@ async def create_forwarded_message(
     recipient_user_id: UUID,
     recipient_device_id: int,
     wire_payload_json: str,
+    consumed_one_time_prekey_id: int | None = None,
 ) -> Message:
     """Create a forwarded message as a new opaque relay message row."""
     _ = original_message_id
@@ -177,6 +178,7 @@ async def create_forwarded_message(
         recipient_user_id=recipient_user_id,
         recipient_device_id=recipient_device_id,
         wire_payload_json=wire_payload_json,
+        consumed_one_time_prekey_id=consumed_one_time_prekey_id,
     )
 
 

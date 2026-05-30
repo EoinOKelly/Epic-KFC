@@ -11,6 +11,7 @@ from app.models.user import User
 from app.repositories import (
     device_key_repository,
     message_repository,
+    one_time_prekey_repository,
     user_repository,
 )
 from app.schemas.message import MessageCreateRequest
@@ -30,6 +31,10 @@ class RecipientNotFoundError(Exception):
 
 class InvalidDeviceError(Exception):
     """Raised when sender or recipient device validation fails."""
+
+
+class InvalidPreKeyError(Exception):
+    """Raised when consumed one-time prekey metadata is inconsistent."""
 
 
 async def send_message(
@@ -174,6 +179,7 @@ async def forward_message(
             recipient_user_id=request_data.recipient_user_id,
             recipient_device_id=request_data.recipient_device_id,
             wire_payload_json=request_data.wire_payload_json,
+            consumed_one_time_prekey_id=request_data.consumed_one_time_prekey_id,
         )
         await db.commit()
         await db.refresh(forwarded)
@@ -208,3 +214,30 @@ async def _validate_send_inputs(
     )
     if recipient_device is None:
         raise InvalidDeviceError("Invalid recipient device.")
+
+    await _validate_consumed_one_time_prekey(db, request_data)
+
+
+async def _validate_consumed_one_time_prekey(
+    db: AsyncSession,
+    request_data: MessageCreateRequest,
+) -> None:
+    """Validate optional consumed prekey metadata against relay DB state.
+
+    consumed_one_time_prekey_id is the public/logical prekey_id returned by the
+    prekey-bundle endpoint, not the database row UUID. Bundle fetch marks that
+    row used, so message send accepts only a matching recipient/device prekey
+    with used_at already set. The backend cannot prove the encrypted payload
+    cryptographically used the prekey; that remains client crypto's job.
+    """
+    if request_data.consumed_one_time_prekey_id is None:
+        return
+
+    prekey = await one_time_prekey_repository.get_by_user_device_prekey_id(
+        db,
+        request_data.recipient_user_id,
+        request_data.recipient_device_id,
+        request_data.consumed_one_time_prekey_id,
+    )
+    if prekey is None or prekey.used_at is None:
+        raise InvalidPreKeyError("Invalid consumed one-time prekey.")

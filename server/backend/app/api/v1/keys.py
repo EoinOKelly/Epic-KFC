@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import enforce_user_rate_limit, get_current_user, get_db
 from app.core import rate_limit
 from app.models.user import User
-from app.repositories import device_key_repository, one_time_prekey_repository
+from app.repositories import device_key_repository, one_time_prekey_repository, user_repository
 from app.schemas.device_key import (
     DeviceKeyResponse,
     DeviceKeyUploadRequest,
@@ -96,6 +96,14 @@ async def upload_one_time_prekeys(
     if any(prekey.device_id != device_id for prekey in request.prekeys):
         raise _device_id_mismatch_error()
 
+    device_key = await device_key_repository.get_active_by_user_and_device(
+        db,
+        current_user.id,
+        device_id,
+    )
+    if device_key is None:
+        raise _device_not_found_error()
+
     try:
         prekeys = await one_time_prekey_repository.create_batch(
             db,
@@ -141,6 +149,20 @@ async def get_prekey_bundle(
         "keys.prekey_bundle_fetch",
         rate_limit.PREKEY_BUNDLE_FETCH_RATE_LIMIT,
     )
+    target_user = await user_repository.get_by_id(db, user_id)
+    if target_user is None or not target_user.is_active:
+        await _record_audit_event(
+            db,
+            http_request,
+            actor_user_id=current_user.id,
+            event_type="keys.prekey_bundle_missing",
+            success=False,
+            resource_type="user",
+            resource_id=user_id,
+            details={"target_device_id": device_id},
+        )
+        raise _target_device_not_found_error()
+
     device_key = await device_key_repository.get_active_by_user_and_device(
         db,
         user_id,
@@ -213,6 +235,14 @@ def _target_device_not_found_error() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail="Target device not found",
+    )
+
+
+def _device_not_found_error() -> HTTPException:
+    """Return a safe current-user device lookup error."""
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Device not found",
     )
 
 

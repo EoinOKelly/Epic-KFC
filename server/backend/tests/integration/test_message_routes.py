@@ -11,8 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps as api_deps
 from app.main import app
-from app.repositories import device_key_repository, user_repository
+from app.repositories import (
+    device_key_repository,
+    one_time_prekey_repository,
+    user_repository,
+)
 from app.schemas.device_key import DeviceKeyUploadRequest
+from app.schemas.one_time_prekey import OneTimePreKeyUpload
 from app.services import auth_service, token_service
 from tests.fixtures.wire_payloads import NEW_WIRE_PAYLOAD, WIRE_PAYLOAD
 
@@ -82,6 +87,51 @@ async def test_send_message_succeeds(
     assert body["sender_user_id"] == str(sender.id)
     assert body["recipient_user_id"] == str(recipient.id)
     assert body["wire_payload_json"] == WIRE_PAYLOAD
+
+
+async def test_send_with_valid_consumed_one_time_prekey_id_succeeds(
+    message_client: AsyncClient,
+    integration_db: AsyncSession,
+) -> None:
+    """Message send stores a valid consumed logical prekey ID."""
+    sender, recipient = await _create_ready_users(
+        integration_db,
+        "alice-prekey",
+        "bob-prekey",
+    )
+    await _create_used_prekey(integration_db, recipient, 1, 701)
+
+    response = await _send_message(
+        message_client,
+        sender,
+        recipient,
+        consumed_one_time_prekey_id=701,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["consumed_one_time_prekey_id"] == 701
+
+
+async def test_send_with_invalid_consumed_one_time_prekey_id_fails(
+    message_client: AsyncClient,
+    integration_db: AsyncSession,
+) -> None:
+    """Message send rejects prekey IDs not consumed for the recipient device."""
+    sender, recipient = await _create_ready_users(
+        integration_db,
+        "alice-invalid-prekey",
+        "bob-invalid-prekey",
+    )
+
+    response = await _send_message(
+        message_client,
+        sender,
+        recipient,
+        consumed_one_time_prekey_id=999,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Message could not be processed"
 
 
 async def test_send_response_excludes_plaintext_private_fields(
@@ -406,6 +456,62 @@ async def test_forward_creates_new_message_with_new_opaque_payload(
     assert body["wire_payload_json"] != original.json()["wire_payload_json"]
 
 
+async def test_forward_with_valid_consumed_one_time_prekey_id_stores_it(
+    message_client: AsyncClient,
+    integration_db: AsyncSession,
+) -> None:
+    """Forwarding stores consumed prekey metadata for the new recipient."""
+    sender, recipient = await _create_ready_users(
+        integration_db,
+        "paula-forward-prekey",
+        "ryan-forward-prekey",
+    )
+    new_recipient = await _create_user(integration_db, "sara-forward-prekey")
+    await _create_device_key(integration_db, new_recipient, 1)
+    await integration_db.commit()
+    await _create_used_prekey(integration_db, new_recipient, 1, 801)
+    original = await _send_message(message_client, sender, recipient)
+
+    response = await _forward_message(
+        message_client,
+        sender,
+        original.json()["id"],
+        new_recipient.id,
+        consumed_one_time_prekey_id=801,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["consumed_one_time_prekey_id"] == 801
+    assert response.json()["wire_payload_json"] == NEW_WIRE_PAYLOAD
+
+
+async def test_forward_with_invalid_consumed_one_time_prekey_id_fails(
+    message_client: AsyncClient,
+    integration_db: AsyncSession,
+) -> None:
+    """Forwarding rejects invalid prekey metadata for the new recipient."""
+    sender, recipient = await _create_ready_users(
+        integration_db,
+        "paula-invalid-forward-prekey",
+        "ryan-invalid-forward-prekey",
+    )
+    new_recipient = await _create_user(integration_db, "sara-invalid-forward-prekey")
+    await _create_device_key(integration_db, new_recipient, 1)
+    await integration_db.commit()
+    original = await _send_message(message_client, sender, recipient)
+
+    response = await _forward_message(
+        message_client,
+        sender,
+        original.json()["id"],
+        new_recipient.id,
+        consumed_one_time_prekey_id=802,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Message could not be processed"
+
+
 async def test_forward_preserves_new_wire_payload_json_exactly(
     message_client: AsyncClient,
     integration_db: AsyncSession,
@@ -471,17 +577,47 @@ async def _create_device_key(integration_db: AsyncSession, user, device_id: int)
     )
 
 
+async def _create_used_prekey(
+    integration_db: AsyncSession,
+    user,
+    device_id: int,
+    prekey_id: int,
+):
+    """Create and mark a public prekey as handed out by the bundle endpoint."""
+    [prekey] = await one_time_prekey_repository.create_batch(
+        integration_db,
+        user.id,
+        device_id,
+        [
+            OneTimePreKeyUpload(
+                device_id=device_id,
+                prekey_id=prekey_id,
+                prekey_public_b64=KEY_B64,
+            ),
+        ],
+    )
+    await one_time_prekey_repository.mark_used(integration_db, prekey)
+    await integration_db.commit()
+    await integration_db.refresh(prekey)
+    return prekey
+
+
 async def _send_message(
     client: AsyncClient,
     sender,
     recipient,
     *,
     wire_payload_json: str = WIRE_PAYLOAD,
+    consumed_one_time_prekey_id: int | None = None,
 ) -> Response:
     """Send a direct message through the route."""
     return await client.post(
         "/api/v1/messages",
-        json=_message_payload(recipient.id, wire_payload_json=wire_payload_json),
+        json=_message_payload(
+            recipient.id,
+            wire_payload_json=wire_payload_json,
+            consumed_one_time_prekey_id=consumed_one_time_prekey_id,
+        ),
         headers=_auth_headers(sender),
     )
 
@@ -515,11 +651,17 @@ async def _forward_message(
     user,
     message_id: str,
     recipient_user_id,
+    *,
+    consumed_one_time_prekey_id: int | None = None,
 ) -> Response:
     """Forward a message through the route."""
     return await client.post(
         f"/api/v1/messages/{message_id}/forward",
-        json=_message_payload(recipient_user_id, wire_payload_json=NEW_WIRE_PAYLOAD),
+        json=_message_payload(
+            recipient_user_id,
+            wire_payload_json=NEW_WIRE_PAYLOAD,
+            consumed_one_time_prekey_id=consumed_one_time_prekey_id,
+        ),
         headers=_auth_headers(user),
     )
 
@@ -534,11 +676,15 @@ def _message_payload(
     recipient_user_id,
     *,
     wire_payload_json: str = WIRE_PAYLOAD,
+    consumed_one_time_prekey_id: int | None = None,
 ) -> dict[str, object]:
     """Build a valid direct message route payload."""
-    return {
+    payload: dict[str, object] = {
         "sender_device_id": 1,
         "recipient_user_id": str(recipient_user_id),
         "recipient_device_id": 1,
         "wire_payload_json": wire_payload_json,
     }
+    if consumed_one_time_prekey_id is not None:
+        payload["consumed_one_time_prekey_id"] = consumed_one_time_prekey_id
+    return payload

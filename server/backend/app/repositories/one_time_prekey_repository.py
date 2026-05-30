@@ -58,6 +58,23 @@ async def get_unused_for_device(
     return result.scalar_one_or_none()
 
 
+async def get_by_user_device_prekey_id(
+    db: AsyncSession,
+    user_id: UUID,
+    device_id: int,
+    prekey_id: int,
+) -> OneTimePreKey | None:
+    """Return a one-time prekey by its public logical prekey ID."""
+    result = await db.execute(
+        select(OneTimePreKey).where(
+            OneTimePreKey.user_id == user_id,
+            OneTimePreKey.device_id == device_id,
+            OneTimePreKey.prekey_id == prekey_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 async def mark_used(
     db: AsyncSession,
     prekey: OneTimePreKey,

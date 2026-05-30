@@ -10,11 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.message import Message
 from app.repositories import message_repository, user_repository
 from app.schemas.common import PaginationParams
+from tests.fixtures.wire_payloads import ALT_WIRE_PAYLOAD, WIRE_PAYLOAD
 
 
 pytestmark = pytest.mark.asyncio
-
-from tests.fixtures.wire_payloads import ALT_WIRE_PAYLOAD, WIRE_PAYLOAD
 
 PASSWORD_HASH = "$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$cGFzc3dvcmQ"
 

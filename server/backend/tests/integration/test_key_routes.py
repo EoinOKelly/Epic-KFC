@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from uuid import uuid4
 
 import pytest
 import pytest_asyncio
@@ -153,6 +154,8 @@ async def test_one_time_prekey_upload_succeeds(
 ) -> None:
     """Authenticated users can upload public one-time prekeys."""
     user = await _create_user(integration_db, "frank")
+    await _create_device_key(integration_db, user, 1)
+    await integration_db.commit()
 
     response = await _post_prekeys(key_client, user, 1, [10, 11])
 
@@ -161,6 +164,48 @@ async def test_one_time_prekey_upload_succeeds(
     assert len(body) == 2
     assert {prekey["prekey_id"] for prekey in body} == {10, 11}
     assert all(prekey["user_id"] == str(user.id) for prekey in body)
+
+
+async def test_one_time_prekey_upload_requires_existing_active_device(
+    key_client: AsyncClient,
+    integration_db: AsyncSession,
+) -> None:
+    """Users cannot upload orphan prekeys for missing devices."""
+    user = await _create_user(integration_db, "frank-missing-device")
+
+    response = await _post_prekeys(key_client, user, 1, [12])
+
+    assert response.status_code == 404
+
+
+async def test_one_time_prekey_upload_rejects_revoked_device(
+    key_client: AsyncClient,
+    integration_db: AsyncSession,
+) -> None:
+    """Users cannot upload prekeys for inactive/revoked devices."""
+    user = await _create_user(integration_db, "frank-revoked-device")
+    await _create_device_key(integration_db, user, 1)
+    await device_key_repository.revoke_device_key(integration_db, user.id, 1)
+    await integration_db.commit()
+
+    response = await _post_prekeys(key_client, user, 1, [13])
+
+    assert response.status_code == 404
+
+
+async def test_user_cannot_upload_prekeys_for_another_users_device(
+    key_client: AsyncClient,
+    integration_db: AsyncSession,
+) -> None:
+    """Device ownership is scoped to the authenticated user."""
+    alice = await _create_user(integration_db, "frank-alice")
+    bob = await _create_user(integration_db, "frank-bob")
+    await _create_device_key(integration_db, bob, 1)
+    await integration_db.commit()
+
+    response = await _post_prekeys(key_client, alice, 1, [14])
+
+    assert response.status_code == 404
 
 
 async def test_oversized_prekey_batch_returns_422(
@@ -186,6 +231,8 @@ async def test_duplicate_prekey_ids_return_409(
 ) -> None:
     """Existing prekey IDs for the same user/device return a safe conflict."""
     user = await _create_user(integration_db, "heidi")
+    await _create_device_key(integration_db, user, 1)
+    await integration_db.commit()
     first = await _post_prekeys(key_client, user, 1, [20])
     second = await _post_prekeys(key_client, user, 1, [20])
 
@@ -293,6 +340,34 @@ async def test_missing_target_device_returns_404(
     target = await _create_user(integration_db, "ruth")
 
     response = await _get_bundle(key_client, requester, target.id, 1)
+
+    assert response.status_code == 404
+
+
+async def test_inactive_target_user_returns_404(
+    key_client: AsyncClient,
+    integration_db: AsyncSession,
+) -> None:
+    """Inactive target users should not return prekey bundles."""
+    requester = await _create_user(integration_db, "quinn-inactive-requester")
+    target = await _create_user(integration_db, "quinn-inactive-target")
+    await _create_device_key(integration_db, target, 1)
+    await user_repository.set_user_active_status(integration_db, target.id, False)
+    await integration_db.commit()
+
+    response = await _get_bundle(key_client, requester, target.id, 1)
+
+    assert response.status_code == 404
+
+
+async def test_nonexistent_target_user_returns_404(
+    key_client: AsyncClient,
+    integration_db: AsyncSession,
+) -> None:
+    """Nonexistent target users should get the same safe not-found response."""
+    requester = await _create_user(integration_db, "quinn-missing-requester")
+
+    response = await _get_bundle(key_client, requester, uuid4(), 1)
 
     assert response.status_code == 404
 

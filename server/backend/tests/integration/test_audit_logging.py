@@ -168,6 +168,8 @@ async def test_one_time_prekey_upload_creates_audit_log(
 ) -> None:
     """One-time prekey batch upload creates an audit event."""
     user = await _create_user(integration_db, "frank")
+    await _create_device_key(integration_db, user, 1)
+    await integration_db.commit()
 
     response = await _post_prekeys(audit_client, user, 1, [10, 11])
     event = await _latest_event(integration_db, "keys.one_time_prekeys_uploaded")

@@ -20,6 +20,7 @@ from app.schemas.message import (
 from app.services import audit_service, message_service
 from app.services.message_service import (
     InvalidDeviceError,
+    InvalidPreKeyError,
     MessageAccessDeniedError,
     MessageNotFoundError,
     RecipientNotFoundError,
@@ -51,7 +52,7 @@ async def send_message(
         message = await message_service.send_message(db, current_user, request)
     except RecipientNotFoundError as exc:
         raise _not_found_error() from exc
-    except InvalidDeviceError as exc:
+    except (InvalidDeviceError, InvalidPreKeyError) as exc:
         raise _bad_request_error() from exc
 
     await _record_audit_event(
@@ -211,6 +212,18 @@ async def forward_message(
             resource_type="message",
             resource_id=message_id,
             details={"reason": "invalid_device"},
+        )
+        raise _bad_request_error() from exc
+    except InvalidPreKeyError as exc:
+        await _record_audit_event(
+            db,
+            http_request,
+            actor_user_id=actor_user_id,
+            event_type="message.forward_denied",
+            success=False,
+            resource_type="message",
+            resource_id=message_id,
+            details={"reason": "invalid_prekey"},
         )
         raise _bad_request_error() from exc
 
