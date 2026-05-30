@@ -63,7 +63,7 @@ public:
     explicit HttpKeyGateway(HttpClient& client, QObject* parent = nullptr);
 
     void upsertDeviceKeys(const QString& accessToken, const DeviceKeyMaterial& material, GatewayCallback<bool> callback) override;
-    void uploadOneTimePreKeys(const QString& accessToken, int deviceId, const QList<OneTimePreKey>& preKeys, GatewayCallback<bool> callback) override;
+    void uploadOneTimePreKeys(const QString& accessToken, int deviceId, const std::vector<OneTimePreKey>& preKeys, GatewayCallback<bool> callback) override;
     void fetchPreKeyBundle(const QString& accessToken, const QString& userId, int deviceId, GatewayCallback<PreKeyBundle> callback) override;
 
 private:

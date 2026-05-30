@@ -4,6 +4,19 @@
 #include "app/EventBus.h"
 #include "support/ClientConstants.h"
 
+namespace {
+QString joinedLines(const std::vector<QString>& lines) {
+    QString result;
+    for (const auto& line : lines) {
+        if (!result.isEmpty()) {
+            result.append('\n');
+        }
+        result.append(line);
+    }
+    return result;
+}
+}
+
 CommandRouter::CommandRouter(EventBus& events, ClientController& controller, QObject* parent)
     : QObject(parent)
     , m_events(events)
@@ -124,7 +137,7 @@ void CommandRouter::handleMessageComposition(const QString& line) {
         m_inputMode = InputMode::Command;
         m_controller.submitComposedMessage(
             m_compositionRecipientUsername,
-            m_compositionLines.join('\n'));
+            joinedLines(m_compositionLines));
         m_compositionLines.clear();
         return;
     }
@@ -141,7 +154,7 @@ void CommandRouter::handleMessageComposition(const QString& line) {
     emit m_events.messagePrepared(
         m_compositionRecipientUsername,
         DefaultDeviceId,
-        m_compositionLines.join('\n'));
+        joinedLines(m_compositionLines));
 }
 
 bool CommandRouter::commandHasArgumentCount(const SlashCommand& command, int minimum, int maximum) {

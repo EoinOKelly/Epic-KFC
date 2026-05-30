@@ -8,11 +8,12 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QStringList>
 
 #include <algorithm>
+#include <map>
 #include <optional>
 #include <utility>
+#include <vector>
 
 #if CLIENT_HAS_OPENSSL
 #include <openssl/evp.h>
@@ -338,7 +339,7 @@ Result<bool> unprotectString(QJsonObject& object, const QString& key, const QStr
 #endif
 }
 
-Result<bool> protectStrings(QJsonObject& object, const QStringList& keys, const QString& passphrase, const QByteArray& salt) {
+Result<bool> protectStrings(QJsonObject& object, const std::vector<QString>& keys, const QString& passphrase, const QByteArray& salt) {
     for (const auto& key : keys) {
         const auto result = protectString(object, key, passphrase, salt);
         if (result.failed()) {
@@ -348,7 +349,7 @@ Result<bool> protectStrings(QJsonObject& object, const QStringList& keys, const 
     return Result<bool>::success(true);
 }
 
-Result<bool> unprotectStrings(QJsonObject& object, const QStringList& keys, const QString& passphrase, const QByteArray& salt) {
+Result<bool> unprotectStrings(QJsonObject& object, const std::vector<QString>& keys, const QString& passphrase, const QByteArray& salt) {
     for (const auto& key : keys) {
         const auto result = unprotectString(object, key, passphrase, salt);
         if (result.failed()) {
@@ -422,7 +423,7 @@ Result<std::optional<DeviceKeyMaterial>> JsonLocalStore::loadDeviceKeys(int devi
     return Result<std::optional<DeviceKeyMaterial>>::success(*it);
 }
 
-Result<bool> JsonLocalStore::saveOneTimePreKeys(const QList<OneTimePreKey>& preKeys) {
+Result<bool> JsonLocalStore::saveOneTimePreKeys(const std::vector<OneTimePreKey>& preKeys) {
     for (const auto& preKey : preKeys) {
         auto it = std::find_if(m_oneTimePreKeys.begin(), m_oneTimePreKeys.end(), [&preKey](const OneTimePreKey& existing) {
             return existing.deviceId == preKey.deviceId && existing.preKeyId == preKey.preKeyId;
@@ -436,12 +437,12 @@ Result<bool> JsonLocalStore::saveOneTimePreKeys(const QList<OneTimePreKey>& preK
     return save();
 }
 
-Result<QList<OneTimePreKey>> JsonLocalStore::loadOneTimePreKeys(int deviceId) const {
-    QList<OneTimePreKey> matching;
+Result<std::vector<OneTimePreKey>> JsonLocalStore::loadOneTimePreKeys(int deviceId) const {
+    std::vector<OneTimePreKey> matching;
     std::copy_if(m_oneTimePreKeys.cbegin(), m_oneTimePreKeys.cend(), std::back_inserter(matching), [deviceId](const OneTimePreKey& preKey) {
         return preKey.deviceId == deviceId;
     });
-    return Result<QList<OneTimePreKey>>::success(matching);
+    return Result<std::vector<OneTimePreKey>>::success(matching);
 }
 
 Result<bool> JsonLocalStore::saveTrustPin(const TrustPin& pin) {
@@ -493,20 +494,24 @@ Result<MessageList> JsonLocalStore::allMessages() const {
 }
 
 Result<ConversationList> JsonLocalStore::conversationsFor(const QString& currentUserId) const {
-    QHash<QString, ConversationSummary> summaries;
+    std::map<QString, ConversationSummary> summaries;
     for (const auto& message : m_messages) {
         const bool sentByCurrentUser = message.senderUserId == currentUserId;
         const QString peerUserId = sentByCurrentUser ? message.recipientUserId : message.senderUserId;
         const int peerDeviceId = sentByCurrentUser ? message.recipientDeviceId : message.senderDeviceId;
         const QString key = QString("%1:%2").arg(peerUserId).arg(peerDeviceId);
-        auto summary = summaries.value(key, {peerUserId, peerDeviceId, 0, {}});
+        auto summary = summaries.contains(key) ? summaries.at(key) : ConversationSummary{peerUserId, peerDeviceId, 0, {}};
         summary.messageCount += 1;
         if (!summary.latestMessageAt.isValid() || message.createdAt > summary.latestMessageAt) {
             summary.latestMessageAt = message.createdAt;
         }
-        summaries.insert(key, summary);
+        summaries.insert_or_assign(key, summary);
     }
-    return Result<ConversationList>::success(summaries.values());
+    ConversationList conversations;
+    std::transform(summaries.cbegin(), summaries.cend(), std::back_inserter(conversations), [](const auto& entry) {
+        return entry.second;
+    });
+    return Result<ConversationList>::success(conversations);
 }
 
 Result<bool> JsonLocalStore::load() {

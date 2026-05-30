@@ -6,6 +6,8 @@
 #include <QJsonObject>
 #include <QString>
 
+#include <vector>
+
 class JsonLocalStore {
 public:
     explicit JsonLocalStore(QString path, bool secretProtectionRequired = false);
@@ -21,8 +23,8 @@ public:
 
     Result<bool> saveDeviceKeys(const DeviceKeyMaterial& material);
     Result<std::optional<DeviceKeyMaterial>> loadDeviceKeys(int deviceId) const;
-    Result<bool> saveOneTimePreKeys(const QList<OneTimePreKey>& preKeys);
-    Result<QList<OneTimePreKey>> loadOneTimePreKeys(int deviceId) const;
+    Result<bool> saveOneTimePreKeys(const std::vector<OneTimePreKey>& preKeys);
+    Result<std::vector<OneTimePreKey>> loadOneTimePreKeys(int deviceId) const;
 
     Result<bool> saveTrustPin(const TrustPin& pin);
     Result<std::optional<TrustPin>> trustPin(const QString& userId, int deviceId) const;
@@ -44,8 +46,8 @@ private:
     QByteArray m_secretSalt;
     AuthSession m_session;
     bool m_hasSession{false};
-    QList<DeviceKeyMaterial> m_deviceKeys;
-    QList<OneTimePreKey> m_oneTimePreKeys;
-    QList<TrustPin> m_trustPins;
+    std::vector<DeviceKeyMaterial> m_deviceKeys;
+    std::vector<OneTimePreKey> m_oneTimePreKeys;
+    std::vector<TrustPin> m_trustPins;
     MessageList m_messages;
 };

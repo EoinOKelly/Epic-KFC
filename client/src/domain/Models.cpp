@@ -2,11 +2,14 @@
 
 #include "support/ClientConstants.h"
 
-#include <QHash>
+#include <array>
+#include <utility>
 
 namespace {
-const QHash<QString, CommandType>& commandLookup() {
-    static const QHash<QString, CommandType> commands{
+using CommandEntry = std::pair<QString, CommandType>;
+
+const std::array<CommandEntry, 21>& commandLookup() {
+    static const std::array<CommandEntry, 21> commands{{
         {CommandNames::Help, CommandType::Help},
         {CommandNames::Register, CommandType::Register},
         {CommandNames::Login, CommandType::Login},
@@ -28,7 +31,7 @@ const QHash<QString, CommandType>& commandLookup() {
         {CommandNames::Sync, CommandType::Sync},
         {CommandNames::Cancel, CommandType::Cancel},
         {CommandNames::Exit, CommandType::Exit},
-    };
+    }};
     return commands;
 }
 }
@@ -62,9 +65,9 @@ QString errorCodeToString(ErrorCode code) {
 }
 
 QString commandTypeName(CommandType type) {
-    for (auto it = commandLookup().cbegin(); it != commandLookup().cend(); ++it) {
-        if (it.value() == type) {
-            return it.key();
+    for (const auto& [name, commandType] : commandLookup()) {
+        if (commandType == type) {
+            return name;
         }
     }
     return "unknown";
@@ -72,11 +75,12 @@ QString commandTypeName(CommandType type) {
 
 std::optional<CommandType> commandTypeFromName(const QString& name) {
     const QString key = name.trimmed().toLower();
-    const auto it = commandLookup().constFind(key);
-    if (it == commandLookup().cend()) {
-        return std::nullopt;
+    for (const auto& [commandName, commandType] : commandLookup()) {
+        if (commandName == key) {
+            return commandType;
+        }
     }
-    return it.value();
+    return std::nullopt;
 }
 
 QString clientModeToString(ClientMode mode) {

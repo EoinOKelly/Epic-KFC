@@ -153,7 +153,7 @@ void KeyService::ensureDeviceKeysUploaded() {
 
 void KeyService::uploadOneTimePreKeys() {
     auto existing = m_store.loadOneTimePreKeys(m_deviceId);
-    if (existing.failed() || existing.value().isEmpty()) {
+    if (existing.failed() || existing.value().empty()) {
         const auto created = m_cryptoProvider.createOneTimePreKeys(m_deviceId, CryptoText::DefaultPreKeyCount);
         if (created.failed()) {
             emit m_events.cryptoOperationFailed(created.error());
@@ -164,7 +164,7 @@ void KeyService::uploadOneTimePreKeys() {
             emit m_events.commandFailed(savedPreKeys.error());
             return;
         }
-        existing = Result<QList<OneTimePreKey>>::success(created.value());
+        existing = Result<std::vector<OneTimePreKey>>::success(created.value());
     }
 
     m_keyGateway.uploadOneTimePreKeys(m_sessionService.accessToken(), m_deviceId, existing.value(), [this](Result<bool> result) {

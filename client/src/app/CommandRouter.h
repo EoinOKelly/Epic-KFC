@@ -5,6 +5,8 @@
 
 #include <QObject>
 
+#include <vector>
+
 class ClientController;
 class EventBus;
 
@@ -39,5 +41,5 @@ private:
     QString m_pendingEmail;
     QString m_pendingLoginIdentifier;
     QString m_compositionRecipientUsername;
-    QStringList m_compositionLines;
+    std::vector<QString> m_compositionLines;
 };

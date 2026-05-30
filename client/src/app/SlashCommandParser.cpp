@@ -42,7 +42,7 @@ Result<SlashCommand> SlashCommandParser::parse(const QString& input) const {
         });
     }
 
-    QStringList arguments;
+    std::vector<QString> arguments;
     if (hasArguments) {
         const auto tokenized = tokenizeArguments(trimmed.mid(firstSpace + 1));
         if (tokenized.failed()) {
@@ -54,8 +54,8 @@ Result<SlashCommand> SlashCommandParser::parse(const QString& input) const {
     return Result<SlashCommand>::success({*commandType, commandName, arguments, input});
 }
 
-Result<QStringList> SlashCommandParser::tokenizeArguments(const QString& text) const {
-    QStringList arguments;
+Result<std::vector<QString>> SlashCommandParser::tokenizeArguments(const QString& text) const {
+    std::vector<QString> arguments;
     QString current;
     bool inQuote = false;
     bool escaping = false;
@@ -96,12 +96,12 @@ Result<QStringList> SlashCommandParser::tokenizeArguments(const QString& text) c
     }
 
     if (inQuote) {
-        return Result<QStringList>::failure({ErrorCode::InvalidCommand, CommandText::UnclosedQuote});
+        return Result<std::vector<QString>>::failure({ErrorCode::InvalidCommand, CommandText::UnclosedQuote});
     }
 
     if (!current.isEmpty()) {
         arguments.push_back(current);
     }
 
-    return Result<QStringList>::success(arguments);
+    return Result<std::vector<QString>>::success(arguments);
 }

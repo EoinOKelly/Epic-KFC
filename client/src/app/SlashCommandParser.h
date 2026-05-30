@@ -4,12 +4,13 @@
 #include "support/Result.h"
 
 #include <QString>
-#include <QStringList>
+
+#include <vector>
 
 class SlashCommandParser {
 public:
     Result<SlashCommand> parse(const QString& input) const;
 
 private:
-    Result<QStringList> tokenizeArguments(const QString& text) const;
+    Result<std::vector<QString>> tokenizeArguments(const QString& text) const;
 };

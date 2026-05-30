@@ -215,8 +215,8 @@ void testEncryptedLocalStore() {
         && loadedDevice.value().has_value()
         && loadedDevice.value()->identityPrivateKey == "identity-private-secret"
         && loadedPreKeys.succeeded()
-        && !loadedPreKeys.value().isEmpty()
-        && loadedPreKeys.value().first().privateKey == "one-time-private-secret"
+        && !loadedPreKeys.value().empty()
+        && loadedPreKeys.value().front().privateKey == "one-time-private-secret"
         && loadedTrustPin.succeeded()
         && loadedTrustPin.value().has_value()
         && loadedTrustPin.value()->identityKey == "trusted-identity-secret";
