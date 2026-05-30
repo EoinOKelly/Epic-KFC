@@ -112,3 +112,16 @@ async def list_active_devices_for_user(
         .order_by(DeviceKey.device_id)
     )
     return list(result.scalars().all())
+
+
+async def list_devices_for_user(
+    db: AsyncSession,
+    user_id: UUID,
+) -> list[DeviceKey]:
+    """Return all device key rows for a user without exposing key material."""
+    result = await db.execute(
+        select(DeviceKey)
+        .where(DeviceKey.user_id == user_id)
+        .order_by(DeviceKey.device_id)
+    )
+    return list(result.scalars().all())

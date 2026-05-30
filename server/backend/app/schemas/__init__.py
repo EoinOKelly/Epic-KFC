@@ -35,6 +35,7 @@ from app.schemas.one_time_prekey import (
     OneTimePreKeyResponse,
     OneTimePreKeyUpload,
 )
+from app.schemas.user import UserByUsernameResponse, UserDeviceSummary
 
 __all__ = [
     "AuditLogResponse",
@@ -60,4 +61,6 @@ __all__ = [
     "TokenResponse",
     "UUIDResponse",
     "UserResponse",
+    "UserByUsernameResponse",
+    "UserDeviceSummary",
 ]
