@@ -102,10 +102,11 @@ void SessionService::updateTokens(const TokenSet& tokens) {
     }
 }
 
-KeyService::KeyService(EventBus& events, IKeyGateway& keyGateway, ICryptoProvider& cryptoProvider, JsonLocalStore& store, SessionService& sessionService, int deviceId, QObject* parent)
+KeyService::KeyService(EventBus& events, IKeyGateway& keyGateway, IUserDirectoryGateway& userDirectoryGateway, ICryptoProvider& cryptoProvider, JsonLocalStore& store, SessionService& sessionService, int deviceId, QObject* parent)
     : QObject(parent)
     , m_events(events)
     , m_keyGateway(keyGateway)
+    , m_userDirectoryGateway(userDirectoryGateway)
     , m_cryptoProvider(cryptoProvider)
     , m_store(store)
     , m_sessionService(sessionService)
@@ -173,45 +174,52 @@ void KeyService::uploadOneTimePreKeys() {
     });
 }
 
-void KeyService::trustUser(const QString& userId, int deviceId) {
+void KeyService::trustUsername(const QString& username) {
     if (!m_sessionService.isLoggedIn()) {
         emit m_events.commandFailed({ErrorCode::AuthRequired, AppText::AuthRequired});
         return;
     }
 
-    m_keyGateway.fetchPreKeyBundle(m_sessionService.accessToken(), userId, deviceId, [this, userId, deviceId](Result<PreKeyBundle> result) {
-        if (result.failed()) {
-            emit m_events.commandFailed(result.error());
+    m_userDirectoryGateway.resolveUsername(m_sessionService.accessToken(), username, m_deviceId, [this](Result<UserAddress> addressResult) {
+        if (addressResult.failed()) {
+            emit m_events.commandFailed(addressResult.error());
             return;
         }
-        const auto verified = m_cryptoProvider.verifySignedPreKey(result.value());
-        if (verified.failed()) {
-            emit m_events.cryptoOperationFailed(verified.error());
-            return;
-        }
+        const UserAddress address = addressResult.value();
+        m_keyGateway.fetchPreKeyBundle(m_sessionService.accessToken(), address.userId, address.deviceId, [this, address](Result<PreKeyBundle> result) {
+            if (result.failed()) {
+                emit m_events.commandFailed(result.error());
+                return;
+            }
+            const auto verified = m_cryptoProvider.verifySignedPreKey(result.value());
+            if (verified.failed()) {
+                emit m_events.cryptoOperationFailed(verified.error());
+                return;
+            }
 
-        const auto existing = m_store.trustPin(userId, deviceId);
-        if (existing.failed()) {
-            emit m_events.commandFailed(existing.error());
-            return;
-        }
-        if (!existing.value().has_value()) {
-            TrustPin pin{userId, deviceId, result.value().identityKey, QDateTime::currentDateTimeUtc()};
-            const auto saved = m_store.saveTrustPin(pin);
-            if (saved.failed()) {
-                emit m_events.commandFailed(saved.error());
+            const auto existing = m_store.trustPin(address.userId, address.deviceId);
+            if (existing.failed()) {
+                emit m_events.commandFailed(existing.error());
+                return;
+            }
+            if (!existing.value().has_value()) {
+                TrustPin pin{address.userId, address.deviceId, result.value().identityKey, QDateTime::currentDateTimeUtc()};
+                const auto saved = m_store.saveTrustPin(pin);
+                if (saved.failed()) {
+                    emit m_events.commandFailed(saved.error());
+                    return;
+                }
+                m_lastTrustedBundle = result.value();
+                emit m_events.trustPinCreated(pin);
+                return;
+            }
+            if (existing.value()->identityKey != result.value().identityKey) {
+                emit m_events.trustPinMismatch(address.userId, address.deviceId);
                 return;
             }
             m_lastTrustedBundle = result.value();
-            emit m_events.trustPinCreated(pin);
-            return;
-        }
-        if (existing.value()->identityKey != result.value().identityKey) {
-            emit m_events.trustPinMismatch(userId, deviceId);
-            return;
-        }
-        m_lastTrustedBundle = result.value();
-        emit m_events.trustPinMatched(userId, deviceId);
+            emit m_events.trustPinMatched(address.userId, address.deviceId);
+        });
     });
 }
 
@@ -236,13 +244,14 @@ Result<PreKeyBundle> KeyService::cachedBundle(const QString& userId, int deviceI
         && m_lastTrustedBundle->deviceId == deviceId) {
         return Result<PreKeyBundle>::success(*m_lastTrustedBundle);
     }
-    return Result<PreKeyBundle>::failure({ErrorCode::TrustError, "Run /trust for this user/device before sending."});
+    return Result<PreKeyBundle>::failure({ErrorCode::TrustError, "Run /trust for this username before sending."});
 }
 
-MessageService::MessageService(EventBus& events, IMessageGateway& messageGateway, ICryptoProvider& cryptoProvider, JsonLocalStore& store, SessionService& sessionService, KeyService& keyService, int deviceId, QObject* parent)
+MessageService::MessageService(EventBus& events, IMessageGateway& messageGateway, IUserDirectoryGateway& userDirectoryGateway, ICryptoProvider& cryptoProvider, JsonLocalStore& store, SessionService& sessionService, KeyService& keyService, int deviceId, QObject* parent)
     : QObject(parent)
     , m_events(events)
     , m_messageGateway(messageGateway)
+    , m_userDirectoryGateway(userDirectoryGateway)
     , m_cryptoProvider(cryptoProvider)
     , m_store(store)
     , m_sessionService(sessionService)
@@ -285,12 +294,22 @@ void MessageService::listConversations() {
     emit m_events.conversationListUpdated(conversations.value());
 }
 
-void MessageService::send(const QString& recipientUserId, int recipientDeviceId, const QString& plaintext) {
+void MessageService::send(const QString& recipientUsername, const QString& plaintext) {
     if (!requireSession()) {
         return;
     }
+    m_userDirectoryGateway.resolveUsername(m_sessionService.accessToken(), recipientUsername, m_deviceId, [this, plaintext](Result<UserAddress> result) {
+        if (result.failed()) {
+            emit m_events.commandFailed(result.error());
+            return;
+        }
+        sendToAddress(result.value(), plaintext);
+    });
+}
+
+void MessageService::sendToAddress(const UserAddress& recipientAddress, const QString& plaintext) {
     const auto device = m_keyService.currentDevice();
-    const auto bundle = m_keyService.cachedBundle(recipientUserId, recipientDeviceId);
+    const auto bundle = m_keyService.cachedBundle(recipientAddress.userId, recipientAddress.deviceId);
     if (device.failed()) {
         emit m_events.commandFailed(device.error());
         return;
@@ -306,7 +325,7 @@ void MessageService::send(const QString& recipientUserId, int recipientDeviceId,
         return;
     }
 
-    const LocalMessage draft = draftFor(recipientUserId, recipientDeviceId, encrypted.value().wirePayloadJson);
+    const LocalMessage draft = draftFor(recipientAddress.userId, recipientAddress.deviceId, encrypted.value().wirePayloadJson);
     m_messageGateway.sendMessage(m_sessionService.accessToken(), draft, encrypted.value().consumedOneTimePreKeyId, [this](Result<LocalMessage> result) {
         if (result.failed()) {
             emit m_events.commandFailed(result.error());
@@ -356,7 +375,20 @@ void MessageService::read(const QString& messageId) {
     });
 }
 
-void MessageService::forward(const QString& messageId, const QString& recipientUserId, int recipientDeviceId) {
+void MessageService::forward(const QString& messageId, const QString& recipientUsername) {
+    if (!requireSession()) {
+        return;
+    }
+    m_userDirectoryGateway.resolveUsername(m_sessionService.accessToken(), recipientUsername, m_deviceId, [this, messageId](Result<UserAddress> result) {
+        if (result.failed()) {
+            emit m_events.commandFailed(result.error());
+            return;
+        }
+        forwardToAddress(messageId, result.value());
+    });
+}
+
+void MessageService::forwardToAddress(const QString& messageId, const UserAddress& recipientAddress) {
     const auto found = m_store.findMessage(messageId);
     if (found.failed() || !found.value().has_value()) {
         emit m_events.commandFailed({ErrorCode::NotFound, "Message must be cached before forwarding. Use /read first."});
@@ -372,7 +404,7 @@ void MessageService::forward(const QString& messageId, const QString& recipientU
         emit m_events.cryptoOperationFailed(plaintext.error());
         return;
     }
-    const auto bundle = m_keyService.cachedBundle(recipientUserId, recipientDeviceId);
+    const auto bundle = m_keyService.cachedBundle(recipientAddress.userId, recipientAddress.deviceId);
     if (bundle.failed()) {
         emit m_events.commandFailed(bundle.error());
         return;
@@ -382,7 +414,7 @@ void MessageService::forward(const QString& messageId, const QString& recipientU
         emit m_events.cryptoOperationFailed(encrypted.error());
         return;
     }
-    const LocalMessage draft = draftFor(recipientUserId, recipientDeviceId, encrypted.value().wirePayloadJson);
+    const LocalMessage draft = draftFor(recipientAddress.userId, recipientAddress.deviceId, encrypted.value().wirePayloadJson);
     m_messageGateway.forwardMessage(m_sessionService.accessToken(), messageId, draft, encrypted.value().consumedOneTimePreKeyId, [this](Result<LocalMessage> result) {
         if (result.failed()) {
             emit m_events.commandFailed(result.error());

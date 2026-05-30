@@ -7,7 +7,9 @@
 #include <QJsonObject>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QUuid>
 
+#include <algorithm>
 #include <utility>
 
 namespace {
@@ -35,6 +37,14 @@ QString keyPath(const QString& suffix) {
 
 QString messagePath(const QString& suffix) {
     return QString("/messages%1").arg(suffix);
+}
+
+QString userPath(const QString& suffix) {
+    return QString("/users%1").arg(suffix);
+}
+
+QString encodedPathSegment(const QString& value) {
+    return QString::fromLatin1(QUrl::toPercentEncoding(value));
 }
 
 void addOptionalString(QJsonObject& object, const QString& key, const QString& value) {
@@ -360,6 +370,59 @@ void HttpKeyGateway::fetchPreKeyBundle(const QString& accessToken, const QString
             object.value("oneTimePreKey").toString()
         }));
     });
+}
+
+HttpUserDirectoryGateway::HttpUserDirectoryGateway(HttpClient& client, QObject* parent)
+    : QObject(parent)
+    , m_client(client) {
+}
+
+void HttpUserDirectoryGateway::resolveUsername(const QString& accessToken, const QString& username, int defaultDeviceId, GatewayCallback<UserAddress> callback) {
+    const QString trimmedUsername = username.trimmed();
+    if (trimmedUsername.isEmpty()) {
+        callback(Result<UserAddress>::failure({ErrorCode::InvalidCommand, AppText::EmptyUsername}));
+        return;
+    }
+
+    const bool isUuid = !QUuid(trimmedUsername).isNull();
+    if (isUuid) {
+        callback(Result<UserAddress>::success({trimmedUsername, trimmedUsername, defaultDeviceId}));
+        return;
+    }
+
+    const QString path = userPath(QString("/by-username/%1").arg(encodedPathSegment(trimmedUsername)));
+    m_client.get(path, accessToken, [this, trimmedUsername, defaultDeviceId, callback = std::move(callback)](Result<QJsonDocument> result) mutable {
+        if (result.failed()) {
+            callback(Result<UserAddress>::failure({result.error().code, AppText::UsernameResolveUnavailable}));
+            return;
+        }
+        UserAddress address = userAddressFromJson(result.value().object(), defaultDeviceId);
+        if (address.userId.isEmpty()) {
+            callback(Result<UserAddress>::failure({ErrorCode::NotFound, QString("No user found for username %1.").arg(trimmedUsername)}));
+            return;
+        }
+        callback(Result<UserAddress>::success(address));
+    });
+}
+
+UserAddress HttpUserDirectoryGateway::userAddressFromJson(const QJsonObject& object, int defaultDeviceId) const {
+    int deviceId = object.value("default_device_id").toInt(defaultDeviceId);
+    const QJsonArray devices = object.value("devices").toArray();
+    if (!devices.isEmpty()) {
+        const auto activeDevice = std::find_if(devices.cbegin(), devices.cend(), [](const QJsonValue& value) {
+            return value.toObject().value("is_active").toBool(true);
+        });
+        const QJsonObject device = activeDevice == devices.cend()
+            ? devices.first().toObject()
+            : (*activeDevice).toObject();
+        deviceId = device.value("device_id").toInt(deviceId);
+    }
+
+    return {
+        object.value("id").toString(object.value("user_id").toString()),
+        object.value("username").toString(),
+        deviceId
+    };
 }
 
 HttpMessageGateway::HttpMessageGateway(HttpClient& client, QObject* parent)

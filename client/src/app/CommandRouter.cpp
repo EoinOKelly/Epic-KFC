@@ -52,15 +52,13 @@ void CommandRouter::handleCommandMode(const QString& line) {
             emit m_events.statusMessage("Enter login password.");
         }
         return;
+    case CommandType::Msg:
     case CommandType::Send:
-        if (commandHasArgumentCount(command, 1, 2) && commandHasValidDeviceId(command, 1)) {
-            m_compositionRecipientUserId = command.arguments.at(0);
-            m_compositionRecipientDeviceId = command.arguments.size() == 2
-                ? command.arguments.at(1).toInt()
-                : DefaultDeviceId;
+        if (commandHasArgumentCount(command, 1, 1)) {
+            m_compositionRecipientUsername = command.arguments.at(0);
             m_compositionLines.clear();
             m_inputMode = InputMode::MessageComposition;
-            m_controller.beginMessageComposition(m_compositionRecipientUserId, m_compositionRecipientDeviceId);
+            m_controller.beginMessageComposition(m_compositionRecipientUsername);
         }
         return;
     case CommandType::Help:
@@ -86,7 +84,7 @@ void CommandRouter::handleCommandMode(const QString& line) {
         }
         return;
     case CommandType::Forward:
-        if (commandHasArgumentCount(command, 2, 3) && commandHasValidDeviceId(command, 2)) {
+        if (commandHasArgumentCount(command, 2, 2)) {
             m_controller.handleCommand(command);
         }
         return;
@@ -96,7 +94,7 @@ void CommandRouter::handleCommandMode(const QString& line) {
         }
         return;
     case CommandType::Trust:
-        if (commandHasArgumentCount(command, 1, 2) && commandHasValidDeviceId(command, 1)) {
+        if (commandHasArgumentCount(command, 1, 1)) {
             m_controller.handleCommand(command);
         }
         return;
@@ -125,8 +123,7 @@ void CommandRouter::handleMessageComposition(const QString& line) {
     if (submitRequested) {
         m_inputMode = InputMode::Command;
         m_controller.submitComposedMessage(
-            m_compositionRecipientUserId,
-            m_compositionRecipientDeviceId,
+            m_compositionRecipientUsername,
             m_compositionLines.join('\n'));
         m_compositionLines.clear();
         return;
@@ -142,8 +139,8 @@ void CommandRouter::handleMessageComposition(const QString& line) {
 
     m_compositionLines.push_back(line);
     emit m_events.messagePrepared(
-        m_compositionRecipientUserId,
-        m_compositionRecipientDeviceId,
+        m_compositionRecipientUsername,
+        DefaultDeviceId,
         m_compositionLines.join('\n'));
 }
 
@@ -168,21 +165,3 @@ bool CommandRouter::commandHasArgumentCount(const SlashCommand& command, int min
     return false;
 }
 
-bool CommandRouter::commandHasValidDeviceId(const SlashCommand& command, int argumentIndex) {
-    if (argumentIndex >= command.arguments.size()) {
-        return true;
-    }
-
-    bool parsed = false;
-    const int deviceId = command.arguments.at(argumentIndex).toInt(&parsed);
-    const bool validDeviceId = parsed && deviceId > 0;
-    if (validDeviceId) {
-        return true;
-    }
-
-    emit m_events.commandFailed({
-        ErrorCode::InvalidCommand,
-        QString(CommandText::PositiveDeviceId).arg(command.name)
-    });
-    return false;
-}

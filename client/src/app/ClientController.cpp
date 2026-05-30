@@ -58,8 +58,8 @@ void ClientController::handleCommand(const SlashCommand& command) {
         }
         return;
     case CommandType::Forward:
-        if (command.arguments.size() >= 2 && command.arguments.size() <= 3) {
-            m_messageService.forward(command.arguments.at(0), command.arguments.at(1), deviceIdFromArguments(command.arguments, 2));
+        if (command.arguments.size() == 2) {
+            m_messageService.forward(command.arguments.at(0), command.arguments.at(1));
         }
         return;
     case CommandType::Revoke:
@@ -78,8 +78,8 @@ void ClientController::handleCommand(const SlashCommand& command) {
         }
         return;
     case CommandType::Trust:
-        if (command.arguments.size() >= 1 && command.arguments.size() <= 2) {
-            m_keyService.trustUser(command.arguments.at(0), deviceIdFromArguments(command.arguments, 1));
+        if (command.arguments.size() == 1) {
+            m_keyService.trustUsername(command.arguments.at(0));
         }
         return;
     case CommandType::Verify:
@@ -95,6 +95,7 @@ void ClientController::handleCommand(const SlashCommand& command) {
         return;
     case CommandType::Register:
     case CommandType::Login:
+    case CommandType::Msg:
     case CommandType::Send:
         return;
     }
@@ -108,30 +109,19 @@ void ClientController::login(const QString& usernameOrEmail, const QString& pass
     m_sessionService.login(usernameOrEmail, password);
 }
 
-void ClientController::beginMessageComposition(const QString& recipientUserId, int deviceId) {
-    emit m_events.messagePrepared(recipientUserId, deviceId, {});
+void ClientController::beginMessageComposition(const QString& recipientUsername) {
+    emit m_events.messagePrepared(recipientUsername, m_config.deviceId, {});
 }
 
-void ClientController::submitComposedMessage(const QString& recipientUserId, int deviceId, const QString& body) {
+void ClientController::submitComposedMessage(const QString& recipientUsername, const QString& body) {
     if (body.trimmed().isEmpty()) {
         emit m_events.commandFailed({ErrorCode::InvalidCommand, AppText::EmptyMessage});
         return;
     }
-    m_messageService.send(recipientUserId, deviceId, body);
+    m_messageService.send(recipientUsername, body);
 }
 
 void ClientController::cancelComposition() {
     emit m_events.messageCompositionCancelled();
 }
 
-int ClientController::deviceIdFromArguments(const QStringList& arguments, int index) const {
-    if (index >= arguments.size()) {
-        return m_config.deviceId;
-    }
-    bool parsed = false;
-    const int deviceId = arguments.at(index).toInt(&parsed);
-    if (!parsed || deviceId <= 0) {
-        return m_config.deviceId;
-    }
-    return deviceId;
-}

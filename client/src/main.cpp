@@ -38,13 +38,16 @@ int main(int argc, char* argv[]) {
     std::unique_ptr<HttpClient> httpClient;
     std::unique_ptr<IAuthGateway> httpAuthGateway;
     std::unique_ptr<IKeyGateway> httpKeyGateway;
+    std::unique_ptr<IUserDirectoryGateway> httpUserDirectoryGateway;
     std::unique_ptr<IMessageGateway> httpMessageGateway;
     std::unique_ptr<IAuthGateway> mockAuthGateway;
     std::unique_ptr<IKeyGateway> mockKeyGateway;
+    std::unique_ptr<IUserDirectoryGateway> mockUserDirectoryGateway;
     std::unique_ptr<IMessageGateway> mockMessageGateway;
 
     IAuthGateway* authGateway = nullptr;
     IKeyGateway* keyGateway = nullptr;
+    IUserDirectoryGateway* userDirectoryGateway = nullptr;
     IMessageGateway* messageGateway = nullptr;
 
     if (config.mode == ClientMode::Real) {
@@ -57,17 +60,21 @@ int main(int argc, char* argv[]) {
         httpClient = std::make_unique<HttpClient>(config.apiUrl);
         httpAuthGateway = std::make_unique<HttpAuthGateway>(*httpClient);
         httpKeyGateway = std::make_unique<HttpKeyGateway>(*httpClient);
+        httpUserDirectoryGateway = std::make_unique<HttpUserDirectoryGateway>(*httpClient);
         httpMessageGateway = std::make_unique<HttpMessageGateway>(*httpClient);
         authGateway = httpAuthGateway.get();
         keyGateway = httpKeyGateway.get();
+        userDirectoryGateway = httpUserDirectoryGateway.get();
         messageGateway = httpMessageGateway.get();
     } else {
         cryptoProvider = std::make_unique<MockCryptoProvider>();
         mockAuthGateway = std::make_unique<MockAuthGateway>();
         mockKeyGateway = std::make_unique<MockKeyGateway>();
+        mockUserDirectoryGateway = std::make_unique<MockUserDirectoryGateway>();
         mockMessageGateway = std::make_unique<MockMessageGateway>();
         authGateway = mockAuthGateway.get();
         keyGateway = mockKeyGateway.get();
+        userDirectoryGateway = mockUserDirectoryGateway.get();
         messageGateway = mockMessageGateway.get();
     }
 
@@ -77,8 +84,8 @@ int main(int argc, char* argv[]) {
             sessionService.updateTokens(tokens);
         });
     }
-    KeyService keyService(events, *keyGateway, *cryptoProvider, store, sessionService, config.deviceId);
-    MessageService messageService(events, *messageGateway, *cryptoProvider, store, sessionService, keyService, config.deviceId);
+    KeyService keyService(events, *keyGateway, *userDirectoryGateway, *cryptoProvider, store, sessionService, config.deviceId);
+    MessageService messageService(events, *messageGateway, *userDirectoryGateway, *cryptoProvider, store, sessionService, keyService, config.deviceId);
     ClientController controller(events, config, sessionService, keyService, messageService);
     CommandRouter router(events, controller);
     ConsolePresenter presenter(events);

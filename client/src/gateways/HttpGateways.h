@@ -70,6 +70,20 @@ private:
     HttpClient& m_client;
 };
 
+class HttpUserDirectoryGateway : public QObject, public IUserDirectoryGateway {
+    Q_OBJECT
+
+public:
+    explicit HttpUserDirectoryGateway(HttpClient& client, QObject* parent = nullptr);
+
+    void resolveUsername(const QString& accessToken, const QString& username, int defaultDeviceId, GatewayCallback<UserAddress> callback) override;
+
+private:
+    UserAddress userAddressFromJson(const QJsonObject& object, int defaultDeviceId) const;
+
+    HttpClient& m_client;
+};
+
 class HttpMessageGateway : public QObject, public IMessageGateway {
     Q_OBJECT
 

@@ -30,7 +30,6 @@ private:
     void handleLoginPassword(const QString& line);
     void handleMessageComposition(const QString& line);
     bool commandHasArgumentCount(const SlashCommand& command, int minimum, int maximum = -1);
-    bool commandHasValidDeviceId(const SlashCommand& command, int argumentIndex);
 
     EventBus& m_events;
     ClientController& m_controller;
@@ -39,7 +38,6 @@ private:
     QString m_pendingUsername;
     QString m_pendingEmail;
     QString m_pendingLoginIdentifier;
-    QString m_compositionRecipientUserId;
-    int m_compositionRecipientDeviceId{DefaultDeviceId};
+    QString m_compositionRecipientUsername;
     QStringList m_compositionLines;
 };
