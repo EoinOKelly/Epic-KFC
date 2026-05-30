@@ -4,6 +4,7 @@
 #include "crypto/NativeSignalCryptoProvider.h"
 #include "domain/Models.h"
 #include "storage/JsonLocalStore.h"
+#include "support/ClientConstants.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -42,14 +43,29 @@ void testParser() {
 
 void testStartupConfig() {
     StartupConfigParser parser;
-    const auto mock = parser.parse({"client"});
-    expect(mock.succeeded() && mock.value().mode == ClientMode::Mock, "startup defaults to mock mode");
+    const auto defaultReal = parser.parse({"client"});
+    const bool defaultRealMode = defaultReal.succeeded()
+        && defaultReal.value().mode == ClientMode::Real
+        && defaultReal.value().apiUrl == AppText::DefaultApiUrl;
+    expect(defaultRealMode, "startup defaults to real mode with team API URL");
+
+    const auto debug = parser.parse({"client", "--debug"});
+    expect(debug.succeeded() && debug.value().mode == ClientMode::Mock && debug.value().apiUrl.isEmpty(), "startup debug flag selects mock mode");
 
     const auto real = parser.parse({"client", "--mode", "real", "--api-url", "https://example.test/api/v1", "--device-id", "2"});
     expect(real.succeeded() && real.value().mode == ClientMode::Real && real.value().deviceId == 2, "startup accepts real mode config");
 
-    const auto invalid = parser.parse({"client", "--mode", "real"});
-    expect(invalid.failed(), "startup rejects real mode without api url");
+    const auto realDefaultUrl = parser.parse({"client", "--mode", "real"});
+    expect(realDefaultUrl.succeeded() && realDefaultUrl.value().apiUrl == AppText::DefaultApiUrl, "startup real mode uses default API URL");
+
+    const auto debugRealConflict = parser.parse({"client", "--debug", "--mode", "real"});
+    expect(debugRealConflict.failed(), "startup rejects debug with real mode");
+
+    const auto realDebugConflict = parser.parse({"client", "--mode", "real", "--debug"});
+    expect(realDebugConflict.failed(), "startup rejects real mode with debug");
+
+    const auto debugApiConflict = parser.parse({"client", "--debug", "--api-url", "https://example.test/api/v1"});
+    expect(debugApiConflict.failed(), "startup rejects debug with API URL");
 
     const auto insecure = parser.parse({"client", "--mode", "real", "--api-url", "http://localhost:8000/api/v1"});
     expect(insecure.failed(), "startup rejects real mode without HTTPS");

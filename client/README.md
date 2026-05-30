@@ -19,11 +19,14 @@ ConsoleInputWorker
   -> ConsolePresenter
 ```
 
-Mock and real integrations are selected at startup:
+The client starts in real mode by default against the team HTTPS endpoint:
 
-- `--mode mock`: local demo mode with mock gateways and mock crypto-shaped
+- `client`: FastAPI integration over TLS using
+  `https://kfc.theburkenator.com/api/v1`.
+- `client --debug`: local demo mode with mock gateways and mock crypto-shaped
   payloads.
-- `--mode real --api-url https://host/api/v1`: FastAPI integration over TLS.
+- `client --api-url https://host/api/v1`: real mode with an overridden backend
+  URL.
 
 Real mode requires HTTPS and does not disable Qt certificate validation.
 
@@ -53,22 +56,29 @@ cmake --build client/out/build/debug --parallel 4
 
 ## Run
 
-Mock mode:
+Real mode using the default team backend:
 
 ```bash
-client --mode mock
+client
 ```
 
-Real mode:
+Debug/mock mode:
 
 ```bash
-client --mode real --api-url https://localhost:8000/api/v1 --device-id 1
+client --debug
+```
+
+Real mode with an overridden backend:
+
+```bash
+client --api-url https://kfc.theburkenator.com/api/v1 --device-id 1
 ```
 
 Optional:
 
 ```bash
 --state-path path/to/client-state.json
+--mode mock|real
 ```
 
 ## Slash Commands

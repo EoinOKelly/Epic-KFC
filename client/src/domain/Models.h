@@ -63,7 +63,7 @@ struct ClientError {
 };
 
 struct StartupConfig {
-    ClientMode mode{ClientMode::Mock};
+    ClientMode mode{ClientMode::Real};
     QString apiUrl;
     int deviceId{DefaultDeviceId};
     QString statePath;
