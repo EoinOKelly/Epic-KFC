@@ -33,10 +33,10 @@ class KeyService : public QObject {
     Q_OBJECT
 
 public:
-    KeyService(EventBus& events, IKeyGateway& keyGateway, ICryptoProvider& cryptoProvider, JsonLocalStore& store, SessionService& sessionService, int deviceId, QObject* parent = nullptr);
+    KeyService(EventBus& events, IKeyGateway& keyGateway, IUserDirectoryGateway& userDirectoryGateway, ICryptoProvider& cryptoProvider, JsonLocalStore& store, SessionService& sessionService, int deviceId, QObject* parent = nullptr);
 
     void ensureDeviceKeysUploaded();
-    void trustUser(const QString& userId, int deviceId);
+    void trustUsername(const QString& username);
     Result<DeviceKeyMaterial> currentDevice();
     Result<std::optional<TrustPin>> trustPin(const QString& userId, int deviceId) const;
     Result<PreKeyBundle> cachedBundle(const QString& userId, int deviceId) const;
@@ -46,6 +46,7 @@ private:
 
     EventBus& m_events;
     IKeyGateway& m_keyGateway;
+    IUserDirectoryGateway& m_userDirectoryGateway;
     ICryptoProvider& m_cryptoProvider;
     JsonLocalStore& m_store;
     SessionService& m_sessionService;
@@ -57,14 +58,14 @@ class MessageService : public QObject {
     Q_OBJECT
 
 public:
-    MessageService(EventBus& events, IMessageGateway& messageGateway, ICryptoProvider& cryptoProvider, JsonLocalStore& store, SessionService& sessionService, KeyService& keyService, int deviceId, QObject* parent = nullptr);
+    MessageService(EventBus& events, IMessageGateway& messageGateway, IUserDirectoryGateway& userDirectoryGateway, ICryptoProvider& cryptoProvider, JsonLocalStore& store, SessionService& sessionService, KeyService& keyService, int deviceId, QObject* parent = nullptr);
 
     void listReceived();
     void listSent();
     void listConversations();
-    void send(const QString& recipientUserId, int recipientDeviceId, const QString& plaintext);
+    void send(const QString& recipientUsername, const QString& plaintext);
     void read(const QString& messageId);
-    void forward(const QString& messageId, const QString& recipientUserId, int recipientDeviceId);
+    void forward(const QString& messageId, const QString& recipientUsername);
     void revoke(const QString& messageId);
     void deleteMessage(const QString& messageId);
     void download(const QString& messageId, const QString& path);
@@ -74,10 +75,13 @@ private:
     bool requireSession();
     std::optional<OneTimePreKey> oneTimePreKeyFor(const LocalMessage& message) const;
     void saveAndEmitList(const MessageList& messages);
+    void sendToAddress(const UserAddress& recipientAddress, const QString& plaintext);
+    void forwardToAddress(const QString& messageId, const UserAddress& recipientAddress);
     LocalMessage draftFor(const QString& recipientUserId, int recipientDeviceId, const QString& wirePayloadJson) const;
 
     EventBus& m_events;
     IMessageGateway& m_messageGateway;
+    IUserDirectoryGateway& m_userDirectoryGateway;
     ICryptoProvider& m_cryptoProvider;
     JsonLocalStore& m_store;
     SessionService& m_sessionService;

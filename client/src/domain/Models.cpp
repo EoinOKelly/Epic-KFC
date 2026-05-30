@@ -16,6 +16,7 @@ const QHash<QString, CommandType>& commandLookup() {
         {CommandNames::Conversations, CommandType::Conversations},
         {CommandNames::Inbox, CommandType::Inbox},
         {CommandNames::Sent, CommandType::Sent},
+        {CommandNames::Msg, CommandType::Msg},
         {CommandNames::Send, CommandType::Send},
         {CommandNames::Read, CommandType::Read},
         {CommandNames::Forward, CommandType::Forward},
@@ -90,6 +91,7 @@ void registerClientMetaTypes() {
     qRegisterMetaType<StartupConfig>("StartupConfig");
     qRegisterMetaType<SlashCommand>("SlashCommand");
     qRegisterMetaType<UserProfile>("UserProfile");
+    qRegisterMetaType<UserAddress>("UserAddress");
     qRegisterMetaType<TokenSet>("TokenSet");
     qRegisterMetaType<AuthSession>("AuthSession");
     qRegisterMetaType<DeviceKeyMaterial>("DeviceKeyMaterial");

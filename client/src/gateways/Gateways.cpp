@@ -135,6 +135,29 @@ void MockKeyGateway::fetchPreKeyBundle(const QString& accessToken, const QString
     });
 }
 
+MockUserDirectoryGateway::MockUserDirectoryGateway(QObject* parent)
+    : QObject(parent) {
+}
+
+void MockUserDirectoryGateway::resolveUsername(const QString& accessToken, const QString& username, int defaultDeviceId, GatewayCallback<UserAddress> callback) {
+    later(this, [accessToken, username, defaultDeviceId, callback = std::move(callback)]() mutable {
+        const QString trimmedUsername = username.trimmed();
+        if (accessToken.isEmpty()) {
+            callback(Result<UserAddress>::failure({ErrorCode::AuthRequired, AppText::AuthRequired}));
+            return;
+        }
+        if (trimmedUsername.isEmpty()) {
+            callback(Result<UserAddress>::failure({ErrorCode::InvalidCommand, AppText::EmptyUsername}));
+            return;
+        }
+        callback(Result<UserAddress>::success({
+            QString("mock-user-%1").arg(trimmedUsername),
+            trimmedUsername,
+            defaultDeviceId
+        }));
+    });
+}
+
 MockMessageGateway::MockMessageGateway(QObject* parent)
     : QObject(parent) {
 }

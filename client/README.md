@@ -85,21 +85,26 @@ All actions start with `/`.
 /conversations
 /inbox
 /sent
-/send <recipientUserUuid> [deviceId]
+/msg <username>
+/send <username>
 /read <messageId>
-/forward <messageId> <recipientUserUuid> [deviceId]
+/forward <messageId> <username>
 /revoke <messageId>
 /delete <messageId>
 /download <messageId> <path>
-/trust <userUuid> [deviceId]
+/trust <username>
 /verify <messageId>
 /sync
 /cancel
 /exit
 ```
 
-`/register`, `/login`, and `/send` enter prompt modes. Message composition accepts
-slash-prefixed body text until `/send` submits or `/cancel` aborts.
+`/register`, `/login`, `/msg`, and `/send` enter prompt modes. Message composition
+accepts slash-prefixed body text until `/send` submits or `/cancel` aborts.
+
+Mock mode resolves usernames locally. Real mode accepts UUIDs today and is wired for
+`GET /api/v1/users/by-username/{username}` once the backend exposes username lookup
+with active device metadata.
 
 ## Security Notes
 

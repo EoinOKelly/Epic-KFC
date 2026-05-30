@@ -27,6 +27,12 @@ public:
     virtual void fetchPreKeyBundle(const QString& accessToken, const QString& userId, int deviceId, GatewayCallback<PreKeyBundle> callback) = 0;
 };
 
+class IUserDirectoryGateway {
+public:
+    virtual ~IUserDirectoryGateway() = default;
+    virtual void resolveUsername(const QString& accessToken, const QString& username, int defaultDeviceId, GatewayCallback<UserAddress> callback) = 0;
+};
+
 class IMessageGateway {
 public:
     virtual ~IMessageGateway() = default;
@@ -73,6 +79,15 @@ public:
 
 private:
     QHash<QString, PreKeyBundle> m_bundles;
+};
+
+class MockUserDirectoryGateway : public QObject, public IUserDirectoryGateway {
+    Q_OBJECT
+
+public:
+    explicit MockUserDirectoryGateway(QObject* parent = nullptr);
+
+    void resolveUsername(const QString& accessToken, const QString& username, int defaultDeviceId, GatewayCallback<UserAddress> callback) override;
 };
 
 class MockMessageGateway : public QObject, public IMessageGateway {

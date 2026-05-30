@@ -27,13 +27,18 @@ ConsolePresenter::ConsolePresenter(EventBus& events, QObject* parent)
         printMessage(QString(AppText::KeysUploaded).arg(deviceId));
     });
     connect(&events, &EventBus::trustPinCreated, this, [this](const TrustPin& pin) {
-        printMessage(QString(AppText::TrustFirstUse).arg(pin.userId).arg(pin.deviceId));
+        Q_UNUSED(pin)
+        printMessage(AppText::TrustFirstUse);
     });
     connect(&events, &EventBus::trustPinMatched, this, [this](const QString& userId, int deviceId) {
-        printMessage(QString(AppText::TrustAlreadyMatches).arg(userId).arg(deviceId));
+        Q_UNUSED(userId)
+        Q_UNUSED(deviceId)
+        printMessage(AppText::TrustAlreadyMatches);
     });
     connect(&events, &EventBus::trustPinMismatch, this, [this](const QString& userId, int deviceId) {
-        printError({ErrorCode::TrustError, QString(AppText::TrustMismatch).arg(userId).arg(deviceId)});
+        Q_UNUSED(userId)
+        Q_UNUSED(deviceId)
+        printError({ErrorCode::TrustError, AppText::TrustMismatch});
     });
     connect(&events, &EventBus::conversationListUpdated, this, [this](const ConversationList& conversations) {
         if (conversations.isEmpty()) {
@@ -42,8 +47,8 @@ ConsolePresenter::ConsolePresenter(EventBus& events, QObject* parent)
         }
         m_output << AppText::ConversationHeader << '\n';
         for (const auto& conversation : conversations) {
-            m_output << "  " << conversation.peerUserId << " device " << conversation.peerDeviceId
-                     << " | messages=" << conversation.messageCount << '\n';
+            Q_UNUSED(conversation.peerDeviceId)
+            m_output << "  " << conversation.peerUserId << " | messages=" << conversation.messageCount << '\n';
         }
         printPrompt();
     });
@@ -60,8 +65,9 @@ ConsolePresenter::ConsolePresenter(EventBus& events, QObject* parent)
         printPrompt();
     });
     connect(&events, &EventBus::messagePrepared, this, [this](const QString& recipientUserId, int deviceId, const QString& body) {
+        Q_UNUSED(deviceId)
         if (body.isEmpty()) {
-            printMessage(QString(AppText::CompositionStarted).arg(recipientUserId).arg(deviceId));
+            printMessage(QString(AppText::CompositionStarted).arg(recipientUserId));
             return;
         }
         printMessage(QString(AppText::DraftLength).arg(body.size()));
@@ -70,7 +76,7 @@ ConsolePresenter::ConsolePresenter(EventBus& events, QObject* parent)
         printMessage(AppText::CompositionCancelled);
     });
     connect(&events, &EventBus::messageSent, this, [this](const LocalMessage& message) {
-        printMessage(QString(AppText::MessageSent).arg(message.id, message.recipientUserId).arg(message.recipientDeviceId));
+        printMessage(QString(AppText::MessageSent).arg(message.id));
     });
     connect(&events, &EventBus::messageOpened, this, [this](const LocalMessage& message, const QString& plaintext) {
         m_output << QString(AppText::MessageOpened).arg(message.id) << '\n' << plaintext << '\n';

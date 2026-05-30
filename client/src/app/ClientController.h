@@ -21,13 +21,11 @@ public:
     void handleCommand(const SlashCommand& command);
     void registerUser(const QString& username, const QString& email, const QString& password);
     void login(const QString& usernameOrEmail, const QString& password);
-    void beginMessageComposition(const QString& recipientUserId, int deviceId);
-    void submitComposedMessage(const QString& recipientUserId, int deviceId, const QString& body);
+    void beginMessageComposition(const QString& recipientUsername);
+    void submitComposedMessage(const QString& recipientUsername, const QString& body);
     void cancelComposition();
 
 private:
-    int deviceIdFromArguments(const QStringList& arguments, int index) const;
-
     EventBus& m_events;
     StartupConfig m_config;
     SessionService& m_sessionService;

@@ -30,6 +30,9 @@ void testParser() {
     const auto login = parser.parse("/LOGIN alice@example.com");
     expect(login.succeeded() && login.value().type == CommandType::Login, "parser accepts case-insensitive slash command");
 
+    const auto msg = parser.parse("/msg bob");
+    expect(msg.succeeded() && msg.value().type == CommandType::Msg && msg.value().arguments.at(0) == "bob", "parser accepts IRC-style username message command");
+
     const auto quoted = parser.parse("/download msg-1 \"C:/Temp/out file.txt\"");
     expect(quoted.succeeded() && quoted.value().arguments.at(1) == "C:/Temp/out file.txt", "parser handles quoted arguments");
 

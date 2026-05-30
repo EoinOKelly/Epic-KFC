@@ -32,6 +32,7 @@ enum class CommandType {
     Conversations,
     Inbox,
     Sent,
+    Msg,
     Send,
     Read,
     Forward,
@@ -92,6 +93,12 @@ struct TokenSet {
 struct AuthSession {
     UserProfile user;
     TokenSet tokens;
+};
+
+struct UserAddress {
+    QString userId;
+    QString username;
+    int deviceId{DefaultDeviceId};
 };
 
 struct DeviceKeyMaterial {
@@ -176,6 +183,7 @@ Q_DECLARE_METATYPE(ClientError)
 Q_DECLARE_METATYPE(StartupConfig)
 Q_DECLARE_METATYPE(SlashCommand)
 Q_DECLARE_METATYPE(UserProfile)
+Q_DECLARE_METATYPE(UserAddress)
 Q_DECLARE_METATYPE(TokenSet)
 Q_DECLARE_METATYPE(AuthSession)
 Q_DECLARE_METATYPE(DeviceKeyMaterial)

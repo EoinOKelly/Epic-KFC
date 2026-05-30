@@ -34,6 +34,8 @@ inline const QString Greeting = "Epic KFC secure messaging client. Type /help to
 inline const QString MockStatus = "Mock mode is active. No backend is required.";
 inline const QString RealStatus = "Real mode is active. Backend API: %1";
 inline const QString AuthRequired = "You must /login before using this command.";
+inline const QString UsernameResolveUnavailable = "Username lookup is not available from this backend yet. Use a user UUID or ask the backend team for /users/by-username/{username}.";
+inline const QString EmptyUsername = "Username must not be empty.";
 inline const QString NoComposition = "There is no active message composition.";
 inline const QString EmptyMessage = "Cannot send an empty message.";
 inline const QString AnchorUnavailable = "Anchor unavailable for %1 because the backend has no anchor route yet.";
@@ -43,18 +45,18 @@ inline const QString RegisteredUser = "Registered %1. Use /login to start a sess
 inline const QString SessionEnded = "Session ended.";
 inline const QString KeysUploaded = "Device keys uploaded for device %1.";
 inline const QString NativeCryptoUnavailable = "Real mode requires OpenSSL-backed native crypto. Install OpenSSL 3 development libraries and rebuild the client.";
-inline const QString CompositionStarted = "Composing message for %1 device %2. Type body lines, /send to submit, or /cancel.";
+inline const QString CompositionStarted = "Composing message for %1. Type body lines, /send to submit, or /cancel.";
 inline const QString CompositionCancelled = "Message composition cancelled.";
 inline const QString DraftLength = "Draft length: %1 character(s).";
-inline const QString MessageSent = "Message %1 sent to %2 device %3.";
+inline const QString MessageSent = "Message %1 sent.";
 inline const QString MessageOpened = "Message %1:";
 inline const QString MessageForwarded = "Message forwarded as %1.";
 inline const QString MessageRevoked = "Message %1 revoked.";
 inline const QString MessageDeleted = "Message %1 deleted.";
 inline const QString MessageDownloaded = "Message %1 exported to %2.";
-inline const QString TrustFirstUse = "Pinned first-use identity for %1 device %2.";
-inline const QString TrustAlreadyMatches = "Identity for %1 device %2 is already trusted.";
-inline const QString TrustMismatch = "Trust mismatch for %1 device %2. Sending is blocked.";
+inline const QString TrustFirstUse = "Pinned first-use identity.";
+inline const QString TrustAlreadyMatches = "Identity is already trusted.";
+inline const QString TrustMismatch = "Trust mismatch. Sending is blocked.";
 inline const QString EmptyConversationList = "No cached conversations found.";
 inline const QString EmptyMessageList = "No messages found.";
 inline const QString ConversationHeader = "Conversations:";
@@ -72,13 +74,14 @@ inline const QString Help =
     "  /conversations\n"
     "  /inbox\n"
     "  /sent\n"
-    "  /send <recipientUserUuid> [deviceId]\n"
+    "  /msg <username>\n"
+    "  /send <username>\n"
     "  /read <messageId>\n"
-    "  /forward <messageId> <recipientUserUuid> [deviceId]\n"
+    "  /forward <messageId> <username>\n"
     "  /revoke <messageId>\n"
     "  /delete <messageId>\n"
     "  /download <messageId> <path>\n"
-    "  /trust <userUuid> [deviceId]\n"
+    "  /trust <username>\n"
     "  /verify <messageId>\n"
     "  /sync\n"
     "  /cancel\n"
@@ -114,6 +117,7 @@ inline const QString Status = "status";
 inline const QString Conversations = "conversations";
 inline const QString Inbox = "inbox";
 inline const QString Sent = "sent";
+inline const QString Msg = "msg";
 inline const QString Send = "send";
 inline const QString Read = "read";
 inline const QString Forward = "forward";
