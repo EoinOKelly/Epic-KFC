@@ -1,12 +1,11 @@
 #pragma once
 
 #include <QDateTime>
-#include <QList>
 #include <QMetaType>
 #include <QString>
-#include <QStringList>
 
 #include <optional>
+#include <vector>
 
 enum class ErrorCode {
     InvalidCommand,
@@ -73,7 +72,7 @@ struct StartupConfig {
 struct SlashCommand {
     CommandType type{CommandType::Help};
     QString name;
-    QStringList arguments;
+    std::vector<QString> arguments;
     QString originalLine;
 };
 
@@ -170,8 +169,8 @@ struct ConversationSummary {
     QDateTime latestMessageAt;
 };
 
-using MessageList = QList<LocalMessage>;
-using ConversationList = QList<ConversationSummary>;
+using MessageList = std::vector<LocalMessage>;
+using ConversationList = std::vector<ConversationSummary>;
 
 QString errorCodeToString(ErrorCode code);
 QString commandTypeName(CommandType type);

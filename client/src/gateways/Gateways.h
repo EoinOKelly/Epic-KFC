@@ -6,6 +6,8 @@
 #include <QObject>
 
 #include <functional>
+#include <map>
+#include <vector>
 
 template <typename T>
 using GatewayCallback = std::function<void(Result<T>)>;
@@ -23,7 +25,7 @@ class IKeyGateway {
 public:
     virtual ~IKeyGateway() = default;
     virtual void upsertDeviceKeys(const QString& accessToken, const DeviceKeyMaterial& material, GatewayCallback<bool> callback) = 0;
-    virtual void uploadOneTimePreKeys(const QString& accessToken, int deviceId, const QList<OneTimePreKey>& preKeys, GatewayCallback<bool> callback) = 0;
+    virtual void uploadOneTimePreKeys(const QString& accessToken, int deviceId, const std::vector<OneTimePreKey>& preKeys, GatewayCallback<bool> callback) = 0;
     virtual void fetchPreKeyBundle(const QString& accessToken, const QString& userId, int deviceId, GatewayCallback<PreKeyBundle> callback) = 0;
 };
 
@@ -49,7 +51,7 @@ class ICryptoProvider {
 public:
     virtual ~ICryptoProvider() = default;
     virtual Result<DeviceKeyMaterial> loadOrCreateDevice(DeviceKeyMaterial existing, int deviceId) = 0;
-    virtual Result<QList<OneTimePreKey>> createOneTimePreKeys(int deviceId, int count) = 0;
+    virtual Result<std::vector<OneTimePreKey>> createOneTimePreKeys(int deviceId, int count) = 0;
     virtual Result<bool> verifySignedPreKey(const PreKeyBundle& bundle) = 0;
     virtual Result<EncryptedPayload> encrypt(const QString& senderUserId, const DeviceKeyMaterial& senderDevice, const PreKeyBundle& recipientBundle, const QString& plaintext) = 0;
     virtual Result<QString> decrypt(const QString& currentUserId, const DeviceKeyMaterial& currentDevice, const LocalMessage& message, const std::optional<OneTimePreKey>& oneTimePreKey) = 0;
@@ -74,11 +76,11 @@ public:
     explicit MockKeyGateway(QObject* parent = nullptr);
 
     void upsertDeviceKeys(const QString& accessToken, const DeviceKeyMaterial& material, GatewayCallback<bool> callback) override;
-    void uploadOneTimePreKeys(const QString& accessToken, int deviceId, const QList<OneTimePreKey>& preKeys, GatewayCallback<bool> callback) override;
+    void uploadOneTimePreKeys(const QString& accessToken, int deviceId, const std::vector<OneTimePreKey>& preKeys, GatewayCallback<bool> callback) override;
     void fetchPreKeyBundle(const QString& accessToken, const QString& userId, int deviceId, GatewayCallback<PreKeyBundle> callback) override;
 
 private:
-    QHash<QString, PreKeyBundle> m_bundles;
+    std::map<QString, PreKeyBundle> m_bundles;
 };
 
 class MockUserDirectoryGateway : public QObject, public IUserDirectoryGateway {

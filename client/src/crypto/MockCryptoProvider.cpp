@@ -25,8 +25,8 @@ Result<DeviceKeyMaterial> MockCryptoProvider::loadOrCreateDevice(DeviceKeyMateri
     });
 }
 
-Result<QList<OneTimePreKey>> MockCryptoProvider::createOneTimePreKeys(int deviceId, int count) {
-    QList<OneTimePreKey> preKeys;
+Result<std::vector<OneTimePreKey>> MockCryptoProvider::createOneTimePreKeys(int deviceId, int count) {
+    std::vector<OneTimePreKey> preKeys;
     for (int index = 0; index < count; ++index) {
         const int preKeyId = CryptoText::FirstPreKeyId + index;
         const QString label = QString("mock-device-%1-pre-key-%2").arg(deviceId).arg(preKeyId);
@@ -38,7 +38,7 @@ Result<QList<OneTimePreKey>> MockCryptoProvider::createOneTimePreKeys(int device
             false
         });
     }
-    return Result<QList<OneTimePreKey>>::success(preKeys);
+    return Result<std::vector<OneTimePreKey>>::success(preKeys);
 }
 
 Result<bool> MockCryptoProvider::verifySignedPreKey(const PreKeyBundle& bundle) {
@@ -119,7 +119,8 @@ QString MockCryptoProvider::toBase64(const QByteArray& value) const {
 
 int MockCryptoProvider::nextCounter(const QString& userId, int deviceId) {
     const QString key = QString("%1:%2").arg(userId).arg(deviceId);
-    const int counter = m_sendCounters.value(key, 0);
-    m_sendCounters.insert(key, counter + 1);
+    const auto foundCounter = m_sendCounters.find(key);
+    const int counter = foundCounter == m_sendCounters.end() ? 0 : foundCounter->second;
+    m_sendCounters.insert_or_assign(key, counter + 1);
     return counter;
 }

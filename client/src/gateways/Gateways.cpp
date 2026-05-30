@@ -79,7 +79,7 @@ void MockKeyGateway::upsertDeviceKeys(const QString& accessToken, const DeviceKe
         }
 
         const QString userId = "mock-user";
-        m_bundles.insert(bundleKey(userId, material.deviceId), {
+        m_bundles.insert_or_assign(bundleKey(userId, material.deviceId), PreKeyBundle{
             userId,
             material.registrationId,
             material.deviceId,
@@ -95,7 +95,7 @@ void MockKeyGateway::upsertDeviceKeys(const QString& accessToken, const DeviceKe
     });
 }
 
-void MockKeyGateway::uploadOneTimePreKeys(const QString& accessToken, int deviceId, const QList<OneTimePreKey>& preKeys, GatewayCallback<bool> callback) {
+void MockKeyGateway::uploadOneTimePreKeys(const QString& accessToken, int deviceId, const std::vector<OneTimePreKey>& preKeys, GatewayCallback<bool> callback) {
     later(this, [accessToken, deviceId, preKeys, callback = std::move(callback)]() mutable {
         Q_UNUSED(deviceId)
         Q_UNUSED(preKeys)
@@ -115,8 +115,9 @@ void MockKeyGateway::fetchPreKeyBundle(const QString& accessToken, const QString
         }
 
         const QString key = bundleKey(userId, deviceId);
-        if (m_bundles.contains(key)) {
-            callback(Result<PreKeyBundle>::success(m_bundles.value(key)));
+        const auto bundle = m_bundles.find(key);
+        if (bundle != m_bundles.end()) {
+            callback(Result<PreKeyBundle>::success(bundle->second));
             return;
         }
 

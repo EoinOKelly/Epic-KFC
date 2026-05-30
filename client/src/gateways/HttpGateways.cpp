@@ -325,7 +325,7 @@ void HttpKeyGateway::upsertDeviceKeys(const QString& accessToken, const DeviceKe
     });
 }
 
-void HttpKeyGateway::uploadOneTimePreKeys(const QString& accessToken, int deviceId, const QList<OneTimePreKey>& preKeys, GatewayCallback<bool> callback) {
+void HttpKeyGateway::uploadOneTimePreKeys(const QString& accessToken, int deviceId, const std::vector<OneTimePreKey>& preKeys, GatewayCallback<bool> callback) {
     QJsonArray array;
     for (const auto& preKey : preKeys) {
         array.push_back(QJsonObject{

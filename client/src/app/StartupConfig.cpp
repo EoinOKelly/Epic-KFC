@@ -15,20 +15,20 @@ QString defaultStatePath() {
     return QDir(basePath).filePath(AppText::DefaultStateFile);
 }
 
-QString nextValue(const QStringList& arguments, int index) {
+QString nextValue(const std::vector<QString>& arguments, int index) {
     const int valueIndex = index + 1;
-    if (valueIndex >= arguments.size()) {
+    if (valueIndex >= static_cast<int>(arguments.size())) {
         return {};
     }
     return arguments.at(valueIndex);
 }
 }
 
-Result<StartupConfig> StartupConfigParser::parse(const QStringList& arguments) const {
+Result<StartupConfig> StartupConfigParser::parse(const std::vector<QString>& arguments) const {
     StartupConfig config;
     config.statePath = defaultStatePath();
 
-    for (int index = 1; index < arguments.size(); ++index) {
+    for (int index = 1; index < static_cast<int>(arguments.size()); ++index) {
         const QString argument = arguments.at(index);
         if (argument == AppText::HelpFlag) {
             return Result<StartupConfig>::failure({ErrorCode::InvalidConfiguration, AppText::StartupUsage});

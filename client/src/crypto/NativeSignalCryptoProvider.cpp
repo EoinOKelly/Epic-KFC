@@ -239,17 +239,17 @@ Result<DeviceKeyMaterial> NativeSignalCryptoProvider::loadOrCreateDevice(DeviceK
 #endif
 }
 
-Result<QList<OneTimePreKey>> NativeSignalCryptoProvider::createOneTimePreKeys(int deviceId, int count) {
+Result<std::vector<OneTimePreKey>> NativeSignalCryptoProvider::createOneTimePreKeys(int deviceId, int count) {
 #if !CLIENT_HAS_OPENSSL
     Q_UNUSED(deviceId)
     Q_UNUSED(count)
-    return Result<QList<OneTimePreKey>>::failure({ErrorCode::CryptoError, AppText::NativeCryptoUnavailable});
+    return Result<std::vector<OneTimePreKey>>::failure({ErrorCode::CryptoError, AppText::NativeCryptoUnavailable});
 #else
-    QList<OneTimePreKey> preKeys;
+    std::vector<OneTimePreKey> preKeys;
     for (int index = 0; index < count; ++index) {
         const RawKeyPair keyPair = generateRawKeyPair(EVP_PKEY_X25519);
         if (keyPair.publicKey.size() != CryptoText::KeyBytes || keyPair.privateKey.size() != CryptoText::KeyBytes) {
-            return Result<QList<OneTimePreKey>>::failure({ErrorCode::CryptoError, "OpenSSL one-time pre-key generation failed."});
+            return Result<std::vector<OneTimePreKey>>::failure({ErrorCode::CryptoError, "OpenSSL one-time pre-key generation failed."});
         }
         const QByteArray publicKey = keyPair.publicKey;
         const QByteArray privateKey = keyPair.privateKey;
@@ -261,7 +261,7 @@ Result<QList<OneTimePreKey>> NativeSignalCryptoProvider::createOneTimePreKeys(in
             false
         });
     }
-    return Result<QList<OneTimePreKey>>::success(preKeys);
+    return Result<std::vector<OneTimePreKey>>::success(preKeys);
 #endif
 }
 
@@ -507,7 +507,8 @@ QString NativeSignalCryptoProvider::sessionKey(const QString& userId, int device
 
 int NativeSignalCryptoProvider::nextCounter(const QString& userId, int deviceId) {
     const QString key = sessionKey(userId, deviceId);
-    const int counter = m_sendCounters.value(key, 0);
-    m_sendCounters.insert(key, counter + 1);
+    const auto foundCounter = m_sendCounters.find(key);
+    const int counter = foundCounter == m_sendCounters.end() ? 0 : foundCounter->second;
+    m_sendCounters.insert_or_assign(key, counter + 1);
     return counter;
 }

@@ -17,6 +17,14 @@
 #include <QTextStream>
 
 #include <memory>
+#include <vector>
+
+namespace {
+std::vector<QString> applicationArguments() {
+    const QStringList qtArguments = QCoreApplication::arguments();
+    return {qtArguments.cbegin(), qtArguments.cend()};
+}
+}
 
 int main(int argc, char* argv[]) {
     QCoreApplication app(argc, argv);
@@ -25,7 +33,7 @@ int main(int argc, char* argv[]) {
     registerClientMetaTypes();
 
     StartupConfigParser configParser;
-    const auto parsedConfig = configParser.parse(QCoreApplication::arguments());
+    const auto parsedConfig = configParser.parse(applicationArguments());
     if (parsedConfig.failed()) {
         QTextStream(stderr) << parsedConfig.error().message << '\n';
         return 1;

@@ -41,7 +41,7 @@ ConsolePresenter::ConsolePresenter(EventBus& events, QObject* parent)
         printError({ErrorCode::TrustError, AppText::TrustMismatch});
     });
     connect(&events, &EventBus::conversationListUpdated, this, [this](const ConversationList& conversations) {
-        if (conversations.isEmpty()) {
+        if (conversations.empty()) {
             printMessage(AppText::EmptyConversationList);
             return;
         }
@@ -53,7 +53,7 @@ ConsolePresenter::ConsolePresenter(EventBus& events, QObject* parent)
         printPrompt();
     });
     connect(&events, &EventBus::messageListUpdated, this, [this](const MessageList& messages) {
-        if (messages.isEmpty()) {
+        if (messages.empty()) {
             printMessage(AppText::EmptyMessageList);
             return;
         }
