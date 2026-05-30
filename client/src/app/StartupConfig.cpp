@@ -26,7 +26,12 @@ QString nextValue(const std::vector<QString>& arguments, int index) {
 
 Result<StartupConfig> StartupConfigParser::parse(const std::vector<QString>& arguments) const {
     StartupConfig config;
+    config.mode = ClientMode::Real;
+    config.apiUrl = AppText::DefaultApiUrl;
     config.statePath = defaultStatePath();
+    bool debugMode = false;
+    bool realModeProvided = false;
+    bool apiUrlProvided = false;
 
     for (int index = 1; index < static_cast<int>(arguments.size()); ++index) {
         const QString argument = arguments.at(index);
@@ -34,12 +39,30 @@ Result<StartupConfig> StartupConfigParser::parse(const std::vector<QString>& arg
             return Result<StartupConfig>::failure({ErrorCode::InvalidConfiguration, AppText::StartupUsage});
         }
 
+        if (argument == AppText::DebugFlag) {
+            if (realModeProvided) {
+                return Result<StartupConfig>::failure({ErrorCode::InvalidConfiguration, AppText::DebugRealModeConflict});
+            }
+            debugMode = true;
+            config.mode = ClientMode::Mock;
+            config.apiUrl.clear();
+            continue;
+        }
+
         if (argument == AppText::ModeFlag) {
             const QString mode = nextValue(arguments, index).toLower();
             if (mode == AppText::MockMode) {
                 config.mode = ClientMode::Mock;
+                config.apiUrl.clear();
             } else if (mode == AppText::RealMode) {
+                if (debugMode) {
+                    return Result<StartupConfig>::failure({ErrorCode::InvalidConfiguration, AppText::DebugRealModeConflict});
+                }
+                realModeProvided = true;
                 config.mode = ClientMode::Real;
+                if (!apiUrlProvided) {
+                    config.apiUrl = AppText::DefaultApiUrl;
+                }
             } else {
                 return Result<StartupConfig>::failure({ErrorCode::InvalidConfiguration, AppText::InvalidMode});
             }
@@ -48,7 +71,11 @@ Result<StartupConfig> StartupConfigParser::parse(const std::vector<QString>& arg
         }
 
         if (argument == AppText::ApiUrlFlag) {
+            if (debugMode) {
+                return Result<StartupConfig>::failure({ErrorCode::InvalidConfiguration, AppText::DebugApiUrlConflict});
+            }
             config.apiUrl = nextValue(arguments, index);
+            apiUrlProvided = true;
             ++index;
             continue;
         }
@@ -74,6 +101,10 @@ Result<StartupConfig> StartupConfigParser::parse(const std::vector<QString>& arg
             ErrorCode::InvalidConfiguration,
             QString(CommandText::UnknownCommand).arg(argument, AppText::StartupUsage)
         });
+    }
+
+    if (debugMode && apiUrlProvided) {
+        return Result<StartupConfig>::failure({ErrorCode::InvalidConfiguration, AppText::DebugApiUrlConflict});
     }
 
     if (config.mode == ClientMode::Real) {
