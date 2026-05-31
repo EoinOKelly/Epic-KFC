@@ -39,6 +39,22 @@ Required dependencies:
 - Qt 6 or Qt 5 with Core and Network
 - OpenSSL 3 development libraries for real native crypto
 
+MSVC real mode needs an MSVC-compatible OpenSSL install. The OpenSSL binaries
+bundled under `C:\Qt\Tools\mingw*_64\opt` are MinGW libraries and cannot be
+linked into the Visual Studio build.
+
+Visual Studio with vcpkg OpenSSL example:
+
+```powershell
+vcpkg install openssl:x64-windows
+cmake -S client -B client\out\build\debug -DCMAKE_PREFIX_PATH=C:\Qt\6.9.1\msvc2022_64 -DCMAKE_TOOLCHAIN_FILE=C:\path\to\vcpkg\scripts\buildsystems\vcpkg.cmake -DCLIENT_BUILD_TESTS=ON
+cmake --build client\out\build\debug --parallel 4
+```
+
+Production builds require OpenSSL by default. A mock-only build can be configured
+with `-DCLIENT_REQUIRE_OPENSSL=OFF`, but real mode will refuse to start without
+native crypto.
+
 Windows with Qt MinGW example:
 
 ```powershell
@@ -112,9 +128,9 @@ All actions start with `/`.
 `/register`, `/login`, `/msg`, and `/send` enter prompt modes. Message composition
 accepts slash-prefixed body text until `/send` submits or `/cancel` aborts.
 
-Mock mode resolves usernames locally. Real mode accepts UUIDs today and is wired for
-`GET /api/v1/users/by-username/{username}` once the backend exposes username lookup
-with active device metadata.
+Mock mode resolves usernames locally. Real mode resolves usernames through the
+production `GET /api/v1/users/by-username/{username}` endpoint and then uses the
+returned user/device metadata for trust and message commands.
 
 ## Security Notes
 

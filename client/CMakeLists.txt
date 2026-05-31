@@ -10,21 +10,52 @@ find_package(Qt${QT_VERSION_MAJOR}
         Network
 )
 
-if(MSVC AND OPENSSL_ROOT_DIR MATCHES "mingw")
-    unset(OPENSSL_ROOT_DIR CACHE)
-    unset(OPENSSL_INCLUDE_DIR CACHE)
-    unset(LIB_EAY_DEBUG CACHE)
-    unset(LIB_EAY_RELEASE CACHE)
-    unset(SSL_EAY_DEBUG CACHE)
-    unset(SSL_EAY_RELEASE CACHE)
+option(CLIENT_REQUIRE_OPENSSL "Require OpenSSL-backed native crypto for real mode" ON)
+
+set(CLIENT_OPENSSL_CACHE_VARIABLES
+    OPENSSL_ROOT_DIR
+    OPENSSL_INCLUDE_DIR
+    OPENSSL_CRYPTO_LIBRARY
+    OPENSSL_SSL_LIBRARY
+    LIB_EAY_DEBUG
+    LIB_EAY_RELEASE
+    LIB_EAY_LIBRARY_DEBUG
+    LIB_EAY_LIBRARY_RELEASE
+    SSL_EAY_DEBUG
+    SSL_EAY_RELEASE
+    SSL_EAY_LIBRARY_DEBUG
+    SSL_EAY_LIBRARY_RELEASE
+)
+
+set(CLIENT_OPENSSL_CACHE_USES_MINGW FALSE)
+foreach(CLIENT_OPENSSL_CACHE_VARIABLE ${CLIENT_OPENSSL_CACHE_VARIABLES})
+    if(DEFINED ${CLIENT_OPENSSL_CACHE_VARIABLE}
+        AND "${${CLIENT_OPENSSL_CACHE_VARIABLE}}" MATCHES "[Mm][Ii][Nn][Gg][Ww]")
+        set(CLIENT_OPENSSL_CACHE_USES_MINGW TRUE)
+    endif()
+endforeach()
+
+if(MSVC AND CLIENT_OPENSSL_CACHE_USES_MINGW)
+    foreach(CLIENT_OPENSSL_CACHE_VARIABLE ${CLIENT_OPENSSL_CACHE_VARIABLES})
+        unset(${CLIENT_OPENSSL_CACHE_VARIABLE} CACHE)
+    endforeach()
 endif()
 
-find_package(OpenSSL QUIET)
+find_package(OpenSSL QUIET COMPONENTS Crypto)
 
 if(NOT OpenSSL_FOUND AND MINGW AND EXISTS "C:/Qt/Tools/mingw1310_64/opt")
     set(OPENSSL_ROOT_DIR "C:/Qt/Tools/mingw1310_64/opt" CACHE PATH "OpenSSL root directory")
-    find_package(OpenSSL QUIET)
+    find_package(OpenSSL QUIET COMPONENTS Crypto)
 endif()
+
+if(CLIENT_REQUIRE_OPENSSL AND NOT OpenSSL_FOUND)
+    message(FATAL_ERROR
+        "OpenSSL Crypto was not found. Real mode requires OpenSSL-backed native crypto. "
+        "Install OpenSSL 3 development libraries built for the active compiler, then rerun CMake. "
+        "For a mock-only build, configure with -DCLIENT_REQUIRE_OPENSSL=OFF."
+    )
+endif()
+
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 
