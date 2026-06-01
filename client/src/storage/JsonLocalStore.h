@@ -15,6 +15,7 @@ public:
     void setSecretProtectionRequired(bool required);
     void setSecretPassphrase(QString passphrase);
     void clearSecretPassphrase();
+    void useAccountScopedPath(const QString& accountId);
     Result<bool> reload();
 
     Result<bool> saveSession(const AuthSession& session);

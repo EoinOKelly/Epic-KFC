@@ -97,6 +97,11 @@ Optional:
 --mode mock|real
 ```
 
+In real mode, the default local state is split by authenticated user so switching
+accounts on the same machine does not try to decrypt another account's device
+keys. Supplying `--state-path` opts into one explicit state file, which should be
+unique per account unless the same local password is reused intentionally.
+
 ## Slash Commands
 
 All actions start with `/`.

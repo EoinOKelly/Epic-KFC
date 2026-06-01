@@ -86,7 +86,8 @@ int main(int argc, char* argv[]) {
         messageGateway = mockMessageGateway.get();
     }
 
-    SessionService sessionService(events, *authGateway, store);
+    const bool accountScopedState = config.mode == ClientMode::Real && !config.statePathExplicit;
+    SessionService sessionService(events, *authGateway, store, accountScopedState);
     if (httpClient) {
         httpClient->setTokenUpdateHandler([&sessionService](const TokenSet& tokens) {
             sessionService.updateTokens(tokens);

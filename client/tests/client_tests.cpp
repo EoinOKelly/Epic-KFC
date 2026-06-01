@@ -172,7 +172,9 @@ void testEncryptedLocalStore() {
 #if CLIENT_HAS_OPENSSL
     const QString stateFileName = "client-test-state.json";
     const QString path = QDir::current().filePath(stateFileName);
+    const QString accountPath = QDir::current().filePath("user_2-client-state.json");
     QFile::remove(path);
+    QFile::remove(accountPath);
     const QString passphrase = "local-test-passphrase";
     JsonLocalStore store(path, true);
     store.setSecretPassphrase(passphrase);
@@ -237,7 +239,20 @@ void testEncryptedLocalStore() {
         && loadedTrustPin.value().has_value()
         && loadedTrustPin.value()->identityKey == "trusted-identity-secret";
     expect(loaded, "encrypted store reloads secrets with passphrase");
+
+    JsonLocalStore accountScoped(path, true);
+    accountScoped.setSecretPassphrase("different-account-passphrase");
+    accountScoped.useAccountScopedPath("user/2");
+    const AuthSession accountSession{
+        {"user/2", "bob", "bob@example.test"},
+        {"account-token", "account-refresh", "bearer", 3600}
+    };
+    const auto savedAccountSession = accountScoped.saveSession(accountSession);
+    const auto accountStateIsSeparate = QFile::exists(accountPath);
+    expect(savedAccountSession.succeeded() && accountStateIsSeparate, "encrypted store scopes default state by account");
+
     QFile::remove(path);
+    QFile::remove(accountPath);
 #else
     expect(true, "encrypted store test skipped without OpenSSL");
 #endif

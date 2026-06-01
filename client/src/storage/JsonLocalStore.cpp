@@ -36,6 +36,22 @@ const QString SecretIvKey = "iv";
 const QString SecretAuthTagKey = "authTag";
 const QString SecretCiphertextKey = "ciphertext";
 const QString SecretKdfName = "PBKDF2-HMAC-SHA256";
+const QString AccountStateFallbackName = "account";
+
+QString safeStateName(const QString& value) {
+    QString safeName;
+    for (const QChar character : value) {
+        const bool allowedCharacter = character.isLetterOrNumber()
+            || character == '-'
+            || character == '_';
+        safeName.append(allowedCharacter ? character : '_');
+    }
+
+    if (safeName.isEmpty()) {
+        return AccountStateFallbackName;
+    }
+    return safeName;
+}
 
 QJsonObject userToJson(const UserProfile& user) {
     return {
@@ -376,6 +392,12 @@ void JsonLocalStore::setSecretPassphrase(QString passphrase) {
 
 void JsonLocalStore::clearSecretPassphrase() {
     m_secretPassphrase.clear();
+}
+
+void JsonLocalStore::useAccountScopedPath(const QString& accountId) {
+    const QFileInfo currentPath(m_path);
+    const QString fileName = QString("%1-%2").arg(safeStateName(accountId), AppText::DefaultStateFile);
+    m_path = currentPath.absoluteDir().filePath(fileName);
 }
 
 Result<bool> JsonLocalStore::reload() {

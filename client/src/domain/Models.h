@@ -67,6 +67,7 @@ struct StartupConfig {
     QString apiUrl;
     int deviceId{DefaultDeviceId};
     QString statePath;
+    bool statePathExplicit{false};
 };
 
 struct SlashCommand {

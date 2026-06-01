@@ -93,6 +93,7 @@ Result<StartupConfig> StartupConfigParser::parse(const std::vector<QString>& arg
 
         if (argument == AppText::StatePathFlag) {
             config.statePath = nextValue(arguments, index);
+            config.statePathExplicit = true;
             ++index;
             continue;
         }

@@ -11,7 +11,7 @@ class SessionService : public QObject {
     Q_OBJECT
 
 public:
-    SessionService(EventBus& events, IAuthGateway& authGateway, JsonLocalStore& store, QObject* parent = nullptr);
+    SessionService(EventBus& events, IAuthGateway& authGateway, JsonLocalStore& store, bool accountScopedState = false, QObject* parent = nullptr);
 
     void registerUser(const QString& username, const QString& email, const QString& password);
     void login(const QString& usernameOrEmail, const QString& password);
@@ -26,6 +26,7 @@ private:
     EventBus& m_events;
     IAuthGateway& m_authGateway;
     JsonLocalStore& m_store;
+    bool m_accountScopedState{false};
     std::optional<AuthSession> m_session;
 };
 

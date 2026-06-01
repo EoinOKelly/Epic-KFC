@@ -7,11 +7,12 @@
 
 #include <algorithm>
 
-SessionService::SessionService(EventBus& events, IAuthGateway& authGateway, JsonLocalStore& store, QObject* parent)
+SessionService::SessionService(EventBus& events, IAuthGateway& authGateway, JsonLocalStore& store, bool accountScopedState, QObject* parent)
     : QObject(parent)
     , m_events(events)
     , m_authGateway(authGateway)
-    , m_store(store) {
+    , m_store(store)
+    , m_accountScopedState(accountScopedState) {
     const auto loaded = m_store.loadSession();
     if (loaded.succeeded() && loaded.value().has_value()) {
         m_session = *loaded.value();
@@ -35,6 +36,9 @@ void SessionService::login(const QString& usernameOrEmail, const QString& passwo
             return;
         }
         m_store.setSecretPassphrase(password);
+        if (m_accountScopedState) {
+            m_store.useAccountScopedPath(result.value().user.id);
+        }
         const auto loadedLocalState = m_store.reload();
         if (loadedLocalState.failed()) {
             emit m_events.commandFailed(loadedLocalState.error());
