@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QStringList>
 #include <QUuid>
 
 #include <algorithm>
@@ -69,6 +70,40 @@ bool isAlreadyUploadedPreKeyError(const ClientError& error) {
     const bool mentionsExisting = error.message.contains("already", Qt::CaseInsensitive)
         || error.message.contains("exists", Qt::CaseInsensitive);
     return isHttpError && isConflict && mentionsPreKey && mentionsExisting;
+}
+
+QString validationLocation(const QJsonArray& location) {
+    QStringList parts;
+    for (const auto& part : location) {
+        if (part.isString()) {
+            parts.push_back(part.toString());
+        } else if (part.isDouble()) {
+            parts.push_back(QString::number(part.toInt()));
+        }
+    }
+    return parts.join('.');
+}
+
+QString validationDetailMessage(const QJsonValue& detail) {
+    if (detail.isString()) {
+        return detail.toString();
+    }
+    if (!detail.isArray()) {
+        return {};
+    }
+
+    QStringList messages;
+    for (const auto& item : detail.toArray()) {
+        const QJsonObject object = item.toObject();
+        const QString location = validationLocation(object.value("loc").toArray());
+        const QString message = object.value("msg").toString();
+        if (!location.isEmpty() && !message.isEmpty()) {
+            messages.push_back(QString("%1: %2").arg(location, message));
+        } else if (!message.isEmpty()) {
+            messages.push_back(message);
+        }
+    }
+    return messages.join("; ");
 }
 }
 
@@ -220,7 +255,10 @@ ClientError HttpClient::errorForReply(QNetworkReply& reply, const QByteArray& re
     QString message = reply.errorString();
     const QJsonObject errorObject = QJsonDocument::fromJson(responseBody).object();
     if (errorObject.contains("detail")) {
-        message = errorObject.value("detail").toString(message);
+        const QString detail = validationDetailMessage(errorObject.value("detail"));
+        if (!detail.isEmpty()) {
+            message = detail;
+        }
     }
     if (reply.error() == QNetworkReply::SslHandshakeFailedError) {
         return {ErrorCode::TlsError, message};

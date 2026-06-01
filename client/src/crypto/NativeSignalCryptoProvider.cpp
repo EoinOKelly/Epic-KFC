@@ -31,6 +31,29 @@ bool isValidBase64(const QString& value) {
     return !value.isEmpty() && !QByteArray::fromBase64(value.toLatin1()).isEmpty();
 }
 
+QString wrapWirePayload(const QJsonObject& payload, int counter, int registrationId) {
+    const QByteArray rawPayload = QJsonDocument(payload).toJson(QJsonDocument::Compact);
+    QJsonObject envelope{
+        {CryptoText::WireFormat, CryptoText::WireFormatValue},
+        {CryptoText::WireType, counter == 0 ? CryptoText::WirePreKeyWhisperMessageType : CryptoText::WireWhisperMessageType},
+        {CryptoText::WireBodyB64, QString::fromLatin1(rawPayload.toBase64())}
+    };
+    if (counter == 0) {
+        envelope.insert(CryptoText::WireRegistrationId, registrationId);
+    }
+    return QString::fromUtf8(QJsonDocument(envelope).toJson(QJsonDocument::Compact));
+}
+
+QJsonObject unwrapWirePayload(const QString& wirePayloadJson) {
+    const QJsonObject payload = QJsonDocument::fromJson(wirePayloadJson.toUtf8()).object();
+    if (payload.value(CryptoText::WireFormat).toString() != CryptoText::WireFormatValue) {
+        return payload;
+    }
+
+    const QByteArray body = QByteArray::fromBase64(payload.value(CryptoText::WireBodyB64).toString().toLatin1());
+    return QJsonDocument::fromJson(body).object();
+}
+
 #if CLIENT_HAS_OPENSSL
 struct AeadResult {
     QByteArray ciphertext;
@@ -350,7 +373,7 @@ Result<EncryptedPayload> NativeSignalCryptoProvider::encrypt(
     }
 
     return Result<EncryptedPayload>::success({
-        QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)),
+        wrapWirePayload(root, counter, recipientBundle.registrationId),
         recipientBundle.oneTimePreKeyId
     });
 #endif
@@ -368,7 +391,7 @@ Result<QString> NativeSignalCryptoProvider::decrypt(
     Q_UNUSED(oneTimePreKey)
     return Result<QString>::failure({ErrorCode::CryptoError, AppText::NativeCryptoUnavailable});
 #else
-    const QJsonObject root = QJsonDocument::fromJson(message.wirePayloadJson.toUtf8()).object();
+    const QJsonObject root = unwrapWirePayload(message.wirePayloadJson);
     const int counter = root.value(CryptoText::WireCounter).toInt();
     const int previousCounter = root.value(CryptoText::WirePreviousCounter).toInt();
     const QByteArray ratchetPublicKey = fromBase64(root.value(CryptoText::WireRatchetPublicKey).toString());

@@ -5,6 +5,31 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+namespace {
+QString wrapWirePayload(const QJsonObject& payload, int counter, int registrationId) {
+    const QByteArray rawPayload = QJsonDocument(payload).toJson(QJsonDocument::Compact);
+    QJsonObject envelope{
+        {CryptoText::WireFormat, CryptoText::WireFormatValue},
+        {CryptoText::WireType, counter == 0 ? CryptoText::WirePreKeyWhisperMessageType : CryptoText::WireWhisperMessageType},
+        {CryptoText::WireBodyB64, QString::fromLatin1(rawPayload.toBase64())}
+    };
+    if (counter == 0) {
+        envelope.insert(CryptoText::WireRegistrationId, registrationId);
+    }
+    return QString::fromUtf8(QJsonDocument(envelope).toJson(QJsonDocument::Compact));
+}
+
+QJsonObject unwrapWirePayload(const QString& wirePayloadJson) {
+    const QJsonObject payload = QJsonDocument::fromJson(wirePayloadJson.toUtf8()).object();
+    if (payload.value(CryptoText::WireFormat).toString() != CryptoText::WireFormatValue) {
+        return payload;
+    }
+
+    const QByteArray body = QByteArray::fromBase64(payload.value(CryptoText::WireBodyB64).toString().toLatin1());
+    return QJsonDocument::fromJson(body).object();
+}
+}
+
 Result<DeviceKeyMaterial> MockCryptoProvider::loadOrCreateDevice(DeviceKeyMaterial existing, int deviceId) {
     if (!existing.identityKey.isEmpty()) {
         return Result<DeviceKeyMaterial>::success(existing);
@@ -80,7 +105,7 @@ Result<EncryptedPayload> MockCryptoProvider::encrypt(
     }
 
     return Result<EncryptedPayload>::success({
-        QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)),
+        wrapWirePayload(root, counter, recipientBundle.registrationId),
         recipientBundle.oneTimePreKeyId
     });
 }
@@ -94,7 +119,7 @@ Result<QString> MockCryptoProvider::decrypt(
     Q_UNUSED(currentDevice)
     Q_UNUSED(oneTimePreKey)
 
-    const QJsonObject root = QJsonDocument::fromJson(message.wirePayloadJson.toUtf8()).object();
+    const QJsonObject root = unwrapWirePayload(message.wirePayloadJson);
     const QString encodedCiphertext = root.value(CryptoText::WireCiphertext).toString();
     const QByteArray plaintext = QByteArray::fromBase64(encodedCiphertext.toLatin1());
     if (plaintext.isEmpty() && !encodedCiphertext.isEmpty()) {

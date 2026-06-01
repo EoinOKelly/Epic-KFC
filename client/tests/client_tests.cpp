@@ -26,6 +26,18 @@ void expect(bool condition, const char* name) {
     ++failures;
 }
 
+QJsonObject wireBodyFromEnvelope(const QString& wirePayloadJson) {
+    const QJsonObject envelope = QJsonDocument::fromJson(wirePayloadJson.toUtf8()).object();
+    const QByteArray body = QByteArray::fromBase64(envelope.value(CryptoText::WireBodyB64).toString().toLatin1());
+    return QJsonDocument::fromJson(body).object();
+}
+
+QString envelopeWithBody(const QString& wirePayloadJson, const QJsonObject& body) {
+    QJsonObject envelope = QJsonDocument::fromJson(wirePayloadJson.toUtf8()).object();
+    envelope.insert(CryptoText::WireBodyB64, QString::fromLatin1(QJsonDocument(body).toJson(QJsonDocument::Compact).toBase64()));
+    return QString::fromUtf8(QJsonDocument(envelope).toJson(QJsonDocument::Compact));
+}
+
 void testParser() {
     SlashCommandParser parser;
     const auto login = parser.parse("/LOGIN alice@example.com");
@@ -97,9 +109,14 @@ void testCryptoWireShape() {
     const auto encrypted = crypto.encrypt("alice", alice.value(), bundle, "hello");
     expect(encrypted.succeeded(), "crypto encrypts message");
 
-    const QJsonObject wire = QJsonDocument::fromJson(encrypted.value().wirePayloadJson.toUtf8()).object();
-    expect(wire.contains("counter") && wire.contains("previousCounter") && wire.contains("ciphertext")
-        && wire.contains("iv") && wire.contains("authTag"), "crypto emits required wire json fields");
+    const QJsonObject envelope = QJsonDocument::fromJson(encrypted.value().wirePayloadJson.toUtf8()).object();
+    const QJsonObject wire = wireBodyFromEnvelope(encrypted.value().wirePayloadJson);
+    const bool hasEnvelope = envelope.value(CryptoText::WireFormat).toString() == CryptoText::WireFormatValue
+        && envelope.value(CryptoText::WireType).toInt() == CryptoText::WirePreKeyWhisperMessageType
+        && !envelope.value(CryptoText::WireBodyB64).toString().isEmpty();
+    const bool hasBody = wire.contains("counter") && wire.contains("previousCounter") && wire.contains("ciphertext")
+        && wire.contains("iv") && wire.contains("authTag");
+    expect(hasEnvelope && hasBody, "crypto emits required wire json fields");
 
     LocalMessage received{
         "message-1",
@@ -121,7 +138,7 @@ void testCryptoWireShape() {
 
     QJsonObject tampered = wire;
     tampered.insert("authTag", QString::fromLatin1(QByteArray("tampered-auth-tag").toBase64()));
-    received.wirePayloadJson = QString::fromUtf8(QJsonDocument(tampered).toJson(QJsonDocument::Compact));
+    received.wirePayloadJson = envelopeWithBody(encrypted.value().wirePayloadJson, tampered);
     const auto rejected = crypto.decrypt("bob", bob.value(), received, std::nullopt);
     expect(rejected.failed(), "crypto rejects tampered AES-GCM payload");
 #else
