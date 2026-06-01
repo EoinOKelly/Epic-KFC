@@ -13,6 +13,8 @@
 #include <utility>
 
 namespace {
+constexpr int ConflictStatusCode = 409;
+
 QString withoutTrailingSlash(QString value) {
     while (value.endsWith('/')) {
         value.chop(1);
@@ -39,14 +41,6 @@ QString messagePath(const QString& suffix) {
     return QString("/messages%1").arg(suffix);
 }
 
-QString userPath(const QString& suffix) {
-    return QString("/users%1").arg(suffix);
-}
-
-QString encodedPathSegment(const QString& value) {
-    return QString::fromLatin1(QUrl::toPercentEncoding(value));
-}
-
 void addOptionalString(QJsonObject& object, const QString& key, const QString& value) {
     if (value.isEmpty()) {
         object.insert(key, QJsonValue::Null);
@@ -57,6 +51,16 @@ void addOptionalString(QJsonObject& object, const QString& key, const QString& v
 
 bool isRefreshPath(const QString& path) {
     return normalizedPath(path) == authPath("/refresh");
+}
+
+bool isAlreadyUploadedPreKeyError(const ClientError& error) {
+    const bool isHttpError = error.code == ErrorCode::HttpError;
+    const bool isConflict = error.message.contains(QString::number(ConflictStatusCode));
+    const bool mentionsPreKey = error.message.contains("prekey", Qt::CaseInsensitive)
+        || error.message.contains("pre-key", Qt::CaseInsensitive);
+    const bool mentionsExisting = error.message.contains("already", Qt::CaseInsensitive)
+        || error.message.contains("exists", Qt::CaseInsensitive);
+    return isHttpError && isConflict && mentionsPreKey && mentionsExisting;
 }
 }
 
@@ -338,6 +342,10 @@ void HttpKeyGateway::uploadOneTimePreKeys(const QString& accessToken, int device
     const QString path = keyPath(QString("/devices/%1/one-time-prekeys").arg(deviceId));
     m_client.post(path, accessToken, {{"prekeys", array}}, [callback = std::move(callback)](Result<QJsonDocument> result) mutable {
         if (result.failed()) {
+            if (isAlreadyUploadedPreKeyError(result.error())) {
+                callback(Result<bool>::success(true));
+                return;
+            }
             callback(Result<bool>::failure(result.error()));
             return;
         }
@@ -390,39 +398,8 @@ void HttpUserDirectoryGateway::resolveUsername(const QString& accessToken, const
         return;
     }
 
-    const QString path = userPath(QString("/by-username/%1").arg(encodedPathSegment(trimmedUsername)));
-    m_client.get(path, accessToken, [this, trimmedUsername, defaultDeviceId, callback = std::move(callback)](Result<QJsonDocument> result) mutable {
-        if (result.failed()) {
-            callback(Result<UserAddress>::failure({result.error().code, AppText::UsernameResolveUnavailable}));
-            return;
-        }
-        UserAddress address = userAddressFromJson(result.value().object(), defaultDeviceId);
-        if (address.userId.isEmpty()) {
-            callback(Result<UserAddress>::failure({ErrorCode::NotFound, QString("No user found for username %1.").arg(trimmedUsername)}));
-            return;
-        }
-        callback(Result<UserAddress>::success(address));
-    });
-}
-
-UserAddress HttpUserDirectoryGateway::userAddressFromJson(const QJsonObject& object, int defaultDeviceId) const {
-    int deviceId = object.value("default_device_id").toInt(defaultDeviceId);
-    const QJsonArray devices = object.value("devices").toArray();
-    if (!devices.isEmpty()) {
-        const auto activeDevice = std::find_if(devices.cbegin(), devices.cend(), [](const QJsonValue& value) {
-            return value.toObject().value("is_active").toBool(true);
-        });
-        const QJsonObject device = activeDevice == devices.cend()
-            ? devices.first().toObject()
-            : (*activeDevice).toObject();
-        deviceId = device.value("device_id").toInt(deviceId);
-    }
-
-    return {
-        object.value("id").toString(object.value("user_id").toString()),
-        object.value("username").toString(),
-        deviceId
-    };
+    callback(Result<UserAddress>::failure({ErrorCode::InvalidCommand, AppText::UsernameResolveUnavailable}));
+    return;
 }
 
 HttpMessageGateway::HttpMessageGateway(HttpClient& client, QObject* parent)

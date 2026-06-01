@@ -79,8 +79,6 @@ public:
     void resolveUsername(const QString& accessToken, const QString& username, int defaultDeviceId, GatewayCallback<UserAddress> callback) override;
 
 private:
-    UserAddress userAddressFromJson(const QJsonObject& object, int defaultDeviceId) const;
-
     HttpClient& m_client;
 };
 
