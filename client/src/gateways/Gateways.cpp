@@ -7,6 +7,7 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <string>
 
 namespace {
 constexpr int MockLatencyMs = 10;
@@ -15,8 +16,8 @@ QString mockTokenFor(const QString& username) {
     return QString("mock-token-%1").arg(username);
 }
 
-QString bundleKey(const QString& userId, int deviceId) {
-    return QString("%1:%2").arg(userId).arg(deviceId);
+std::string bundleKey(const QString& userId, int deviceId) {
+    return QString("%1:%2").arg(userId).arg(deviceId).toStdString();
 }
 
 void later(QObject* parent, std::function<void()> work) {
@@ -114,7 +115,7 @@ void MockKeyGateway::fetchPreKeyBundle(const QString& accessToken, const QString
             return;
         }
 
-        const QString key = bundleKey(userId, deviceId);
+        const std::string key = bundleKey(userId, deviceId);
         const auto bundle = m_bundles.find(key);
         if (bundle != m_bundles.end()) {
             callback(Result<PreKeyBundle>::success(bundle->second));

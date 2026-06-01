@@ -194,7 +194,7 @@ bool CommandRouter::commandHasArgumentCount(const SlashCommand& command, int min
 
     emit m_events.commandFailed({
         ErrorCode::InvalidCommand,
-        QString(CommandText::ArgumentCount).arg(command.name, expected)
+        QString(CommandText::ArgumentCount).arg(QString::fromStdString(command.name), expected)
     });
     return false;
 }

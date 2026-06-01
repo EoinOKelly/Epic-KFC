@@ -2,7 +2,8 @@
 
 #include "gateways/Gateways.h"
 
-#include <map>
+#include <string>
+#include <unordered_map>
 
 class MockCryptoProvider : public ICryptoProvider {
 public:
@@ -15,7 +16,8 @@ public:
 private:
     QString encodedMockBytes(const QString& label) const;
     QString toBase64(const QByteArray& value) const;
+    std::string sessionKey(const QString& userId, int deviceId) const;
     int nextCounter(const QString& userId, int deviceId);
 
-    std::map<QString, int> m_sendCounters;
+    std::unordered_map<std::string, int> m_sendCounters;
 };

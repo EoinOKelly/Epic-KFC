@@ -6,7 +6,8 @@
 #include <QObject>
 
 #include <functional>
-#include <map>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 template <typename T>
@@ -80,7 +81,7 @@ public:
     void fetchPreKeyBundle(const QString& accessToken, const QString& userId, int deviceId, GatewayCallback<PreKeyBundle> callback) override;
 
 private:
-    std::map<QString, PreKeyBundle> m_bundles;
+    std::unordered_map<std::string, PreKeyBundle> m_bundles;
 };
 
 class MockUserDirectoryGateway : public QObject, public IUserDirectoryGateway {

@@ -4,7 +4,8 @@
 
 #include <QByteArray>
 
-#include <map>
+#include <string>
+#include <unordered_map>
 
 class NativeSignalCryptoProvider : public ICryptoProvider {
 public:
@@ -27,8 +28,8 @@ private:
     QByteArray firstRatchetMessageKey(const QByteArray& rootKey, const QByteArray& localRatchetPrivateKey, const QByteArray& remoteRatchetPublicKey) const;
     QByteArray cryptWithKeystream(const QByteArray& input, const QByteArray& key, const QByteArray& iv) const;
     QByteArray aadFor(int counter, int previousCounter, const QByteArray& ratchetPublicKey) const;
-    QString sessionKey(const QString& userId, int deviceId) const;
+    std::string sessionKey(const QString& userId, int deviceId) const;
     int nextCounter(const QString& userId, int deviceId);
 
-    std::map<QString, int> m_sendCounters;
+    std::unordered_map<std::string, int> m_sendCounters;
 };

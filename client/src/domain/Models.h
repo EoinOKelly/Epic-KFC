@@ -5,6 +5,7 @@
 #include <QString>
 
 #include <optional>
+#include <string>
 #include <vector>
 
 enum class ErrorCode {
@@ -72,7 +73,7 @@ struct StartupConfig {
 
 struct SlashCommand {
     CommandType type{CommandType::Help};
-    QString name;
+    std::string name;
     std::vector<QString> arguments;
     QString originalLine;
 };

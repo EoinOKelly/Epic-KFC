@@ -51,7 +51,7 @@ Result<SlashCommand> SlashCommandParser::parse(const QString& input) const {
         arguments = tokenized.value();
     }
 
-    return Result<SlashCommand>::success({*commandType, commandName, arguments, input});
+    return Result<SlashCommand>::success({*commandType, commandName.toStdString(), arguments, input});
 }
 
 Result<std::vector<QString>> SlashCommandParser::tokenizeArguments(const QString& text) const {

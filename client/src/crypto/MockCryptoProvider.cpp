@@ -142,8 +142,12 @@ QString MockCryptoProvider::toBase64(const QByteArray& value) const {
     return QString::fromLatin1(value.toBase64());
 }
 
+std::string MockCryptoProvider::sessionKey(const QString& userId, int deviceId) const {
+    return QString("%1:%2").arg(userId).arg(deviceId).toStdString();
+}
+
 int MockCryptoProvider::nextCounter(const QString& userId, int deviceId) {
-    const QString key = QString("%1:%2").arg(userId).arg(deviceId);
+    const std::string key = sessionKey(userId, deviceId);
     const auto foundCounter = m_sendCounters.find(key);
     const int counter = foundCounter == m_sendCounters.end() ? 0 : foundCounter->second;
     m_sendCounters.insert_or_assign(key, counter + 1);

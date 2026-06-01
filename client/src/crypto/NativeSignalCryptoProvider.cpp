@@ -524,12 +524,12 @@ QByteArray NativeSignalCryptoProvider::aadFor(int counter, int previousCounter, 
     return intToBigEndian(counter) + intToBigEndian(previousCounter) + ratchetPublicKey;
 }
 
-QString NativeSignalCryptoProvider::sessionKey(const QString& userId, int deviceId) const {
-    return QString("%1:%2").arg(userId).arg(deviceId);
+std::string NativeSignalCryptoProvider::sessionKey(const QString& userId, int deviceId) const {
+    return QString("%1:%2").arg(userId).arg(deviceId).toStdString();
 }
 
 int NativeSignalCryptoProvider::nextCounter(const QString& userId, int deviceId) {
-    const QString key = sessionKey(userId, deviceId);
+    const std::string key = sessionKey(userId, deviceId);
     const auto foundCounter = m_sendCounters.find(key);
     const int counter = foundCounter == m_sendCounters.end() ? 0 : foundCounter->second;
     m_sendCounters.insert_or_assign(key, counter + 1);
