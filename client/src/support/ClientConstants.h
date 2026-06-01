@@ -62,8 +62,13 @@ inline const QString TrustFirstUse = "Pinned first-use identity.";
 inline const QString TrustAlreadyMatches = "Identity is already trusted.";
 inline const QString TrustMismatch = "Trust mismatch. Sending is blocked.";
 inline const QString EmptyConversationList = "No cached conversations found.";
+inline const QString EmptyUnreadInbox = "No unread messages.";
 inline const QString EmptyMessageList = "No messages found.";
 inline const QString ConversationHeader = "Conversations:";
+inline const QString UnreadInboxHeader = "Unread inbox:";
+inline const QString ConversationLogHeader = "Conversation with %1 (%2), page %3/%4:";
+inline const QString ConversationLogLine = "  [%1] %2 %3: %4";
+inline const QString ConversationLogDecryptFailed = "  [%1] %2 %3: <could not decrypt: %4>";
 inline const QString MessageHeader = "Messages:";
 inline const QString ErrorPrefix = "Error [";
 inline const QString ErrorSeparator = "]: ";
@@ -80,7 +85,7 @@ inline const QString Help =
     "  /sent\n"
     "  /msg <username>\n"
     "  /send <username>\n"
-    "  /read <messageId>\n"
+    "  /read <username> [page]\n"
     "  /forward <messageId> <username>\n"
     "  /revoke <messageId>\n"
     "  /delete <messageId>\n"
@@ -109,6 +114,7 @@ inline const QString ArgumentCount = "/%1 expects %2.";
 inline const QString AtLeast = "at least %1 argument(s)";
 inline const QString Exactly = "%1 argument(s)";
 inline const QString PositiveDeviceId = "/%1 expects deviceId to be a positive integer.";
+inline const QString PositivePage = "/%1 expects page to be a positive integer.";
 }
 
 namespace CommandNames {
@@ -174,6 +180,7 @@ inline const QString AccessRevokedAt = "accessRevokedAt";
 inline const QString SenderDeletedAt = "senderDeletedAt";
 inline const QString RecipientDeletedAt = "recipientDeletedAt";
 inline const QString DeletedAt = "deletedAt";
+inline const QString ReadAt = "readAt";
 }
 
 namespace CryptoText {
@@ -204,4 +211,8 @@ inline constexpr int FirstPreKeyId = 1;
 inline constexpr int SignedPreKeyId = 1;
 inline constexpr int DefaultRegistrationIdMinimum = 10000;
 inline constexpr int DefaultRegistrationIdRange = 90000;
+}
+
+namespace Paging {
+inline constexpr int ConversationPageSize = 10;
 }

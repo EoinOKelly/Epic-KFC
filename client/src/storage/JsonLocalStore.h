@@ -33,7 +33,10 @@ public:
     Result<bool> saveMessage(const LocalMessage& message);
     Result<std::optional<LocalMessage>> findMessage(const QString& messageId) const;
     Result<MessageList> allMessages() const;
+    Result<MessageList> messagesWithPeer(const QString& currentUserId, const QString& peerUserId) const;
     Result<ConversationList> conversationsFor(const QString& currentUserId) const;
+    Result<ConversationList> unreadConversationsFor(const QString& currentUserId) const;
+    Result<bool> markConversationRead(const QString& currentUserId, const QString& peerUserId);
 
 private:
     Result<bool> load();

@@ -307,12 +307,48 @@ void MessageService::listSent() {
 }
 
 void MessageService::listConversations() {
-    const auto conversations = m_store.conversationsFor(m_sessionService.currentUserId());
-    if (conversations.failed()) {
-        emit m_events.commandFailed(conversations.error());
+    if (!requireSession()) {
         return;
     }
-    emit m_events.conversationListUpdated(conversations.value());
+    m_messageGateway.listReceived(m_sessionService.accessToken(), [this](Result<MessageList> receivedResult) {
+        if (receivedResult.failed()) {
+            emit m_events.commandFailed(receivedResult.error());
+            return;
+        }
+        saveMessages(receivedResult.value());
+        m_messageGateway.listSent(m_sessionService.accessToken(), [this](Result<MessageList> sentResult) {
+            if (sentResult.failed()) {
+                emit m_events.commandFailed(sentResult.error());
+                return;
+            }
+            saveMessages(sentResult.value());
+            const auto conversations = m_store.conversationsFor(m_sessionService.currentUserId());
+            if (conversations.failed()) {
+                emit m_events.commandFailed(conversations.error());
+                return;
+            }
+            emit m_events.conversationListUpdated(conversations.value());
+        });
+    });
+}
+
+void MessageService::listUnreadSenders() {
+    if (!requireSession()) {
+        return;
+    }
+    m_messageGateway.listReceived(m_sessionService.accessToken(), [this](Result<MessageList> result) {
+        if (result.failed()) {
+            emit m_events.commandFailed(result.error());
+            return;
+        }
+        saveMessages(result.value());
+        const auto unread = m_store.unreadConversationsFor(m_sessionService.currentUserId());
+        if (unread.failed()) {
+            emit m_events.commandFailed(unread.error());
+            return;
+        }
+        emit m_events.unreadInboxUpdated(unread.value());
+    });
 }
 
 void MessageService::send(const QString& recipientUsername, const QString& plaintext) {
@@ -361,38 +397,32 @@ void MessageService::sendToAddress(const UserAddress& recipientAddress, const QS
     });
 }
 
-void MessageService::read(const QString& messageId) {
+void MessageService::readConversation(const QString& username, int page) {
     if (!requireSession()) {
         return;
     }
 
-    const auto found = m_store.findMessage(messageId);
-    if (found.succeeded() && found.value().has_value()) {
-        const auto device = m_keyService.currentDevice();
-        if (device.failed()) {
-            emit m_events.commandFailed(device.error());
+    m_userDirectoryGateway.resolveUsername(m_sessionService.accessToken(), username, m_deviceId, [this, username, page](Result<UserAddress> addressResult) {
+        if (addressResult.failed()) {
+            emit m_events.commandFailed(addressResult.error());
             return;
         }
-        const auto plaintext = m_cryptoProvider.decrypt(m_sessionService.currentUserId(), device.value(), *found.value(), oneTimePreKeyFor(*found.value()));
-        if (plaintext.failed()) {
-            emit m_events.cryptoOperationFailed(plaintext.error());
-            return;
-        }
-        emit m_events.messageOpened(*found.value(), plaintext.value());
-        return;
-    }
-
-    m_messageGateway.getMessage(m_sessionService.accessToken(), messageId, [this](Result<LocalMessage> result) {
-        if (result.failed()) {
-            emit m_events.commandFailed(result.error());
-            return;
-        }
-        const auto saved = m_store.saveMessage(result.value());
-        if (saved.failed()) {
-            emit m_events.commandFailed(saved.error());
-            return;
-        }
-        read(result.value().id);
+        const UserAddress address = addressResult.value();
+        m_messageGateway.listReceived(m_sessionService.accessToken(), [this, address, username, page](Result<MessageList> receivedResult) {
+            if (receivedResult.failed()) {
+                emit m_events.commandFailed(receivedResult.error());
+                return;
+            }
+            saveMessages(receivedResult.value());
+            m_messageGateway.listSent(m_sessionService.accessToken(), [this, address, username, page](Result<MessageList> sentResult) {
+                if (sentResult.failed()) {
+                    emit m_events.commandFailed(sentResult.error());
+                    return;
+                }
+                saveMessages(sentResult.value());
+                openConversationFromCache(address, username, page);
+            });
+        });
     });
 }
 
@@ -534,6 +564,11 @@ std::optional<OneTimePreKey> MessageService::oneTimePreKeyFor(const LocalMessage
 }
 
 void MessageService::saveAndEmitList(const MessageList& messages) {
+    saveMessages(messages);
+    emit m_events.messageListUpdated(messages);
+}
+
+void MessageService::saveMessages(const MessageList& messages) {
     for (const auto& message : messages) {
         const auto saved = m_store.saveMessage(message);
         if (saved.failed()) {
@@ -541,7 +576,49 @@ void MessageService::saveAndEmitList(const MessageList& messages) {
             return;
         }
     }
-    emit m_events.messageListUpdated(messages);
+}
+
+void MessageService::openConversationFromCache(const UserAddress& address, const QString& username, int page) {
+    const auto messages = m_store.messagesWithPeer(m_sessionService.currentUserId(), address.userId);
+    if (messages.failed()) {
+        emit m_events.commandFailed(messages.error());
+        return;
+    }
+    if (messages.value().empty()) {
+        emit m_events.commandFailed({ErrorCode::NotFound, QString("No cached conversation with %1.").arg(username)});
+        return;
+    }
+
+    const int pageSize = Paging::ConversationPageSize;
+    const int pageCount = static_cast<int>((messages.value().size() + pageSize - 1) / pageSize);
+    const int safePage = std::clamp(page, 1, pageCount);
+    const int start = (safePage - 1) * pageSize;
+    const int end = std::min(start + pageSize, static_cast<int>(messages.value().size()));
+    const auto device = m_keyService.currentDevice();
+    if (device.failed()) {
+        emit m_events.commandFailed(device.error());
+        return;
+    }
+
+    ConversationLog entries;
+    for (int index = start; index < end; ++index) {
+        const LocalMessage& message = messages.value().at(index);
+        ConversationLogEntry entry{message, {}, std::nullopt};
+        const auto plaintext = m_cryptoProvider.decrypt(m_sessionService.currentUserId(), device.value(), message, oneTimePreKeyFor(message));
+        if (plaintext.succeeded()) {
+            entry.plaintext = plaintext.value();
+        } else {
+            entry.decryptError = plaintext.error();
+        }
+        entries.push_back(entry);
+    }
+
+    const auto markedRead = m_store.markConversationRead(m_sessionService.currentUserId(), address.userId);
+    if (markedRead.failed()) {
+        emit m_events.commandFailed(markedRead.error());
+        return;
+    }
+    emit m_events.conversationLogOpened(username, address.userId, entries, safePage, pageCount);
 }
 
 LocalMessage MessageService::draftFor(const QString& recipientUserId, int recipientDeviceId, const QString& wirePayloadJson) const {
@@ -553,6 +630,7 @@ LocalMessage MessageService::draftFor(const QString& recipientUserId, int recipi
         recipientDeviceId,
         wirePayloadJson,
         std::nullopt,
+        {},
         {},
         {},
         {},

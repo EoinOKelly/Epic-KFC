@@ -21,6 +21,8 @@ signals:
     void trustPinMatched(QString userId, int deviceId);
     void trustPinMismatch(QString userId, int deviceId);
     void conversationListUpdated(ConversationList conversations);
+    void unreadInboxUpdated(ConversationList conversations);
+    void conversationLogOpened(QString username, QString peerUserId, ConversationLog entries, int page, int pageCount);
     void messageListUpdated(MessageList messages);
     void messageReceived(LocalMessage message);
     void messagePrepared(QString recipientUserId, int deviceId, QString currentBody);

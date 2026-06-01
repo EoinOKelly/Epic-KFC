@@ -171,6 +171,7 @@ QJsonObject messageToJson(const LocalMessage& message) {
         {StorageKeys::SenderDeletedAt, message.senderDeletedAt},
         {StorageKeys::RecipientDeletedAt, message.recipientDeletedAt},
         {StorageKeys::DeletedAt, message.deletedAt},
+        {StorageKeys::ReadAt, message.readAt},
         {"direction", message.direction == MessageDirection::Sent ? "sent" : "received"}
     };
 }
@@ -191,6 +192,7 @@ LocalMessage messageFromJson(const QJsonObject& object) {
         object.value(StorageKeys::SenderDeletedAt).toString(),
         object.value(StorageKeys::RecipientDeletedAt).toString(),
         object.value(StorageKeys::DeletedAt).toString(),
+        object.value(StorageKeys::ReadAt).toString(),
         object.value("direction").toString() == "sent" ? MessageDirection::Sent : MessageDirection::Received
     };
 }
@@ -496,7 +498,11 @@ Result<bool> JsonLocalStore::saveMessage(const LocalMessage& message) {
     if (it == m_messages.end()) {
         m_messages.push_back(message);
     } else {
+        const QString previousReadAt = it->readAt;
         *it = message;
+        if (it->readAt.isEmpty()) {
+            it->readAt = previousReadAt;
+        }
     }
     return save();
 }
@@ -515,6 +521,19 @@ Result<MessageList> JsonLocalStore::allMessages() const {
     return Result<MessageList>::success(m_messages);
 }
 
+Result<MessageList> JsonLocalStore::messagesWithPeer(const QString& currentUserId, const QString& peerUserId) const {
+    MessageList messages;
+    std::copy_if(m_messages.cbegin(), m_messages.cend(), std::back_inserter(messages), [&currentUserId, &peerUserId](const LocalMessage& message) {
+        const bool sentToPeer = message.senderUserId == currentUserId && message.recipientUserId == peerUserId;
+        const bool receivedFromPeer = message.senderUserId == peerUserId && message.recipientUserId == currentUserId;
+        return sentToPeer || receivedFromPeer;
+    });
+    std::sort(messages.begin(), messages.end(), [](const LocalMessage& left, const LocalMessage& right) {
+        return left.createdAt < right.createdAt;
+    });
+    return Result<MessageList>::success(messages);
+}
+
 Result<ConversationList> JsonLocalStore::conversationsFor(const QString& currentUserId) const {
     std::map<QString, ConversationSummary> summaries;
     for (const auto& message : m_messages) {
@@ -522,8 +541,12 @@ Result<ConversationList> JsonLocalStore::conversationsFor(const QString& current
         const QString peerUserId = sentByCurrentUser ? message.recipientUserId : message.senderUserId;
         const int peerDeviceId = sentByCurrentUser ? message.recipientDeviceId : message.senderDeviceId;
         const QString key = QString("%1:%2").arg(peerUserId).arg(peerDeviceId);
-        auto summary = summaries.contains(key) ? summaries.at(key) : ConversationSummary{peerUserId, peerDeviceId, 0, {}};
+        auto summary = summaries.contains(key) ? summaries.at(key) : ConversationSummary{peerUserId, peerDeviceId, 0, 0, {}};
         summary.messageCount += 1;
+        const bool unreadIncoming = !sentByCurrentUser && message.readAt.isEmpty();
+        if (unreadIncoming) {
+            summary.unreadCount += 1;
+        }
         if (!summary.latestMessageAt.isValid() || message.createdAt > summary.latestMessageAt) {
             summary.latestMessageAt = message.createdAt;
         }
@@ -534,6 +557,29 @@ Result<ConversationList> JsonLocalStore::conversationsFor(const QString& current
         return entry.second;
     });
     return Result<ConversationList>::success(conversations);
+}
+
+Result<ConversationList> JsonLocalStore::unreadConversationsFor(const QString& currentUserId) const {
+    const auto conversations = conversationsFor(currentUserId);
+    if (conversations.failed()) {
+        return conversations;
+    }
+    ConversationList unread;
+    std::copy_if(conversations.value().cbegin(), conversations.value().cend(), std::back_inserter(unread), [](const ConversationSummary& conversation) {
+        return conversation.unreadCount > 0;
+    });
+    return Result<ConversationList>::success(unread);
+}
+
+Result<bool> JsonLocalStore::markConversationRead(const QString& currentUserId, const QString& peerUserId) {
+    const QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+    for (auto& message : m_messages) {
+        const bool incomingFromPeer = message.senderUserId == peerUserId && message.recipientUserId == currentUserId;
+        if (incomingFromPeer && message.readAt.isEmpty()) {
+            message.readAt = now;
+        }
+    }
+    return save();
 }
 
 Result<bool> JsonLocalStore::load() {

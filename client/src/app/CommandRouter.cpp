@@ -36,7 +36,6 @@ const std::set<CommandType>& zeroArgumentCommands() {
 
 const std::set<CommandType>& oneArgumentCommands() {
     static const std::set<CommandType> commands{
-        CommandType::Read,
         CommandType::Revoke,
         CommandType::DeleteMessage,
         CommandType::Verify,
@@ -122,6 +121,11 @@ void CommandRouter::handleCommandMode(const QString& line) {
     }
 
     switch (command.type) {
+    case CommandType::Read:
+        if (commandHasArgumentCount(command, 1, 2)) {
+            m_controller.handleCommand(command);
+        }
+        return;
     case CommandType::Forward:
         if (commandHasArgumentCount(command, 2, 2)) {
             m_controller.handleCommand(command);

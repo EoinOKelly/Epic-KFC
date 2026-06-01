@@ -48,7 +48,37 @@ ConsolePresenter::ConsolePresenter(EventBus& events, QObject* parent)
         m_output << AppText::ConversationHeader << '\n';
         for (const auto& conversation : conversations) {
             Q_UNUSED(conversation.peerDeviceId)
-            m_output << "  " << conversation.peerUserId << " | messages=" << conversation.messageCount << '\n';
+            m_output << "  " << conversation.peerUserId << " | messages=" << conversation.messageCount
+                     << " | unread=" << conversation.unreadCount << '\n';
+        }
+        printPrompt();
+    });
+    connect(&events, &EventBus::unreadInboxUpdated, this, [this](const ConversationList& conversations) {
+        if (conversations.empty()) {
+            printMessage(AppText::EmptyUnreadInbox);
+            return;
+        }
+        m_output << AppText::UnreadInboxHeader << '\n';
+        for (const auto& conversation : conversations) {
+            Q_UNUSED(conversation.peerDeviceId)
+            m_output << "  " << conversation.peerUserId << " | unread=" << conversation.unreadCount << '\n';
+        }
+        printPrompt();
+    });
+    connect(&events, &EventBus::conversationLogOpened, this, [this](const QString& username, const QString& peerUserId, const ConversationLog& entries, int page, int pageCount) {
+        m_output << QString(AppText::ConversationLogHeader).arg(username, peerUserId).arg(page).arg(pageCount) << '\n';
+        for (const auto& entry : entries) {
+            const QString direction = entry.message.direction == MessageDirection::Sent ? "->" : "<-";
+            const QString timestamp = entry.message.createdAt.toString(Qt::ISODate);
+            if (entry.decryptError.has_value()) {
+                m_output << QString(AppText::ConversationLogDecryptFailed)
+                                .arg(timestamp, direction, entry.message.id, entry.decryptError->message)
+                         << '\n';
+                continue;
+            }
+            m_output << QString(AppText::ConversationLogLine)
+                            .arg(timestamp, direction, entry.message.id, entry.plaintext)
+                     << '\n';
         }
         printPrompt();
     });

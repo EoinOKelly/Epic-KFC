@@ -132,6 +132,7 @@ void testCryptoWireShape() {
         {},
         {},
         {},
+        {},
         MessageDirection::Received
     };
     const auto decrypted = crypto.decrypt("bob", bob.value(), received, std::nullopt);
@@ -176,6 +177,7 @@ void testMockCrypto() {
         encrypted.value().wirePayloadJson,
         encrypted.value().consumedOneTimePreKeyId,
         QDateTime::currentDateTimeUtc(),
+        {},
         {},
         {},
         {},

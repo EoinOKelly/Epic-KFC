@@ -108,4 +108,6 @@ void registerClientMetaTypes() {
     qRegisterMetaType<MessageList>("MessageList");
     qRegisterMetaType<ConversationSummary>("ConversationSummary");
     qRegisterMetaType<ConversationList>("ConversationList");
+    qRegisterMetaType<ConversationLogEntry>("ConversationLogEntry");
+    qRegisterMetaType<ConversationLog>("ConversationLog");
 }

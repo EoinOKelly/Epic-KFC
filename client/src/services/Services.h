@@ -64,8 +64,9 @@ public:
     void listReceived();
     void listSent();
     void listConversations();
+    void listUnreadSenders();
     void send(const QString& recipientUsername, const QString& plaintext);
-    void read(const QString& messageId);
+    void readConversation(const QString& username, int page);
     void forward(const QString& messageId, const QString& recipientUsername);
     void revoke(const QString& messageId);
     void deleteMessage(const QString& messageId);
@@ -76,6 +77,8 @@ private:
     bool requireSession();
     std::optional<OneTimePreKey> oneTimePreKeyFor(const LocalMessage& message) const;
     void saveAndEmitList(const MessageList& messages);
+    void saveMessages(const MessageList& messages);
+    void openConversationFromCache(const UserAddress& address, const QString& username, int page);
     void sendToAddress(const UserAddress& recipientAddress, const QString& plaintext);
     void forwardToAddress(const QString& messageId, const UserAddress& recipientAddress);
     LocalMessage draftFor(const QString& recipientUserId, int recipientDeviceId, const QString& wirePayloadJson) const;

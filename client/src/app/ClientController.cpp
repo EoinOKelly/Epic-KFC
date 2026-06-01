@@ -46,6 +46,8 @@ void ClientController::handleCommand(const SlashCommand& command) {
         m_messageService.listConversations();
         return;
     case CommandType::Inbox:
+        m_messageService.listUnreadSenders();
+        return;
     case CommandType::Sync:
         m_messageService.listReceived();
         return;
@@ -53,8 +55,17 @@ void ClientController::handleCommand(const SlashCommand& command) {
         m_messageService.listSent();
         return;
     case CommandType::Read:
-        if (command.arguments.size() == 1) {
-            m_messageService.read(command.arguments.at(0));
+        if (command.arguments.size() == 1 || command.arguments.size() == 2) {
+            bool pageOk = true;
+            const int page = command.arguments.size() == 2 ? command.arguments.at(1).toInt(&pageOk) : 1;
+            if (!pageOk || page <= 0) {
+                emit m_events.commandFailed({
+                    ErrorCode::InvalidCommand,
+                    QString(CommandText::PositivePage).arg(QString::fromStdString(command.name))
+                });
+                return;
+            }
+            m_messageService.readConversation(command.arguments.at(0), page);
         }
         return;
     case CommandType::Forward:

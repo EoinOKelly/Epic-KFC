@@ -161,6 +161,7 @@ struct LocalMessage {
     QString senderDeletedAt;
     QString recipientDeletedAt;
     QString deletedAt;
+    QString readAt;
     MessageDirection direction{MessageDirection::Received};
 };
 
@@ -168,11 +169,19 @@ struct ConversationSummary {
     QString peerUserId;
     int peerDeviceId{DefaultDeviceId};
     int messageCount{0};
+    int unreadCount{0};
     QDateTime latestMessageAt;
+};
+
+struct ConversationLogEntry {
+    LocalMessage message;
+    QString plaintext;
+    std::optional<ClientError> decryptError;
 };
 
 using MessageList = std::vector<LocalMessage>;
 using ConversationList = std::vector<ConversationSummary>;
+using ConversationLog = std::vector<ConversationLogEntry>;
 
 QString errorCodeToString(ErrorCode code);
 QString commandTypeName(CommandType type);
@@ -196,3 +205,5 @@ Q_DECLARE_METATYPE(LocalMessage)
 Q_DECLARE_METATYPE(MessageList)
 Q_DECLARE_METATYPE(ConversationSummary)
 Q_DECLARE_METATYPE(ConversationList)
+Q_DECLARE_METATYPE(ConversationLogEntry)
+Q_DECLARE_METATYPE(ConversationLog)
