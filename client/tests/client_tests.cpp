@@ -217,15 +217,36 @@ void testEncryptedLocalStore() {
     };
     const OneTimePreKey preKey{1, 7, "one-time-public", "one-time-private-secret", false};
     const TrustPin trustPin{"bob", 1, "trusted-identity-secret", QDateTime::currentDateTimeUtc()};
+    const UserAddress bobAddress{"bob", "bobUsername", 1};
+    const LocalMessage message{
+        "stored-message-1",
+        "bob",
+        1,
+        "user-1",
+        1,
+        "{}",
+        std::nullopt,
+        QDateTime::currentDateTimeUtc(),
+        {},
+        {},
+        {},
+        {},
+        {},
+        MessageDirection::Received
+    };
 
     const auto savedSession = store.saveSession(session);
     const auto savedDevice = store.saveDeviceKeys(device);
     const auto savedPreKey = store.saveOneTimePreKeys({preKey});
+    const auto savedKnownUser = store.saveKnownUser(bobAddress);
     const auto savedTrustPin = store.saveTrustPin(trustPin);
+    const auto savedMessage = store.saveMessage(message);
     expect(savedSession.succeeded(), "encrypted store saves protected session");
     expect(savedDevice.succeeded(), "encrypted store saves protected device keys");
     expect(savedPreKey.succeeded(), "encrypted store saves protected one-time pre-keys");
+    expect(savedKnownUser.succeeded(), "encrypted store saves known usernames");
     expect(savedTrustPin.succeeded(), "encrypted store saves protected trust pins");
+    expect(savedMessage.succeeded(), "encrypted store saves cached messages");
 
     QFile file(path);
     file.open(QIODevice::ReadOnly);
@@ -244,7 +265,9 @@ void testEncryptedLocalStore() {
     const auto loadedSession = reloaded.loadSession();
     const auto loadedDevice = reloaded.loadDeviceKeys(1);
     const auto loadedPreKeys = reloaded.loadOneTimePreKeys(1);
+    const auto loadedKnownUser = reloaded.knownUser("bob", 1);
     const auto loadedTrustPin = reloaded.trustPin("bob", 1);
+    const auto conversations = reloaded.conversationsFor("user-1");
     const bool loaded = reloadResult.succeeded()
         && loadedSession.succeeded()
         && loadedSession.value().has_value()
@@ -255,9 +278,15 @@ void testEncryptedLocalStore() {
         && loadedPreKeys.succeeded()
         && !loadedPreKeys.value().empty()
         && loadedPreKeys.value().front().privateKey == "one-time-private-secret"
+        && loadedKnownUser.succeeded()
+        && loadedKnownUser.value().has_value()
+        && loadedKnownUser.value()->username == "bobUsername"
         && loadedTrustPin.succeeded()
         && loadedTrustPin.value().has_value()
-        && loadedTrustPin.value()->identityKey == "trusted-identity-secret";
+        && loadedTrustPin.value()->identityKey == "trusted-identity-secret"
+        && conversations.succeeded()
+        && !conversations.value().empty()
+        && conversations.value().front().peerUsername == "bobUsername";
     expect(loaded, "encrypted store reloads secrets with passphrase");
 
     JsonLocalStore accountScoped(path, true);

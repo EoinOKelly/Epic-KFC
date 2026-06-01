@@ -149,6 +149,7 @@ inline const QString RefreshToken = "refreshToken";
 inline const QString CurrentUser = "currentUser";
 inline const QString DeviceKeys = "deviceKeys";
 inline const QString OneTimePreKeys = "oneTimePreKeys";
+inline const QString KnownUsers = "knownUsers";
 inline const QString TrustPins = "trustPins";
 inline const QString Messages = "messages";
 inline const QString Sessions = "sessions";

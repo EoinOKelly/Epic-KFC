@@ -27,6 +27,8 @@ public:
     Result<bool> saveOneTimePreKeys(const std::vector<OneTimePreKey>& preKeys);
     Result<std::vector<OneTimePreKey>> loadOneTimePreKeys(int deviceId) const;
 
+    Result<bool> saveKnownUser(const UserAddress& address);
+    Result<std::optional<KnownUser>> knownUser(const QString& userId, int deviceId) const;
     Result<bool> saveTrustPin(const TrustPin& pin);
     Result<std::optional<TrustPin>> trustPin(const QString& userId, int deviceId) const;
 
@@ -52,6 +54,7 @@ private:
     bool m_hasSession{false};
     std::vector<DeviceKeyMaterial> m_deviceKeys;
     std::vector<OneTimePreKey> m_oneTimePreKeys;
+    std::vector<KnownUser> m_knownUsers;
     std::vector<TrustPin> m_trustPins;
     MessageList m_messages;
 };

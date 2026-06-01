@@ -139,6 +139,22 @@ OneTimePreKey preKeyFromJson(const QJsonObject& object) {
     };
 }
 
+QJsonObject knownUserToJson(const KnownUser& user) {
+    return {
+        {StorageKeys::UserId, user.userId},
+        {StorageKeys::Username, user.username},
+        {StorageKeys::DeviceId, user.deviceId}
+    };
+}
+
+KnownUser knownUserFromJson(const QJsonObject& object) {
+    return {
+        object.value(StorageKeys::UserId).toString(),
+        object.value(StorageKeys::Username).toString(),
+        object.value(StorageKeys::DeviceId).toInt(DefaultDeviceId)
+    };
+}
+
 QJsonObject trustPinToJson(const TrustPin& pin) {
     return {
         {StorageKeys::UserId, pin.userId},
@@ -469,6 +485,33 @@ Result<std::vector<OneTimePreKey>> JsonLocalStore::loadOneTimePreKeys(int device
     return Result<std::vector<OneTimePreKey>>::success(matching);
 }
 
+Result<bool> JsonLocalStore::saveKnownUser(const UserAddress& address) {
+    if (address.userId.isEmpty() || address.username.isEmpty()) {
+        return Result<bool>::success(true);
+    }
+
+    KnownUser user{address.userId, address.username, address.deviceId};
+    auto it = std::find_if(m_knownUsers.begin(), m_knownUsers.end(), [&user](const KnownUser& existing) {
+        return existing.userId == user.userId && existing.deviceId == user.deviceId;
+    });
+    if (it == m_knownUsers.end()) {
+        m_knownUsers.push_back(user);
+    } else {
+        *it = user;
+    }
+    return save();
+}
+
+Result<std::optional<KnownUser>> JsonLocalStore::knownUser(const QString& userId, int deviceId) const {
+    const auto it = std::find_if(m_knownUsers.cbegin(), m_knownUsers.cend(), [&userId, deviceId](const KnownUser& user) {
+        return user.userId == userId && user.deviceId == deviceId;
+    });
+    if (it == m_knownUsers.cend()) {
+        return Result<std::optional<KnownUser>>::success(std::nullopt);
+    }
+    return Result<std::optional<KnownUser>>::success(*it);
+}
+
 Result<bool> JsonLocalStore::saveTrustPin(const TrustPin& pin) {
     auto it = std::find_if(m_trustPins.begin(), m_trustPins.end(), [&pin](const TrustPin& existing) {
         return existing.userId == pin.userId && existing.deviceId == pin.deviceId;
@@ -541,7 +584,12 @@ Result<ConversationList> JsonLocalStore::conversationsFor(const QString& current
         const QString peerUserId = sentByCurrentUser ? message.recipientUserId : message.senderUserId;
         const int peerDeviceId = sentByCurrentUser ? message.recipientDeviceId : message.senderDeviceId;
         const QString key = QString("%1:%2").arg(peerUserId).arg(peerDeviceId);
-        auto summary = summaries.contains(key) ? summaries.at(key) : ConversationSummary{peerUserId, peerDeviceId, 0, 0, {}};
+        const auto known = knownUser(peerUserId, peerDeviceId);
+        const QString peerUsername = known.succeeded() && known.value().has_value() ? known.value()->username : QString{};
+        auto summary = summaries.contains(key) ? summaries.at(key) : ConversationSummary{peerUserId, peerUsername, peerDeviceId, 0, 0, {}};
+        if (summary.peerUsername.isEmpty() && !peerUsername.isEmpty()) {
+            summary.peerUsername = peerUsername;
+        }
         summary.messageCount += 1;
         const bool unreadIncoming = !sentByCurrentUser && message.readAt.isEmpty();
         if (unreadIncoming) {
@@ -587,6 +635,7 @@ Result<bool> JsonLocalStore::load() {
     m_hasSession = false;
     m_deviceKeys.clear();
     m_oneTimePreKeys.clear();
+    m_knownUsers.clear();
     m_trustPins.clear();
     m_messages.clear();
 
@@ -622,6 +671,9 @@ Result<bool> JsonLocalStore::load() {
     for (const auto value : root.value(StorageKeys::OneTimePreKeys).toArray()) {
         m_oneTimePreKeys.push_back(preKeyFromJson(value.toObject()));
     }
+    for (const auto value : root.value(StorageKeys::KnownUsers).toArray()) {
+        m_knownUsers.push_back(knownUserFromJson(value.toObject()));
+    }
     for (const auto value : root.value(StorageKeys::TrustPins).toArray()) {
         m_trustPins.push_back(trustPinFromJson(value.toObject()));
     }
@@ -655,6 +707,12 @@ Result<bool> JsonLocalStore::save() const {
         preKeys.push_back(preKeyToJson(preKey));
     }
     root.insert(StorageKeys::OneTimePreKeys, preKeys);
+
+    QJsonArray knownUsers;
+    for (const auto& user : m_knownUsers) {
+        knownUsers.push_back(knownUserToJson(user));
+    }
+    root.insert(StorageKeys::KnownUsers, knownUsers);
 
     QJsonArray trustPins;
     for (const auto& pin : m_trustPins) {

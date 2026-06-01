@@ -48,7 +48,8 @@ ConsolePresenter::ConsolePresenter(EventBus& events, QObject* parent)
         m_output << AppText::ConversationHeader << '\n';
         for (const auto& conversation : conversations) {
             Q_UNUSED(conversation.peerDeviceId)
-            m_output << "  " << conversation.peerUserId << " | messages=" << conversation.messageCount
+            const QString peerName = conversation.peerUsername.isEmpty() ? conversation.peerUserId : conversation.peerUsername;
+            m_output << "  " << peerName << " | messages=" << conversation.messageCount
                      << " | unread=" << conversation.unreadCount << '\n';
         }
         printPrompt();
@@ -61,7 +62,8 @@ ConsolePresenter::ConsolePresenter(EventBus& events, QObject* parent)
         m_output << AppText::UnreadInboxHeader << '\n';
         for (const auto& conversation : conversations) {
             Q_UNUSED(conversation.peerDeviceId)
-            m_output << "  " << conversation.peerUserId << " | unread=" << conversation.unreadCount << '\n';
+            const QString peerName = conversation.peerUsername.isEmpty() ? conversation.peerUserId : conversation.peerUsername;
+            m_output << "  " << peerName << " | unread=" << conversation.unreadCount << '\n';
         }
         printPrompt();
     });

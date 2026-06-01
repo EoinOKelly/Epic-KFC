@@ -102,6 +102,12 @@ struct UserAddress {
     int deviceId{DefaultDeviceId};
 };
 
+struct KnownUser {
+    QString userId;
+    QString username;
+    int deviceId{DefaultDeviceId};
+};
+
 struct DeviceKeyMaterial {
     int deviceId{DefaultDeviceId};
     int registrationId{0};
@@ -167,6 +173,7 @@ struct LocalMessage {
 
 struct ConversationSummary {
     QString peerUserId;
+    QString peerUsername;
     int peerDeviceId{DefaultDeviceId};
     int messageCount{0};
     int unreadCount{0};
@@ -194,6 +201,7 @@ Q_DECLARE_METATYPE(StartupConfig)
 Q_DECLARE_METATYPE(SlashCommand)
 Q_DECLARE_METATYPE(UserProfile)
 Q_DECLARE_METATYPE(UserAddress)
+Q_DECLARE_METATYPE(KnownUser)
 Q_DECLARE_METATYPE(TokenSet)
 Q_DECLARE_METATYPE(AuthSession)
 Q_DECLARE_METATYPE(DeviceKeyMaterial)

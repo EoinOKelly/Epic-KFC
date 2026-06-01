@@ -207,6 +207,11 @@ void KeyService::trustUsername(const QString& username) {
             return;
         }
         const UserAddress address = addressResult.value();
+        const auto savedUser = m_store.saveKnownUser(address);
+        if (savedUser.failed()) {
+            emit m_events.commandFailed(savedUser.error());
+            return;
+        }
         m_keyGateway.fetchPreKeyBundle(m_sessionService.accessToken(), address.userId, address.deviceId, [this, address](Result<PreKeyBundle> result) {
             if (result.failed()) {
                 emit m_events.commandFailed(result.error());
@@ -360,6 +365,11 @@ void MessageService::send(const QString& recipientUsername, const QString& plain
             emit m_events.commandFailed(result.error());
             return;
         }
+        const auto savedUser = m_store.saveKnownUser(result.value());
+        if (savedUser.failed()) {
+            emit m_events.commandFailed(savedUser.error());
+            return;
+        }
         sendToAddress(result.value(), plaintext);
     });
 }
@@ -408,6 +418,11 @@ void MessageService::readConversation(const QString& username, int page) {
             return;
         }
         const UserAddress address = addressResult.value();
+        const auto savedUser = m_store.saveKnownUser(address);
+        if (savedUser.failed()) {
+            emit m_events.commandFailed(savedUser.error());
+            return;
+        }
         m_messageGateway.listReceived(m_sessionService.accessToken(), [this, address, username, page](Result<MessageList> receivedResult) {
             if (receivedResult.failed()) {
                 emit m_events.commandFailed(receivedResult.error());
@@ -433,6 +448,11 @@ void MessageService::forward(const QString& messageId, const QString& recipientU
     m_userDirectoryGateway.resolveUsername(m_sessionService.accessToken(), recipientUsername, m_deviceId, [this, messageId](Result<UserAddress> result) {
         if (result.failed()) {
             emit m_events.commandFailed(result.error());
+            return;
+        }
+        const auto savedUser = m_store.saveKnownUser(result.value());
+        if (savedUser.failed()) {
+            emit m_events.commandFailed(savedUser.error());
             return;
         }
         forwardToAddress(messageId, result.value());

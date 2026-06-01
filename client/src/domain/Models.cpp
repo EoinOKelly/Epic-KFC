@@ -97,6 +97,7 @@ void registerClientMetaTypes() {
     qRegisterMetaType<SlashCommand>("SlashCommand");
     qRegisterMetaType<UserProfile>("UserProfile");
     qRegisterMetaType<UserAddress>("UserAddress");
+    qRegisterMetaType<KnownUser>("KnownUser");
     qRegisterMetaType<TokenSet>("TokenSet");
     qRegisterMetaType<AuthSession>("AuthSession");
     qRegisterMetaType<DeviceKeyMaterial>("DeviceKeyMaterial");
