@@ -7,6 +7,20 @@
 
 #include <algorithm>
 
+namespace {
+constexpr int ConflictStatusCode = 409;
+
+bool isAlreadyUploadedPreKeyError(const ClientError& error) {
+    const bool isHttpError = error.code == ErrorCode::HttpError;
+    const bool isConflict = error.message.contains(QString::number(ConflictStatusCode));
+    const bool mentionsPreKey = error.message.contains("prekey", Qt::CaseInsensitive)
+        || error.message.contains("pre-key", Qt::CaseInsensitive);
+    const bool mentionsExisting = error.message.contains("already", Qt::CaseInsensitive)
+        || error.message.contains("exists", Qt::CaseInsensitive);
+    return isHttpError && isConflict && mentionsPreKey && mentionsExisting;
+}
+}
+
 SessionService::SessionService(EventBus& events, IAuthGateway& authGateway, JsonLocalStore& store, bool accountScopedState, QObject* parent)
     : QObject(parent)
     , m_events(events)
@@ -173,6 +187,9 @@ void KeyService::uploadOneTimePreKeys() {
 
     m_keyGateway.uploadOneTimePreKeys(m_sessionService.accessToken(), m_deviceId, existing.value(), [this](Result<bool> result) {
         if (result.failed()) {
+            if (isAlreadyUploadedPreKeyError(result.error())) {
+                return;
+            }
             emit m_events.commandFailed(result.error());
         }
     });
