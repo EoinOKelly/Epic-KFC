@@ -168,6 +168,7 @@ struct LocalMessage {
     QString recipientDeletedAt;
     QString deletedAt;
     QString readAt;
+    QString localPlaintext;
     MessageDirection direction{MessageDirection::Received};
 };
 

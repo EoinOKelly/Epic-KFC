@@ -612,6 +612,7 @@ LocalMessage HttpMessageGateway::messageFromJson(const QJsonObject& object, Mess
         object.value("recipient_deleted_at").toString(),
         object.value("deleted_at").toString(),
         {},
+        {},
         direction
     };
 }

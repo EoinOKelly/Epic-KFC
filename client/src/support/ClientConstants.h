@@ -183,6 +183,7 @@ inline const QString SenderDeletedAt = "senderDeletedAt";
 inline const QString RecipientDeletedAt = "recipientDeletedAt";
 inline const QString DeletedAt = "deletedAt";
 inline const QString ReadAt = "readAt";
+inline const QString LocalPlaintext = "localPlaintext";
 }
 
 namespace CryptoText {

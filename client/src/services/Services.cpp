@@ -393,17 +393,19 @@ void MessageService::sendToAddress(const UserAddress& recipientAddress, const QS
     }
 
     const LocalMessage draft = draftFor(recipientAddress.userId, recipientAddress.deviceId, encrypted.value().wirePayloadJson);
-    m_messageGateway.sendMessage(m_sessionService.accessToken(), draft, encrypted.value().consumedOneTimePreKeyId, [this](Result<LocalMessage> result) {
+    m_messageGateway.sendMessage(m_sessionService.accessToken(), draft, encrypted.value().consumedOneTimePreKeyId, [this, plaintext](Result<LocalMessage> result) {
         if (result.failed()) {
             emit m_events.commandFailed(result.error());
             return;
         }
-        const auto saved = m_store.saveMessage(result.value());
+        LocalMessage savedMessage = result.value();
+        savedMessage.localPlaintext = plaintext;
+        const auto saved = m_store.saveMessage(savedMessage);
         if (saved.failed()) {
             emit m_events.commandFailed(saved.error());
             return;
         }
-        emit m_events.messageSent(result.value());
+        emit m_events.messageSent(savedMessage);
     });
 }
 
@@ -486,17 +488,19 @@ void MessageService::forwardToAddress(const QString& messageId, const UserAddres
         return;
     }
     const LocalMessage draft = draftFor(recipientAddress.userId, recipientAddress.deviceId, encrypted.value().wirePayloadJson);
-    m_messageGateway.forwardMessage(m_sessionService.accessToken(), messageId, draft, encrypted.value().consumedOneTimePreKeyId, [this](Result<LocalMessage> result) {
+    m_messageGateway.forwardMessage(m_sessionService.accessToken(), messageId, draft, encrypted.value().consumedOneTimePreKeyId, [this, plaintext](Result<LocalMessage> result) {
         if (result.failed()) {
             emit m_events.commandFailed(result.error());
             return;
         }
-        const auto saved = m_store.saveMessage(result.value());
+        LocalMessage savedMessage = result.value();
+        savedMessage.localPlaintext = plaintext.value();
+        const auto saved = m_store.saveMessage(savedMessage);
         if (saved.failed()) {
             emit m_events.commandFailed(saved.error());
             return;
         }
-        emit m_events.messageForwarded(result.value());
+        emit m_events.messageForwarded(savedMessage);
     });
 }
 
@@ -626,7 +630,7 @@ void MessageService::openConversationFromCache(const UserAddress& address, const
         ConversationLogEntry entry{message, {}, std::nullopt};
         const bool sentByCurrentUser = message.senderUserId == m_sessionService.currentUserId();
         if (sentByCurrentUser) {
-            entry.plaintext = AppText::SentMessageCiphertextOnly;
+            entry.plaintext = message.localPlaintext.isEmpty() ? AppText::SentMessageCiphertextOnly : message.localPlaintext;
             entries.push_back(entry);
             continue;
         }
@@ -657,6 +661,7 @@ LocalMessage MessageService::draftFor(const QString& recipientUserId, int recipi
         recipientDeviceId,
         wirePayloadJson,
         std::nullopt,
+        {},
         {},
         {},
         {},

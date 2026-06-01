@@ -133,6 +133,7 @@ void testCryptoWireShape() {
         {},
         {},
         {},
+        {},
         MessageDirection::Received
     };
     const auto decrypted = crypto.decrypt("bob", bob.value(), received, std::nullopt);
@@ -177,6 +178,7 @@ void testMockCrypto() {
         encrypted.value().wirePayloadJson,
         encrypted.value().consumedOneTimePreKeyId,
         QDateTime::currentDateTimeUtc(),
+        {},
         {},
         {},
         {},
@@ -232,6 +234,7 @@ void testEncryptedLocalStore() {
         {},
         {},
         {},
+        "locally cached sent body",
         MessageDirection::Received
     };
 
@@ -256,7 +259,8 @@ void testEncryptedLocalStore() {
         && !rawState.contains("refresh-secret-token")
         && !rawState.contains("identity-private-secret")
         && !rawState.contains("one-time-private-secret")
-        && !rawState.contains("trusted-identity-secret");
+        && !rawState.contains("trusted-identity-secret")
+        && !rawState.contains("locally cached sent body");
     expect(secretsHidden, "encrypted store does not write secrets as plaintext");
 
     JsonLocalStore reloaded(path, true);
@@ -267,6 +271,7 @@ void testEncryptedLocalStore() {
     const auto loadedPreKeys = reloaded.loadOneTimePreKeys(1);
     const auto loadedKnownUser = reloaded.knownUser("bob", 1);
     const auto loadedTrustPin = reloaded.trustPin("bob", 1);
+    const auto loadedMessage = reloaded.findMessage("stored-message-1");
     const auto conversations = reloaded.conversationsFor("user-1");
     const bool loaded = reloadResult.succeeded()
         && loadedSession.succeeded()
@@ -284,6 +289,9 @@ void testEncryptedLocalStore() {
         && loadedTrustPin.succeeded()
         && loadedTrustPin.value().has_value()
         && loadedTrustPin.value()->identityKey == "trusted-identity-secret"
+        && loadedMessage.succeeded()
+        && loadedMessage.value().has_value()
+        && loadedMessage.value()->localPlaintext == "locally cached sent body"
         && conversations.succeeded()
         && !conversations.value().empty()
         && conversations.value().front().peerUsername == "bobUsername";
