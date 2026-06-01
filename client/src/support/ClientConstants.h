@@ -69,6 +69,7 @@ inline const QString UnreadInboxHeader = "Unread inbox:";
 inline const QString ConversationLogHeader = "Conversation with %1 (%2), page %3/%4:";
 inline const QString ConversationLogLine = "  [%1] %2 %3: %4";
 inline const QString ConversationLogDecryptFailed = "  [%1] %2 %3: <could not decrypt: %4>";
+inline const QString SentMessageCiphertextOnly = "<sent message encrypted for recipient>";
 inline const QString MessageHeader = "Messages:";
 inline const QString ErrorPrefix = "Error [";
 inline const QString ErrorSeparator = "]: ";

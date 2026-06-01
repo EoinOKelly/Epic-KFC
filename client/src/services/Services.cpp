@@ -604,6 +604,13 @@ void MessageService::openConversationFromCache(const UserAddress& address, const
     for (int index = start; index < end; ++index) {
         const LocalMessage& message = messages.value().at(index);
         ConversationLogEntry entry{message, {}, std::nullopt};
+        const bool sentByCurrentUser = message.senderUserId == m_sessionService.currentUserId();
+        if (sentByCurrentUser) {
+            entry.plaintext = AppText::SentMessageCiphertextOnly;
+            entries.push_back(entry);
+            continue;
+        }
+
         const auto plaintext = m_cryptoProvider.decrypt(m_sessionService.currentUserId(), device.value(), message, oneTimePreKeyFor(message));
         if (plaintext.succeeded()) {
             entry.plaintext = plaintext.value();
