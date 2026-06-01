@@ -30,6 +30,22 @@ QString normalizedPath(QString path) {
     return path;
 }
 
+QString pathWithoutQuery(const QString& path) {
+    const int queryStart = path.indexOf('?');
+    if (queryStart < 0) {
+        return path;
+    }
+    return path.left(queryStart);
+}
+
+QString queryFromPath(const QString& path) {
+    const int queryStart = path.indexOf('?');
+    if (queryStart < 0) {
+        return {};
+    }
+    return path.mid(queryStart + 1);
+}
+
 QString authPath(const QString& suffix) {
     return QString("/auth%1").arg(suffix);
 }
@@ -234,7 +250,8 @@ TokenSet HttpClient::tokensFromJson(const QJsonObject& object) const {
 QUrl HttpClient::urlFor(const QString& path) const {
     QUrl url = m_baseUrl;
     const QString basePath = withoutTrailingSlash(url.path());
-    url.setPath(basePath + normalizedPath(path));
+    url.setPath(basePath + normalizedPath(pathWithoutQuery(path)));
+    url.setQuery(queryFromPath(path));
     return url;
 }
 
