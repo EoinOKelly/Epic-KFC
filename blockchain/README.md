@@ -1,49 +1,32 @@
-# Blockchain integrity module (Sepolia)
+# Blockchain — Merkle message integrity
 
-Tamper-evident anchoring of **keccak256** message/conversation digests via `MessageFidelity.sol`.
+See **[GUIDE.md](./GUIDE.md)** for setup steps and file explanations.
 
-## Quick start
+## Quick commands
 
 ```bash
-cd blockchain
 npm install
-cp .env.example .env
-# Edit .env: SEPOLIA_RPC_URL, DEPLOYER_PRIVATE_KEY (Sepolia test ETH only)
-
-npm run compile
+npm run build      # compile TS API → dist/
+npm run compile    # compile Solidity
 npm test
 npm run deploy:sepolia
-```
-
-After deploy, open the fidelity checker:
-
-```bash
+npm run e2e        # crypto backend + Sepolia anchor
 npm run serve:fidelity
-# http://localhost:5173
 ```
 
-Paste `fidelity-ui/deployment.json` values into the UI (or load from file if served locally).
+## Integrator API
 
-Project-wide architecture and crypto integration: [../docs/README.md](../docs/README.md).
+```javascript
+const {
+  anchorConversationOnChain,
+  verifyMessageOnChain,
+} = require("./dist/index");
 
-## Integration for backend / client teams
+await anchorConversationOnChain(aliceUserId, bobUserId, [
+  { messageId: "...", plaintext: "...", createdAt: "..." },
+]);
 
-| Function | Purpose |
-|----------|---------|
-| `storeHash(bytes32 recordId, bytes32 contentHash)` | Anchor a digest on-chain |
-| `getHash(bytes32 recordId)` | Read digest + `anchoredAt` timestamp |
-| `hasRecord(bytes32 recordId)` | Check existence without revert |
-
-**Record ID convention:** derive a stable `bytes32`, e.g. `keccak256(utf8Bytes("conversation:" + id))` — the fidelity UI uses the same rule when you enter a conversation/message label.
-
-**Content hash:** `keccak256` of the canonical payload bytes your crypto module produces (plaintext demo UI hashes UTF-8 message text).
-
-## Project layout
-
-```
-blockchain/
-  contracts/MessageFidelity.sol   # On-chain anchor
-  scripts/deploy.ts             # Sepolia deploy + ABI export
-  fidelity-ui/                  # Standalone Pass/Fail checker
-  test/                         # Hardhat tests
+const { pass } = await verifyMessageOnChain(
+  aliceUserId, bobUserId, messages, messageId
+);
 ```
