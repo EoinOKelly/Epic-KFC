@@ -2,36 +2,39 @@
 
 #include "support/ClientConstants.h"
 
-#include <array>
-#include <utility>
+#include <unordered_map>
 
 namespace {
-using CommandEntry = std::pair<QString, CommandType>;
+using CommandLookup = std::unordered_map<std::string, CommandType>;
 
-const std::array<CommandEntry, 21>& commandLookup() {
-    static const std::array<CommandEntry, 21> commands{{
-        {CommandNames::Help, CommandType::Help},
-        {CommandNames::Register, CommandType::Register},
-        {CommandNames::Login, CommandType::Login},
-        {CommandNames::Logout, CommandType::Logout},
-        {CommandNames::Whoami, CommandType::Whoami},
-        {CommandNames::Status, CommandType::Status},
-        {CommandNames::Conversations, CommandType::Conversations},
-        {CommandNames::Inbox, CommandType::Inbox},
-        {CommandNames::Sent, CommandType::Sent},
-        {CommandNames::Msg, CommandType::Msg},
-        {CommandNames::Send, CommandType::Send},
-        {CommandNames::Read, CommandType::Read},
-        {CommandNames::Forward, CommandType::Forward},
-        {CommandNames::Revoke, CommandType::Revoke},
-        {CommandNames::Delete, CommandType::DeleteMessage},
-        {CommandNames::Download, CommandType::Download},
-        {CommandNames::Trust, CommandType::Trust},
-        {CommandNames::Verify, CommandType::Verify},
-        {CommandNames::Sync, CommandType::Sync},
-        {CommandNames::Cancel, CommandType::Cancel},
-        {CommandNames::Exit, CommandType::Exit},
-    }};
+std::string commandKey(const QString& name) {
+    return name.trimmed().toLower().toStdString();
+}
+
+const CommandLookup& commandLookup() {
+    static const CommandLookup commands{
+        {CommandNames::Help.toStdString(), CommandType::Help},
+        {CommandNames::Register.toStdString(), CommandType::Register},
+        {CommandNames::Login.toStdString(), CommandType::Login},
+        {CommandNames::Logout.toStdString(), CommandType::Logout},
+        {CommandNames::Whoami.toStdString(), CommandType::Whoami},
+        {CommandNames::Status.toStdString(), CommandType::Status},
+        {CommandNames::Conversations.toStdString(), CommandType::Conversations},
+        {CommandNames::Inbox.toStdString(), CommandType::Inbox},
+        {CommandNames::Sent.toStdString(), CommandType::Sent},
+        {CommandNames::Msg.toStdString(), CommandType::Msg},
+        {CommandNames::Send.toStdString(), CommandType::Send},
+        {CommandNames::Read.toStdString(), CommandType::Read},
+        {CommandNames::Forward.toStdString(), CommandType::Forward},
+        {CommandNames::Revoke.toStdString(), CommandType::Revoke},
+        {CommandNames::Delete.toStdString(), CommandType::DeleteMessage},
+        {CommandNames::Download.toStdString(), CommandType::Download},
+        {CommandNames::Trust.toStdString(), CommandType::Trust},
+        {CommandNames::Verify.toStdString(), CommandType::Verify},
+        {CommandNames::Sync.toStdString(), CommandType::Sync},
+        {CommandNames::Cancel.toStdString(), CommandType::Cancel},
+        {CommandNames::Exit.toStdString(), CommandType::Exit},
+    };
     return commands;
 }
 }
@@ -67,18 +70,16 @@ QString errorCodeToString(ErrorCode code) {
 QString commandTypeName(CommandType type) {
     for (const auto& [name, commandType] : commandLookup()) {
         if (commandType == type) {
-            return name;
+            return QString::fromStdString(name);
         }
     }
     return "unknown";
 }
 
 std::optional<CommandType> commandTypeFromName(const QString& name) {
-    const QString key = name.trimmed().toLower();
-    for (const auto& [commandName, commandType] : commandLookup()) {
-        if (commandName == key) {
-            return commandType;
-        }
+    const auto found = commandLookup().find(commandKey(name));
+    if (found != commandLookup().cend()) {
+        return found->second;
     }
     return std::nullopt;
 }

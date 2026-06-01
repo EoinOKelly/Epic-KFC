@@ -4,6 +4,8 @@
 #include "app/EventBus.h"
 #include "support/ClientConstants.h"
 
+#include <set>
+
 namespace {
 QString joinedLines(const std::vector<QString>& lines) {
     QString result;
@@ -14,6 +16,33 @@ QString joinedLines(const std::vector<QString>& lines) {
         result.append(line);
     }
     return result;
+}
+
+const std::set<CommandType>& zeroArgumentCommands() {
+    static const std::set<CommandType> commands{
+        CommandType::Help,
+        CommandType::Logout,
+        CommandType::Whoami,
+        CommandType::Status,
+        CommandType::Conversations,
+        CommandType::Inbox,
+        CommandType::Sent,
+        CommandType::Sync,
+        CommandType::Cancel,
+        CommandType::Exit,
+    };
+    return commands;
+}
+
+const std::set<CommandType>& oneArgumentCommands() {
+    static const std::set<CommandType> commands{
+        CommandType::Read,
+        CommandType::Revoke,
+        CommandType::DeleteMessage,
+        CommandType::Verify,
+        CommandType::Trust,
+    };
+    return commands;
 }
 }
 
@@ -74,28 +103,25 @@ void CommandRouter::handleCommandMode(const QString& line) {
             m_controller.beginMessageComposition(m_compositionRecipientUsername);
         }
         return;
-    case CommandType::Help:
-    case CommandType::Logout:
-    case CommandType::Whoami:
-    case CommandType::Status:
-    case CommandType::Conversations:
-    case CommandType::Inbox:
-    case CommandType::Sent:
-    case CommandType::Sync:
-    case CommandType::Cancel:
-    case CommandType::Exit:
+    default:
+        break;
+    }
+
+    if (zeroArgumentCommands().contains(command.type)) {
         if (commandHasArgumentCount(command, 0, 0)) {
             m_controller.handleCommand(command);
         }
         return;
-    case CommandType::Read:
-    case CommandType::Revoke:
-    case CommandType::DeleteMessage:
-    case CommandType::Verify:
+    }
+
+    if (oneArgumentCommands().contains(command.type)) {
         if (commandHasArgumentCount(command, 1, 1)) {
             m_controller.handleCommand(command);
         }
         return;
+    }
+
+    switch (command.type) {
     case CommandType::Forward:
         if (commandHasArgumentCount(command, 2, 2)) {
             m_controller.handleCommand(command);
@@ -103,11 +129,6 @@ void CommandRouter::handleCommandMode(const QString& line) {
         return;
     case CommandType::Download:
         if (commandHasArgumentCount(command, 2, 2)) {
-            m_controller.handleCommand(command);
-        }
-        return;
-    case CommandType::Trust:
-        if (commandHasArgumentCount(command, 1, 1)) {
             m_controller.handleCommand(command);
         }
         return;

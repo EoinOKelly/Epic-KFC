@@ -7,11 +7,11 @@
 #include <QJsonObject>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QStringList>
 #include <QUuid>
 
 #include <algorithm>
 #include <utility>
+#include <vector>
 
 namespace {
 constexpr int ConflictStatusCode = 409;
@@ -88,8 +88,19 @@ bool isAlreadyUploadedPreKeyError(const ClientError& error) {
     return isHttpError && isConflict && mentionsPreKey && mentionsExisting;
 }
 
+QString joinedStrings(const std::vector<QString>& values, const QString& separator) {
+    QString result;
+    for (const auto& value : values) {
+        if (!result.isEmpty()) {
+            result.append(separator);
+        }
+        result.append(value);
+    }
+    return result;
+}
+
 QString validationLocation(const QJsonArray& location) {
-    QStringList parts;
+    std::vector<QString> parts;
     for (const auto& part : location) {
         if (part.isString()) {
             parts.push_back(part.toString());
@@ -97,7 +108,7 @@ QString validationLocation(const QJsonArray& location) {
             parts.push_back(QString::number(part.toInt()));
         }
     }
-    return parts.join('.');
+    return joinedStrings(parts, ".");
 }
 
 QString validationDetailMessage(const QJsonValue& detail) {
@@ -108,7 +119,7 @@ QString validationDetailMessage(const QJsonValue& detail) {
         return {};
     }
 
-    QStringList messages;
+    std::vector<QString> messages;
     for (const auto& item : detail.toArray()) {
         const QJsonObject object = item.toObject();
         const QString location = validationLocation(object.value("loc").toArray());
@@ -119,7 +130,7 @@ QString validationDetailMessage(const QJsonValue& detail) {
             messages.push_back(message);
         }
     }
-    return messages.join("; ");
+    return joinedStrings(messages, "; ");
 }
 }
 
