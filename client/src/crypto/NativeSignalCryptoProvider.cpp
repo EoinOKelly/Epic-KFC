@@ -335,10 +335,7 @@ Result<EncryptedPayload> NativeSignalCryptoProvider::encrypt(
     const QByteArray dh1 = x25519Dh(fromBase64(senderDevice.identityPrivateKey), fromBase64(recipientBundle.signedPreKey));
     const QByteArray dh2 = x25519Dh(ephemeralKey.privateKey, fromBase64(recipientBundle.identityKey));
     const QByteArray dh3 = x25519Dh(ephemeralKey.privateKey, fromBase64(recipientBundle.signedPreKey));
-    QByteArray dhOutputs = dh1 + dh2 + dh3;
-    if (!recipientBundle.oneTimePreKey.isEmpty()) {
-        dhOutputs += x25519Dh(ephemeralKey.privateKey, fromBase64(recipientBundle.oneTimePreKey));
-    }
+    const QByteArray dhOutputs = dh1 + dh2 + dh3;
     const QByteArray sharedSecret = kdfX3dh(dhOutputs);
     const QByteArray key = firstRatchetMessageKey(sharedSecret, ratchetKey.privateKey, fromBase64(recipientBundle.signedPreKey));
     const QByteArray ratchetPublicKey = ratchetKey.publicKey;
@@ -374,7 +371,7 @@ Result<EncryptedPayload> NativeSignalCryptoProvider::encrypt(
 
     return Result<EncryptedPayload>::success({
         wrapWirePayload(root, counter, recipientBundle.registrationId),
-        recipientBundle.oneTimePreKeyId
+        std::nullopt
     });
 #endif
 }

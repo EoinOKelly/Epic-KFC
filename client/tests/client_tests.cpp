@@ -108,6 +108,7 @@ void testCryptoWireShape() {
 
     const auto encrypted = crypto.encrypt("alice", alice.value(), bundle, "hello");
     expect(encrypted.succeeded(), "crypto encrypts message");
+    expect(!encrypted.value().consumedOneTimePreKeyId.has_value(), "crypto leaves one-time pre-key unconsumed");
 
     const QJsonObject envelope = QJsonDocument::fromJson(encrypted.value().wirePayloadJson.toUtf8()).object();
     const QJsonObject wire = wireBodyFromEnvelope(encrypted.value().wirePayloadJson);

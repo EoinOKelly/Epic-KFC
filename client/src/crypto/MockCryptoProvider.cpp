@@ -106,7 +106,7 @@ Result<EncryptedPayload> MockCryptoProvider::encrypt(
 
     return Result<EncryptedPayload>::success({
         wrapWirePayload(root, counter, recipientBundle.registrationId),
-        recipientBundle.oneTimePreKeyId
+        std::nullopt
     });
 }
 
