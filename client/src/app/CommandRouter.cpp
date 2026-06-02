@@ -69,6 +69,10 @@ void CommandRouter::handleLine(const QString& line) {
 }
 
 void CommandRouter::handleCommandMode(const QString& line) {
+    if (line.trimmed().isEmpty()) {
+        return;
+    }
+
     const auto parsed = m_parser.parse(line);
     if (parsed.failed()) {
         emit m_events.commandFailed(parsed.error());

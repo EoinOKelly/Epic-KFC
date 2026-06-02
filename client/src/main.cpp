@@ -14,6 +14,7 @@
 #include "support/ClientConstants.h"
 
 #include <QCoreApplication>
+#include <QLoggingCategory>
 #include <QTextStream>
 
 #include <memory>
@@ -31,6 +32,7 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setApplicationName(AppText::ApplicationName);
     QCoreApplication::setOrganizationName(AppText::OrganizationName);
     registerClientMetaTypes();
+    QLoggingCategory::setFilterRules(QStringLiteral("qt.network.http2.warning=false\n"));
 
     StartupConfigParser configParser;
     const auto parsedConfig = configParser.parse(applicationArguments());
