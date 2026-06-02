@@ -220,6 +220,37 @@ async def test_message_send_creates_audit_log(
     assert event.success is True
 
 
+async def test_message_forward_creates_safe_lineage_audit_details(
+    audit_client: AsyncClient,
+    integration_db: AsyncSession,
+) -> None:
+    """Forward audit details include original message UUID but no payload data."""
+    sender, recipient = await _create_ready_users(
+        integration_db,
+        "ivan-forward",
+        "judy-forward",
+    )
+    new_recipient = await _create_user(integration_db, "kate-forward")
+    await _create_device_key(integration_db, new_recipient, 1)
+    await integration_db.commit()
+    original_id = (await _send_message(audit_client, sender, recipient)).json()["id"]
+
+    response = await _forward_message(
+        audit_client,
+        sender,
+        original_id,
+        new_recipient.id,
+    )
+    event = await _latest_event(integration_db, "message.forwarded")
+
+    assert response.status_code == 201
+    assert event.actor_user_id == sender.id
+    assert event.resource_id == UUID(response.json()["id"])
+    assert event.success is True
+    assert event.details == {"forwarded_from_message_id": original_id}
+    assert WIRE_PAYLOAD not in json.dumps(event.details)
+
+
 async def test_message_fetch_success_creates_audit_log(
     audit_client: AsyncClient,
     integration_db: AsyncSession,
@@ -560,6 +591,20 @@ async def _delete_message(client: AsyncClient, user, message_id: str) -> Respons
     """Delete a message through the route."""
     return await client.delete(
         f"/api/v1/messages/{message_id}",
+        headers=_auth_headers(user),
+    )
+
+
+async def _forward_message(
+    client: AsyncClient,
+    user,
+    message_id: str,
+    recipient_user_id,
+) -> Response:
+    """Forward a message through the route."""
+    return await client.post(
+        f"/api/v1/messages/{message_id}/forward",
+        json=_message_payload(recipient_user_id),
         headers=_auth_headers(user),
     )
 

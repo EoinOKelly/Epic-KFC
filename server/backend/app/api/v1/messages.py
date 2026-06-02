@@ -285,6 +285,7 @@ async def forward_message(
         success=True,
         resource_type="message",
         resource_id=message.id,
+        details={"forwarded_from_message_id": message_id},
     )
     return MessageResponse.model_validate(message)
 

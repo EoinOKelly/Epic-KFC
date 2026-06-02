@@ -49,6 +49,7 @@ class MessageResponse(ORMResponseModel):
     recipient_device_id: int
     wire_payload_json: str
     consumed_one_time_prekey_id: int | None
+    forwarded_from_message_id: UUID | None
     created_at: datetime
     access_revoked_at: datetime | None
     sender_deleted_at: datetime | None

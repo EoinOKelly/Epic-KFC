@@ -49,6 +49,31 @@ async def test_exact_wire_payload_string_is_preserved(
     assert message.wire_payload_json == ALT_WIRE_PAYLOAD
 
 
+async def test_create_forwarded_message_stores_original_message_lineage(
+    integration_db: AsyncSession,
+) -> None:
+    """Forwarded relay rows store server-controlled original message provenance."""
+    sender = await _create_user(integration_db, "forward-sender")
+    recipient = await _create_user(integration_db, "forward-recipient")
+    new_recipient = await _create_user(integration_db, "forward-new-recipient")
+    original = await _create_message(integration_db, sender.id, recipient.id)
+
+    forwarded = await message_repository.create_forwarded_message(
+        integration_db,
+        original_message_id=original.id,
+        sender_user_id=sender.id,
+        sender_device_id=1,
+        recipient_user_id=new_recipient.id,
+        recipient_device_id=1,
+        wire_payload_json=ALT_WIRE_PAYLOAD,
+    )
+
+    assert forwarded.id != original.id
+    assert forwarded.forwarded_from_message_id == original.id
+    assert forwarded.wire_payload_json == ALT_WIRE_PAYLOAD
+    assert forwarded.wire_payload_json != original.wire_payload_json
+
+
 async def test_message_model_has_no_plaintext_content_or_body_field() -> None:
     """The message table must not expose plaintext content columns."""
     column_names = set(Message.__table__.columns.keys())

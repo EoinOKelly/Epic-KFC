@@ -44,6 +44,19 @@ def test_derive_message_digest_changes_when_payload_changes() -> None:
     assert derive_message_digest(first) != derive_message_digest(second)
 
 
+def test_derive_message_digest_changes_when_forward_lineage_changes() -> None:
+    """Forward provenance is part of the canonical integrity digest."""
+    first = _message(WIRE_PAYLOAD)
+    second = _message(WIRE_PAYLOAD)
+    second.id = first.id
+    second.sender_user_id = first.sender_user_id
+    second.recipient_user_id = first.recipient_user_id
+    second.created_at = first.created_at
+    second.forwarded_from_message_id = uuid4()
+
+    assert derive_message_digest(first) != derive_message_digest(second)
+
+
 def _message(wire_payload_json: str) -> Message:
     """Build a minimal message model for digest tests."""
     return Message(

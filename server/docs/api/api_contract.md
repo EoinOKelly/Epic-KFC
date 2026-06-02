@@ -352,6 +352,10 @@ Requires access to the original message and stores a new encrypted payload for a
 
 A forwarded message is a new encrypted message row and receives its own pending blockchain anchor. The backend does not decrypt the original message or copy plaintext.
 
+The backend stores `forwarded_from_message_id` on the new row using the
+`message_id` path parameter after access to the original message has been
+verified. Clients must not submit `forwarded_from_message_id` in request bodies.
+
 ### `POST /api/v1/messages/{message_id}/revoke`
 
 Sender-only. Sets `access_revoked_at`, removing recipient access.

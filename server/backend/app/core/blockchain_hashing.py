@@ -33,6 +33,11 @@ def _canonical_message_bytes(message: Message) -> bytes:
     """Serialize stable message metadata for integrity hashing."""
     canonical = {
         "created_at": message.created_at.isoformat(),
+        "forwarded_from_message_id": (
+            str(message.forwarded_from_message_id)
+            if message.forwarded_from_message_id is not None
+            else None
+        ),
         "id": str(message.id),
         "recipient_device_id": message.recipient_device_id,
         "recipient_user_id": str(message.recipient_user_id),

@@ -34,6 +34,7 @@ class Message(Base):
         ),
         Index("ix_messages_sender_user_id_created_at", "sender_user_id", "created_at"),
         Index("ix_messages_access_revoked_at", "access_revoked_at"),
+        Index("ix_messages_forwarded_from_message_id", "forwarded_from_message_id"),
         Index("ix_messages_sender_deleted_at", "sender_deleted_at"),
         Index("ix_messages_recipient_deleted_at", "recipient_deleted_at"),
         Index("ix_messages_deleted_at", "deleted_at"),
@@ -59,6 +60,11 @@ class Message(Base):
     wire_payload_json: Mapped[str] = mapped_column(Text, nullable=False)
     consumed_one_time_prekey_id: Mapped[int | None] = mapped_column(
         Integer,
+        nullable=True,
+    )
+    forwarded_from_message_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("messages.id", ondelete="SET NULL"),
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -92,6 +98,11 @@ class Message(Base):
         "User",
         back_populates="received_messages",
         foreign_keys=[recipient_user_id],
+    )
+    forwarded_from: Mapped["Message | None"] = relationship(
+        "Message",
+        remote_side=[id],
+        foreign_keys=[forwarded_from_message_id],
     )
     blockchain_anchors: Mapped[list["BlockchainAnchor"]] = relationship(
         "BlockchainAnchor",

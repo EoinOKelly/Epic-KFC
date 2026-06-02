@@ -86,6 +86,7 @@ erDiagram
         int recipient_device_id
         text wire_payload_json
         int consumed_one_time_prekey_id
+        uuid forwarded_from_message_id FK
         datetime created_at
         datetime access_revoked_at
         datetime sender_deleted_at
@@ -248,6 +249,7 @@ Important columns:
 - `recipient_device_id`
 - `wire_payload_json`
 - `consumed_one_time_prekey_id`
+- `forwarded_from_message_id`
 - `access_revoked_at`
 - `sender_deleted_at`
 - `recipient_deleted_at`
@@ -258,6 +260,7 @@ Security relevance:
 - `wire_payload_json` is an opaque encrypted libsignal-v1 payload string.
 - No plaintext `body`, `content`, or `plaintext` column exists.
 - Sender identity is derived from the authenticated user in service logic, not client body data.
+- Forward provenance is stored as a nullable self-reference controlled by the backend after original-message access is verified.
 - Recipient visibility checks exclude revoked, recipient-deleted, and deleted rows.
 - Sender visibility checks exclude sender-deleted and deleted rows.
 
@@ -265,6 +268,7 @@ Indexes/constraints:
 
 - `ix_messages_recipient_user_id_device_id_created_at`
 - `ix_messages_sender_user_id_created_at`
+- `ix_messages_forwarded_from_message_id`
 - `ix_messages_access_revoked_at`
 - `ix_messages_sender_deleted_at`
 - `ix_messages_recipient_deleted_at`
@@ -293,7 +297,7 @@ Security relevance:
 - Stores hashes and transaction metadata only.
 - Message send and forward create pending anchors automatically.
 - `record_id` is derived as `keccak256("message:" + message_id)` for message anchors.
-- `digest` is derived from a canonical encrypted message record, including opaque `wire_payload_json` and metadata only.
+- `digest` is derived from a canonical encrypted message record, including opaque `wire_payload_json`, forwarding lineage when present, and metadata only.
 - No plaintext, private keys, raw tokens, or ratchet state are stored in anchor rows.
 - No FastAPI request handler submits blockchain transactions; a separate worker is expected to confirm pending anchors.
 

@@ -104,10 +104,14 @@ async def test_key_and_message_responses_do_not_expose_plaintext_or_private_fiel
     sender, recipient = await _create_ready_users(integration_db, "bob", "carol")
     device_response = await _put_device_key(sensitive_client, sender, 1)
     message_response = await _send_message(sensitive_client, sender, recipient)
-    response_text = (device_response.text + message_response.text).lower()
 
     assert device_response.status_code == 200
     assert message_response.status_code == 201
+    message_body = message_response.json()
+    encrypted_wire_payload = message_body.pop("wire_payload_json")
+    response_text = (device_response.text + json.dumps(message_body)).lower()
+
+    assert encrypted_wire_payload == WIRE_PAYLOAD
     for forbidden in ("private_key", "ratchet_state", "body", "content", "plaintext"):
         assert forbidden not in response_text
 

@@ -21,6 +21,7 @@ SAFE_DETAIL_KEYS = {
     "target_device_id",
     "one_time_prekey_included",
     "reason",
+    "forwarded_from_message_id",
 }
 
 

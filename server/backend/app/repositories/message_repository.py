@@ -17,6 +17,7 @@ async def create_message(
     recipient_device_id: int,
     wire_payload_json: str,
     consumed_one_time_prekey_id: int | None = None,
+    forwarded_from_message_id: UUID | None = None,
 ) -> Message:
     """Create an opaque relay message without committing the transaction."""
     message = Message(
@@ -26,6 +27,7 @@ async def create_message(
         recipient_device_id=recipient_device_id,
         wire_payload_json=wire_payload_json,
         consumed_one_time_prekey_id=consumed_one_time_prekey_id,
+        forwarded_from_message_id=forwarded_from_message_id,
     )
     db.add(message)
     await db.flush()
@@ -169,8 +171,7 @@ async def create_forwarded_message(
     wire_payload_json: str,
     consumed_one_time_prekey_id: int | None = None,
 ) -> Message:
-    """Create a forwarded message as a new opaque relay message row."""
-    _ = original_message_id
+    """Create a forwarded message as a new opaque relay row with lineage."""
     return await create_message(
         db,
         sender_user_id=sender_user_id,
@@ -179,6 +180,7 @@ async def create_forwarded_message(
         recipient_device_id=recipient_device_id,
         wire_payload_json=wire_payload_json,
         consumed_one_time_prekey_id=consumed_one_time_prekey_id,
+        forwarded_from_message_id=original_message_id,
     )
 
 

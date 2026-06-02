@@ -15,7 +15,7 @@ This document maps the backend implementation to the cybersecurity brief areas a
 | Vulnerable components | `pip-audit`, `bandit`, and `ruff` local checks; latest backend virtualenv and requirements audits found no known vulnerabilities | `backend/requirements.txt`, `docs/security/vulnerability_report.md`, `docs/security/security_test_results.md` |
 | Rate-limit abuse | Nginx IP-based edge limits plus FastAPI fixed-window per-IP/per-user limits for register, login, refresh, key upload/fetch, user lookup, message send/forward/read | `backend/deploy/nginx/epic-messaging-api.conf`, `backend/app/core/rate_limit.py`, `backend/app/api/deps.py`, `backend/tests/security/test_rate_limit_security.py` |
 | Auditability / repudiation | Best-effort audit logs for auth, key relay, message success, and message denial events | `backend/app/services/audit_service.py`, `backend/app/models/audit_log.py`, `backend/tests/integration/test_audit_logging.py` |
-| Blockchain integrity evidence | Automatic pending anchors for sent/forwarded encrypted messages; Keccak record IDs and digests; status/verify APIs without plaintext-on-chain | `backend/app/services/blockchain_anchor_service.py`, `backend/app/core/blockchain_hashing.py`, `backend/app/api/v1/blockchain.py` |
+| Blockchain integrity evidence | Automatic pending anchors for sent/forwarded encrypted messages; Keccak record IDs and digests include encrypted metadata and forward lineage; status/verify APIs without plaintext-on-chain | `backend/app/services/blockchain_anchor_service.py`, `backend/app/core/blockchain_hashing.py`, `backend/app/api/v1/blockchain.py` |
 | Network architecture | HTTPS public gateway, Nginx VM listener, FastAPI internal app port, PostgreSQL Docker localhost binding recommendation | `docs/architecture/network_architecture.md`, `docs/deployment/runbook.md` |
 | Pentest evidence | pytest security suite, optional TLS probe, optional curl/ZAP checks | `backend/tests/security`, `backend/scripts/check_tls_connection.py`, `docs/security/penetration_testing_plan.md`, `docs/security/security_test_results.md` |
 
@@ -23,6 +23,7 @@ This document maps the backend implementation to the cybersecurity brief areas a
 
 - The backend authenticates and authorizes API use, but client-side cryptography is responsible for encrypting/decrypting message content.
 - The backend stores `wire_payload_json` as opaque ciphertext and returns it only to authorized sender/recipient users.
+- Forwarded messages are new encrypted relay rows with server-controlled `forwarded_from_message_id` provenance after original-message access is verified.
 - Message send and forward create pending blockchain anchors automatically, but FastAPI does not call Sepolia or hold blockchain wallet keys.
 - The backend cannot prove that a ciphertext cryptographically used a claimed prekey; it only validates that the referenced prekey exists for the recipient device and was previously consumed.
 - Public TLS still terminates at the gateway/Nginx layer, while FastAPI can enforce HTTPS/HSTS using `ENFORCE_HTTPS`, `TRUST_X_FORWARDED_PROTO`, and `HSTS_ENABLED`.

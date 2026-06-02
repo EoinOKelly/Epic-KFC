@@ -111,9 +111,9 @@ Mitigation: Argon2id password hashes, generic auth errors, inactive-user rejecti
 
 ### Broken Access Control
 
-Threat: authenticated user accesses, revokes, deletes, forwards, or lists messages belonging to another user.
+Threat: authenticated user accesses, revokes, deletes, forwards, or lists messages belonging to another user, or spoofs forwarding provenance.
 
-Mitigation: protected routes use `get_current_user`; message service checks sender/recipient relationship; list queries are scoped by current user; sender-only revoke; per-user delete visibility.
+Mitigation: protected routes use `get_current_user`; message service checks sender/recipient relationship; list queries are scoped by current user; sender-only revoke; per-user delete visibility. Forward lineage is stored only by the backend after the original message access check.
 
 ### Injection
 
@@ -131,7 +131,7 @@ Mitigation: response schemas omit password/session hashes; user discovery hides 
 
 Threat: a party later disputes whether an encrypted message record existed or claims the backend changed it.
 
-Mitigation: message send and forward create pending `blockchain_anchors` records. The backend derives a contract-compatible `record_id` from the message ID and a Keccak digest from canonical encrypted message metadata. Status and verification endpoints expose anchor metadata only to authorized users.
+Mitigation: message send and forward create pending `blockchain_anchors` records. The backend derives a contract-compatible `record_id` from the message ID and a Keccak digest from canonical encrypted message metadata, including `forwarded_from_message_id` when present. Status and verification endpoints expose anchor metadata only to authorized users.
 
 Residual risk: FastAPI does not submit transactions. A separate worker must write pending anchors to Sepolia and update confirmation fields. The demo Solidity contract should restrict writes and prevent unintended updates before final deployment.
 

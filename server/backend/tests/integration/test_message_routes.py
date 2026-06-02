@@ -452,6 +452,7 @@ async def test_forward_creates_new_message_with_new_opaque_payload(
     body = response.json()
     assert response.status_code == 201
     assert body["id"] != original.json()["id"]
+    assert body["forwarded_from_message_id"] == original.json()["id"]
     assert body["wire_payload_json"] == NEW_WIRE_PAYLOAD
     assert body["wire_payload_json"] != original.json()["wire_payload_json"]
 

@@ -502,6 +502,7 @@ async def test_forwarding_stores_new_opaque_payload(
     )
 
     assert forwarded.id != original.id
+    assert forwarded.forwarded_from_message_id == original.id
     assert forwarded.wire_payload_json == NEW_WIRE_PAYLOAD
     assert forwarded.wire_payload_json != original.wire_payload_json
     assert "plaintext" not in forwarded.wire_payload_json.lower()

@@ -97,13 +97,18 @@ The backend never stores private keys or client-side Signal session state.
 
 The backend validates the wire payload structure but does not decrypt it.
 
+Forwarding follows the same direct-message path after an extra access check on
+the original message. The forwarded row stores a new client-supplied
+`wire_payload_json` and server-controlled `forwarded_from_message_id`, so
+provenance is auditable without copying plaintext or decrypting the original.
+
 ## Blockchain Anchor Flow
 
 The backend provides integrity-evidence metadata for encrypted messages:
 
 1. Message send or forward stores a new encrypted direct message.
 2. In the same database transaction, the service computes `record_id = keccak256("message:" + message_id)`.
-3. The service computes `digest = keccak256(canonical encrypted message record)`.
+3. The service computes `digest = keccak256(canonical encrypted message record)`, including forward lineage when present.
 4. The service creates or reuses a `blockchain_anchors` row with `status="pending"` and `chain="sepolia"`.
 5. The API returns quickly without contacting Sepolia.
 6. A separate worker/script should read pending anchors, call the Solidity contract, and update `transaction_hash`, `contract_address`, `status`, and `anchored_at`.
