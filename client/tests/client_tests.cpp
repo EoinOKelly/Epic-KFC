@@ -62,7 +62,15 @@ void testStartupConfig() {
     expect(defaultRealMode, "startup defaults to real mode with team API URL");
 
     const auto debug = parser.parse({"client", "--debug"});
-    expect(debug.succeeded() && debug.value().mode == ClientMode::Mock && debug.value().apiUrl.isEmpty(), "startup debug flag selects mock mode");
+    expect(debug.succeeded()
+        && debug.value().mode == ClientMode::Mock
+        && debug.value().apiUrl.isEmpty()
+        && debug.value().showRawErrors, "startup debug flag selects mock mode");
+
+    const auto debugErrors = parser.parse({"client", "--debug-errors"});
+    expect(debugErrors.succeeded()
+        && debugErrors.value().mode == ClientMode::Real
+        && debugErrors.value().showRawErrors, "startup debug errors flag enables raw error output");
 
     const auto real = parser.parse({"client", "--mode", "real", "--api-url", "https://example.test/api/v1", "--device-id", "2"});
     expect(real.succeeded() && real.value().mode == ClientMode::Real && real.value().deviceId == 2, "startup accepts real mode config");

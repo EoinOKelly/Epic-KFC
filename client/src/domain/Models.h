@@ -69,6 +69,7 @@ struct StartupConfig {
     int deviceId{DefaultDeviceId};
     QString statePath;
     bool statePathExplicit{false};
+    bool showRawErrors{false};
 };
 
 struct SlashCommand {
@@ -170,6 +171,32 @@ struct LocalMessage {
     QString readAt;
     QString localSenderCopyWirePayloadJson;
     MessageDirection direction{MessageDirection::Received};
+};
+
+struct BlockchainAnchor {
+    QString id;
+    QString messageId;
+    QString recordId;
+    QString digest;
+    QString merkleRoot;
+    QString transactionHash;
+    QString contractAddress;
+    QString chain;
+    QString status;
+    QString anchoredAt;
+};
+
+struct BlockchainVerification {
+    bool valid{false};
+    QString chain;
+    QString status;
+    QString anchorId;
+    QString messageId;
+    QString recordId;
+    QString digest;
+    QString transactionHash;
+    QString contractAddress;
+    QString verifiedAt;
 };
 
 struct ConversationSummary {

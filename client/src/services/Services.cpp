@@ -610,7 +610,55 @@ void MessageService::download(const QString& messageId, const QString& path) {
 }
 
 void MessageService::verify(const QString& messageId) {
-    emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorUnavailable).arg(messageId));
+    if (!requireSession()) {
+        return;
+    }
+
+    m_messageGateway.fetchMessageAnchor(m_sessionService.accessToken(), messageId, [this, messageId](Result<BlockchainAnchor> anchorResult) {
+        if (anchorResult.failed()) {
+            if (anchorResult.error().code == ErrorCode::NotFound) {
+                emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorUnavailable).arg(messageId));
+                return;
+            }
+            emit m_events.commandFailed(anchorResult.error());
+            return;
+        }
+
+        const BlockchainAnchor anchor = anchorResult.value();
+        const QString status = anchor.status.toLower();
+        if (status == "failed") {
+            emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorFailed).arg(messageId, anchor.chain));
+            return;
+        }
+        if (status != "confirmed") {
+            emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorPending).arg(messageId, anchor.status, anchor.chain));
+            return;
+        }
+
+        m_messageGateway.verifyAnchor(m_sessionService.accessToken(), anchor, [this, messageId](Result<BlockchainVerification> verificationResult) {
+            if (verificationResult.failed()) {
+                emit m_events.commandFailed(verificationResult.error());
+                return;
+            }
+
+            const BlockchainVerification verification = verificationResult.value();
+            if (!verification.valid) {
+                emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorMismatch).arg(messageId));
+                return;
+            }
+
+            if (!verification.transactionHash.isEmpty()) {
+                emit m_events.fidelityStatusUpdated(
+                    messageId,
+                    QString(AppText::AnchorVerifiedWithTransaction).arg(messageId, verification.chain, verification.status, verification.transactionHash));
+                return;
+            }
+
+            emit m_events.fidelityStatusUpdated(
+                messageId,
+                QString(AppText::AnchorVerified).arg(messageId, verification.chain, verification.status));
+        });
+    });
 }
 
 bool MessageService::requireSession() {

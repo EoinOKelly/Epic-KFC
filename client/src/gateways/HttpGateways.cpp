@@ -58,6 +58,10 @@ QString messagePath(const QString& suffix) {
     return QString("/messages%1").arg(suffix);
 }
 
+QString blockchainPath(const QString& suffix) {
+    return QString("/blockchain%1").arg(suffix);
+}
+
 QString userPath(const QString& suffix) {
     return QString("/users%1").arg(suffix);
 }
@@ -297,6 +301,9 @@ ClientError HttpClient::errorForReply(QNetworkReply& reply, const QByteArray& re
     }
     if (statusCode == 401) {
         return {ErrorCode::AuthRequired, QString("HTTP %1: %2").arg(statusCode).arg(message)};
+    }
+    if (statusCode == 404) {
+        return {ErrorCode::NotFound, QString("HTTP %1: %2").arg(statusCode).arg(message)};
     }
     if (statusCode > 0) {
         return {ErrorCode::HttpError, QString("HTTP %1: %2").arg(statusCode).arg(message)};
@@ -586,6 +593,33 @@ void HttpMessageGateway::deleteMessage(const QString& accessToken, const QString
     });
 }
 
+void HttpMessageGateway::fetchMessageAnchor(const QString& accessToken, const QString& messageId, GatewayCallback<BlockchainAnchor> callback) {
+    m_client.get(messagePath(QString("/%1/anchor").arg(messageId)), accessToken, [this, callback = std::move(callback)](Result<QJsonDocument> result) mutable {
+        if (result.failed()) {
+            callback(Result<BlockchainAnchor>::failure(result.error()));
+            return;
+        }
+        callback(Result<BlockchainAnchor>::success(anchorFromJson(result.value().object())));
+    });
+}
+
+void HttpMessageGateway::verifyAnchor(const QString& accessToken, const BlockchainAnchor& anchor, GatewayCallback<BlockchainVerification> callback) {
+    QJsonObject body{
+        {"digest", anchor.digest},
+        {"record_id", anchor.recordId},
+        {"merkle_root", anchor.merkleRoot.isEmpty() ? QJsonValue::Null : QJsonValue(anchor.merkleRoot)},
+        {"transaction_hash", anchor.transactionHash.isEmpty() ? QJsonValue::Null : QJsonValue(anchor.transactionHash)},
+        {"chain", anchor.chain}
+    };
+    m_client.post(blockchainPath("/verify"), accessToken, body, [this, callback = std::move(callback)](Result<QJsonDocument> result) mutable {
+        if (result.failed()) {
+            callback(Result<BlockchainVerification>::failure(result.error()));
+            return;
+        }
+        callback(Result<BlockchainVerification>::success(verificationFromJson(result.value().object())));
+    });
+}
+
 QJsonObject HttpMessageGateway::sendBodyFor(const LocalMessage& draft, std::optional<int> consumedPreKeyId) const {
     QJsonObject body{
         {"sender_device_id", draft.senderDeviceId},
@@ -627,4 +661,34 @@ MessageList HttpMessageGateway::messageListFromJson(const QJsonArray& array, Mes
         messages.push_back(messageFromJson(value.toObject(), direction));
     }
     return messages;
+}
+
+BlockchainAnchor HttpMessageGateway::anchorFromJson(const QJsonObject& object) const {
+    return {
+        object.value("id").toString(),
+        object.value("message_id").toString(),
+        object.value("record_id").toString(),
+        object.value("digest").toString(),
+        object.value("merkle_root").toString(),
+        object.value("transaction_hash").toString(),
+        object.value("contract_address").toString(),
+        object.value("chain").toString(),
+        object.value("status").toString(),
+        object.value("anchored_at").toString()
+    };
+}
+
+BlockchainVerification HttpMessageGateway::verificationFromJson(const QJsonObject& object) const {
+    return {
+        object.value("valid").toBool(false),
+        object.value("chain").toString(),
+        object.value("status").toString(),
+        object.value("anchor_id").toString(),
+        object.value("message_id").toString(),
+        object.value("record_id").toString(),
+        object.value("digest").toString(),
+        object.value("transaction_hash").toString(),
+        object.value("contract_address").toString(),
+        object.value("verified_at").toString()
+    };
 }

@@ -97,11 +97,15 @@ public:
     void forwardMessage(const QString& accessToken, const QString& originalMessageId, const LocalMessage& draft, std::optional<int> consumedPreKeyId, GatewayCallback<LocalMessage> callback) override;
     void revokeMessage(const QString& accessToken, const QString& messageId, GatewayCallback<LocalMessage> callback) override;
     void deleteMessage(const QString& accessToken, const QString& messageId, GatewayCallback<bool> callback) override;
+    void fetchMessageAnchor(const QString& accessToken, const QString& messageId, GatewayCallback<BlockchainAnchor> callback) override;
+    void verifyAnchor(const QString& accessToken, const BlockchainAnchor& anchor, GatewayCallback<BlockchainVerification> callback) override;
 
 private:
     QJsonObject sendBodyFor(const LocalMessage& draft, std::optional<int> consumedPreKeyId) const;
     LocalMessage messageFromJson(const QJsonObject& object, MessageDirection direction) const;
     MessageList messageListFromJson(const QJsonArray& array, MessageDirection direction) const;
+    BlockchainAnchor anchorFromJson(const QJsonObject& object) const;
+    BlockchainVerification verificationFromJson(const QJsonObject& object) const;
 
     HttpClient& m_client;
 };

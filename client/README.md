@@ -24,7 +24,9 @@ The client starts in real mode by default against the team HTTPS endpoint:
 - `client`: FastAPI integration over TLS using
   `https://kfc.theburkenator.com/api/v1`.
 - `client --debug`: local demo mode with mock gateways and mock crypto-shaped
-  payloads.
+  payloads. This also enables raw diagnostic errors.
+- `client --debug-errors`: real mode with technical HTTP/Qt/backend details shown
+  in error output for troubleshooting.
 - `client --api-url https://host/api/v1`: real mode with an overridden backend
   URL.
 
@@ -95,6 +97,7 @@ Optional:
 ```bash
 --state-path path/to/client-state.json
 --mode mock|real
+--debug-errors
 ```
 
 In real mode, the default local state is split by authenticated user so switching
@@ -118,7 +121,7 @@ All actions start with `/`.
 /sent
 /msg <username>
 /send <username>
-/read <messageId>
+/read <username> [page]
 /forward <messageId> <username>
 /revoke <messageId>
 /delete <messageId>
@@ -137,12 +140,22 @@ Mock mode resolves usernames locally. Real mode resolves usernames through the
 production `GET /api/v1/users/by-username/{username}` endpoint and then uses the
 returned user/device metadata for trust and message commands.
 
+`/verify <messageId>` checks the backend blockchain anchor metadata for that
+message. If the anchor is pending or failed, the client reports that plainly. If
+the anchor is confirmed, the client calls `POST /api/v1/blockchain/verify` with
+the stored digest metadata and reports whether the backend verification passed.
+The standalone blockchain fidelity UI remains the place to recompute a digest
+from pasted plaintext/conversation content.
+
 ## Security Notes
 
 - Real mode uses `HttpAuthGateway`, `HttpKeyGateway`, and `HttpMessageGateway`
   against `/auth/*`, `/keys/*`, and `/messages/*`.
 - The HTTP client retries one protected request after a `401` by calling
   `/auth/refresh`, then persists rotated tokens through the encrypted local store.
+- Normal mode hides raw HTTP, Qt, and backend validation details behind safe
+  user-facing error messages. Use `--debug-errors` only when collecting technical
+  diagnostics.
 - Native crypto uses OpenSSL for X25519, Ed25519, HKDF-SHA256, HMAC-SHA256,
   AES-256-GCM, and CSPRNG output.
 - Mock mode uses `MockCryptoProvider`; it is intentionally not security code.

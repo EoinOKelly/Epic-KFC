@@ -2,9 +2,10 @@
 
 #include "support/ClientConstants.h"
 
-ConsolePresenter::ConsolePresenter(EventBus& events, QObject* parent)
+ConsolePresenter::ConsolePresenter(EventBus& events, bool showRawErrors, QObject* parent)
     : QObject(parent)
-    , m_output(stdout) {
+    , m_output(stdout)
+    , m_showRawErrors(showRawErrors) {
     connect(&events, &EventBus::operationStarted, this, [this](const QString& message) {
         printOperation(message);
     });
@@ -76,8 +77,11 @@ ConsolePresenter::ConsolePresenter(EventBus& events, QObject* parent)
             const QString direction = entry.message.direction == MessageDirection::Sent ? "->" : "<-";
             const QString timestamp = entry.message.createdAt.toString(Qt::ISODate);
             if (entry.decryptError.has_value()) {
+                const QString decryptError = m_showRawErrors
+                    ? entry.decryptError->message
+                    : safeErrorMessage(*entry.decryptError);
                 m_output << QString(AppText::ConversationLogDecryptFailed)
-                                .arg(timestamp, direction, entry.message.id, entry.decryptError->message)
+                                .arg(timestamp, direction, entry.message.id, decryptError)
                          << '\n';
                 continue;
             }
@@ -150,6 +154,38 @@ void ConsolePresenter::printMessage(const QString& message) {
 }
 
 void ConsolePresenter::printError(const ClientError& error) {
-    m_output << AppText::ErrorPrefix << errorCodeToString(error.code) << AppText::ErrorSeparator << error.message << '\n';
+    const QString message = m_showRawErrors ? error.message : safeErrorMessage(error);
+    m_output << AppText::ErrorPrefix << errorCodeToString(error.code) << AppText::ErrorSeparator << message << '\n';
     printPrompt();
+}
+
+QString ConsolePresenter::safeErrorMessage(const ClientError& error) const {
+    switch (error.code) {
+    case ErrorCode::InvalidCommand:
+        return error.message;
+    case ErrorCode::InvalidConfiguration:
+        return AppText::InvalidConfigurationError + AppText::DebugErrorHint;
+    case ErrorCode::AuthRequired:
+        return AppText::AuthRequiredError + AppText::DebugErrorHint;
+    case ErrorCode::NetworkError:
+        if (error.message == AppText::HttpRequestTimedOut) {
+            return AppText::HttpRequestTimedOut;
+        }
+        return AppText::NetworkError + AppText::DebugErrorHint;
+    case ErrorCode::TlsError:
+        return AppText::TlsError + AppText::DebugErrorHint;
+    case ErrorCode::HttpError:
+        return AppText::HttpError + AppText::DebugErrorHint;
+    case ErrorCode::CryptoError:
+        return AppText::CryptoError + AppText::DebugErrorHint;
+    case ErrorCode::TrustError:
+        return AppText::TrustError + AppText::DebugErrorHint;
+    case ErrorCode::StorageError:
+        return AppText::StorageError + AppText::DebugErrorHint;
+    case ErrorCode::NotFound:
+        return AppText::NotFoundError + AppText::DebugErrorHint;
+    case ErrorCode::OperationFailed:
+        return AppText::OperationFailedError + AppText::DebugErrorHint;
+    }
+    return AppText::OperationFailedError + AppText::DebugErrorHint;
 }

@@ -45,7 +45,13 @@ Result<StartupConfig> StartupConfigParser::parse(const std::vector<QString>& arg
             }
             debugMode = true;
             config.mode = ClientMode::Mock;
+            config.showRawErrors = true;
             config.apiUrl.clear();
+            continue;
+        }
+
+        if (argument == AppText::DebugErrorsFlag) {
+            config.showRawErrors = true;
             continue;
         }
 

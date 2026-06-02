@@ -14,6 +14,7 @@
 #include "support/ClientConstants.h"
 
 #include <QCoreApplication>
+#include <QDebug>
 #include <QLoggingCategory>
 #include <QTextStream>
 
@@ -25,6 +26,13 @@ std::vector<QString> applicationArguments() {
     const QStringList qtArguments = QCoreApplication::arguments();
     return {qtArguments.cbegin(), qtArguments.cend()};
 }
+
+void quietQtMessageHandler(QtMsgType type, const QMessageLogContext&, const QString& message) {
+    if (type == QtWarningMsg) {
+        return;
+    }
+    QTextStream(stderr) << message << '\n';
+}
 }
 
 int main(int argc, char* argv[]) {
@@ -32,7 +40,6 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setApplicationName(AppText::ApplicationName);
     QCoreApplication::setOrganizationName(AppText::OrganizationName);
     registerClientMetaTypes();
-    QLoggingCategory::setFilterRules(QStringLiteral("qt.network.http2.warning=false\n"));
 
     StartupConfigParser configParser;
     const auto parsedConfig = configParser.parse(applicationArguments());
@@ -41,6 +48,10 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     const StartupConfig config = parsedConfig.value();
+    if (!config.showRawErrors) {
+        qInstallMessageHandler(quietQtMessageHandler);
+        QLoggingCategory::setFilterRules(QStringLiteral("qt.network.warning=false\nqt.network.http2.warning=false\n"));
+    }
 
     EventBus events;
     JsonLocalStore store(config.statePath, config.mode == ClientMode::Real);
@@ -126,7 +137,7 @@ int main(int argc, char* argv[]) {
     MessageService messageService(events, *messageGateway, *userDirectoryGateway, *cryptoProvider, store, sessionService, keyService, config.deviceId);
     ClientController controller(events, config, sessionService, keyService, messageService);
     CommandRouter router(events, controller);
-    ConsolePresenter presenter(events);
+    ConsolePresenter presenter(events, config.showRawErrors);
     ConsoleInputWorker inputWorker;
 
     QObject::connect(&inputWorker, &ConsoleInputWorker::lineRead, &router, &CommandRouter::handleLine);

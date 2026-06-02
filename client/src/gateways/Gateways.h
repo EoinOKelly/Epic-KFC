@@ -46,6 +46,8 @@ public:
     virtual void forwardMessage(const QString& accessToken, const QString& originalMessageId, const LocalMessage& draft, std::optional<int> consumedPreKeyId, GatewayCallback<LocalMessage> callback) = 0;
     virtual void revokeMessage(const QString& accessToken, const QString& messageId, GatewayCallback<LocalMessage> callback) = 0;
     virtual void deleteMessage(const QString& accessToken, const QString& messageId, GatewayCallback<bool> callback) = 0;
+    virtual void fetchMessageAnchor(const QString& accessToken, const QString& messageId, GatewayCallback<BlockchainAnchor> callback) = 0;
+    virtual void verifyAnchor(const QString& accessToken, const BlockchainAnchor& anchor, GatewayCallback<BlockchainVerification> callback) = 0;
 };
 
 class ICryptoProvider {
@@ -106,6 +108,8 @@ public:
     void forwardMessage(const QString& accessToken, const QString& originalMessageId, const LocalMessage& draft, std::optional<int> consumedPreKeyId, GatewayCallback<LocalMessage> callback) override;
     void revokeMessage(const QString& accessToken, const QString& messageId, GatewayCallback<LocalMessage> callback) override;
     void deleteMessage(const QString& accessToken, const QString& messageId, GatewayCallback<bool> callback) override;
+    void fetchMessageAnchor(const QString& accessToken, const QString& messageId, GatewayCallback<BlockchainAnchor> callback) override;
+    void verifyAnchor(const QString& accessToken, const BlockchainAnchor& anchor, GatewayCallback<BlockchainVerification> callback) override;
 
 private:
     LocalMessage withServerFields(LocalMessage draft);

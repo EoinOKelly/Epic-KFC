@@ -265,6 +265,48 @@ void MockMessageGateway::deleteMessage(const QString& accessToken, const QString
     });
 }
 
+void MockMessageGateway::fetchMessageAnchor(const QString& accessToken, const QString& messageId, GatewayCallback<BlockchainAnchor> callback) {
+    later(this, [accessToken, messageId, callback = std::move(callback)]() mutable {
+        if (accessToken.isEmpty()) {
+            callback(Result<BlockchainAnchor>::failure({ErrorCode::AuthRequired, AppText::AuthRequired}));
+            return;
+        }
+        callback(Result<BlockchainAnchor>::success({
+            QString("mock-anchor-%1").arg(messageId),
+            messageId,
+            QString("mock-record-%1").arg(messageId),
+            "0xmockdigest",
+            {},
+            {},
+            {},
+            "mock-chain",
+            "pending",
+            {}
+        }));
+    });
+}
+
+void MockMessageGateway::verifyAnchor(const QString& accessToken, const BlockchainAnchor& anchor, GatewayCallback<BlockchainVerification> callback) {
+    later(this, [accessToken, anchor, callback = std::move(callback)]() mutable {
+        if (accessToken.isEmpty()) {
+            callback(Result<BlockchainVerification>::failure({ErrorCode::AuthRequired, AppText::AuthRequired}));
+            return;
+        }
+        callback(Result<BlockchainVerification>::success({
+            anchor.status == "confirmed",
+            anchor.chain,
+            anchor.status,
+            anchor.id,
+            anchor.messageId,
+            anchor.recordId,
+            anchor.digest,
+            anchor.transactionHash,
+            anchor.contractAddress,
+            QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)
+        }));
+    });
+}
+
 LocalMessage MockMessageGateway::withServerFields(LocalMessage draft) {
     draft.id = QString("mock-message-%1").arg(m_nextMessageNumber++);
     draft.createdAt = QDateTime::currentDateTimeUtc();
