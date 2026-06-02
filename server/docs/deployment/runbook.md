@@ -226,6 +226,39 @@ source .venv/bin/activate
 .venv/bin/python scripts/check_tls_connection.py kfc.theburkenator.com --port 443
 ```
 
+## Blockchain Anchor Operations
+
+The FastAPI backend creates pending `blockchain_anchors` rows automatically when direct messages are sent or forwarded. The API server does not submit transactions to Sepolia and should not hold blockchain wallet private keys.
+
+Useful database checks:
+
+```bash
+docker exec -it epic-postgres psql -U secure_app_user -d secure_messages
+```
+
+```sql
+SELECT id, message_id, record_id, digest, status, transaction_hash, anchored_at
+FROM blockchain_anchors
+ORDER BY created_at DESC
+LIMIT 20;
+```
+
+Expected message-send state before a blockchain worker runs:
+
+```text
+status = pending
+transaction_hash = NULL
+anchored_at = NULL
+```
+
+A separate worker/script should:
+
+1. Read pending anchors from PostgreSQL.
+2. Call the Solidity contract with the backend-generated `record_id` and `digest` or future `merkle_root`.
+3. Update `status`, `transaction_hash`, `contract_address`, and `anchored_at`.
+
+The current sibling `blockchain` folder contains Solidity/demo scripts. Those scripts are not called by FastAPI automatically.
+
 ## Test Commands On VM
 
 ```bash

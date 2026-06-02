@@ -7,8 +7,9 @@ This plan covers the FastAPI backend for the secure messaging project. The backe
 ## Out Of Scope
 
 - Frontend testing
-- Blockchain transaction submission
-- Smart contract testing
+- Blockchain worker implementation
+- Live blockchain transaction submission
+- Smart contract security testing
 - Message encryption or decryption
 - Signal library internals
 - Group chats
@@ -42,6 +43,10 @@ This plan covers the FastAPI backend for the secure messaging project. The backe
 - `POST /api/v1/messages/{message_id}/revoke`
 - `DELETE /api/v1/messages/{message_id}`
 - `GET /api/v1/users/by-username/{username}`
+- `GET /api/v1/messages/{message_id}/anchor`
+- `POST /api/v1/blockchain/anchors`
+- `GET /api/v1/blockchain/anchors/{anchor_id}`
+- `POST /api/v1/blockchain/verify`
 
 ## Tools
 
@@ -63,6 +68,7 @@ This plan covers the FastAPI backend for the secure messaging project. The backe
 - Sensitive data exposure
 - Rate limiting and API abuse
 - Audit logging evidence
+- Blockchain anchor metadata access and verification
 - Network/TLS evidence
 - Vulnerable component scan evidence
 
@@ -76,6 +82,9 @@ This plan covers the FastAPI backend for the secure messaging project. The backe
 - Injection-style payloads do not bypass authentication and do not expose database errors.
 - Responses and audit logs do not expose passwords, hashes, tokens, private keys, or plaintext.
 - Audit logs do not store encrypted `wire_payload_json`; authorized message responses intentionally return encrypted `wire_payload_json` to sender/recipient users.
+- Message send and forward create pending blockchain anchors without putting plaintext on chain.
+- Users cannot fetch anchor metadata for messages they cannot access.
+- Blockchain verification checks backend confirmation metadata and does not require FastAPI to contact Sepolia live.
 - Repeated abusive requests return `429 Too Many Requests` with `Retry-After`.
 - Public TLS probe verifies hostname and certificate chain.
 - Dependency scan findings are recorded and remediated or accepted with rationale.

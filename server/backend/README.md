@@ -1,8 +1,8 @@
 # Secure Messaging API Backend
 
-FastAPI backend for the Epic KFC secure messaging project. The backend authenticates users, issues short-lived access tokens, rotates refresh tokens, stores public device key material, stores public one-time prekeys, relays encrypted direct 1:1 message payloads, enforces object-level access control, records audit events, and applies basic rate limiting.
+FastAPI backend for the Epic KFC secure messaging project. The backend authenticates users, issues short-lived access tokens, rotates refresh tokens, stores public device key material, stores public one-time prekeys, relays encrypted direct 1:1 message payloads, enforces object-level access control, creates pending blockchain integrity anchors, records audit events, and applies basic rate limiting.
 
-The backend is an opaque relay. It does not decrypt messages, store plaintext message bodies, store private keys, store Signal ratchet/session state, or submit blockchain transactions.
+The backend is an opaque relay. It does not decrypt messages, store plaintext message bodies, store private keys, store Signal ratchet/session state, or submit blockchain transactions from FastAPI request handlers.
 
 Public backend documentation URL:
 
@@ -19,6 +19,7 @@ https://kfc.theburkenator.com/docs
 - Alembic migrations
 - Argon2id password hashing through `argon2-cffi`
 - JWT access tokens through `PyJWT`
+- Ethereum Keccak hashing through `eth-hash[pycryptodome]`
 - pytest, httpx ASGI transport, ruff, bandit, pip-audit
 
 ## Environment Variables
@@ -143,6 +144,24 @@ pytest tests/unit tests/integration tests/security -q
 
 The integration and security tests require `TEST_DATABASE_URL` to point at a migrated PostgreSQL database whose name contains `test`. The fixture refuses to run if `TEST_DATABASE_URL` equals `DATABASE_URL`.
 
+## Blockchain Anchoring
+
+Message send and forward flows automatically create a pending `blockchain_anchors` row in the same database transaction as the new encrypted message. The backend computes:
+
+- `record_id = keccak256("message:" + message_id)`
+- `digest = keccak256(canonical encrypted message record)`
+
+The canonical record contains message IDs, sender/recipient IDs, device IDs, timestamp, and the opaque encrypted `wire_payload_json`. It does not contain plaintext, private keys, raw tokens, or client ratchet state.
+
+Available blockchain metadata endpoints:
+
+- `GET /api/v1/messages/{message_id}/anchor`
+- `POST /api/v1/blockchain/anchors`
+- `GET /api/v1/blockchain/anchors/{anchor_id}`
+- `POST /api/v1/blockchain/verify`
+
+FastAPI does not call Sepolia, hold a wallet private key, or call the Solidity contract directly. A separate worker/script still needs to read pending anchors, call the blockchain contract, and update `transaction_hash`, `contract_address`, `status`, and `anchored_at`.
+
 ## Documentation Map
 
 - Backend architecture: `../docs/architecture/backend_architecture.md`
@@ -163,5 +182,5 @@ The integration and security tests require `TEST_DATABASE_URL` to point at a mig
 - Refresh sessions are stored in PostgreSQL rather than Redis.
 - FastAPI does not currently terminate TLS itself; public HTTPS is provided by the gateway/proxy layer.
 - The backend stores and returns opaque encrypted `wire_payload_json` to authorized users, but cannot prove cryptographically that a payload used a claimed one-time prekey.
-- `blockchain_anchors` exists as a table and schema, but there is no API route that submits blockchain transactions.
+- Blockchain anchoring currently creates pending database evidence automatically, but the Sepolia submission/confirmation worker is still a separate missing deployment piece.
 - There is no admin audit-log viewer route.

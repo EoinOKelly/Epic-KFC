@@ -2,9 +2,9 @@
 
 ## System Overview
 
-The backend is an authenticated relay for direct 1:1 encrypted messaging. It stores account records, refresh-session hashes, public device keys, public one-time prekeys, opaque encrypted `wire_payload_json`, message visibility metadata, and audit events.
+The backend is an authenticated relay for direct 1:1 encrypted messaging. It stores account records, refresh-session hashes, public device keys, public one-time prekeys, opaque encrypted `wire_payload_json`, message visibility metadata, blockchain anchor metadata, and audit events.
 
-The backend does not decrypt messages, call Signal cryptography, store private keys, store plaintext message content, store ratchet/session state, support group chats, or submit blockchain transactions.
+The backend does not decrypt messages, call Signal cryptography, store private keys, store plaintext message content, store ratchet/session state, support group chats, or submit blockchain transactions from FastAPI request handlers.
 
 ## Assets
 
@@ -19,6 +19,7 @@ The backend does not decrypt messages, call Signal cryptography, store private k
 - Public one-time prekeys
 - Opaque encrypted relay payloads
 - Message metadata and visibility timestamps
+- Blockchain anchor record IDs, digests, Merkle roots, transaction hashes, and statuses
 - Audit logs
 - PostgreSQL database records
 - VM deployment configuration
@@ -47,6 +48,8 @@ The backend does not decrypt messages, call Signal cryptography, store private k
 - Verified JWT subject to object-level authorization checks
 - Client cryptography package to backend relay storage
 - Backend audit/event data to operator review
+- FastAPI pending anchor metadata to a future blockchain worker
+- Blockchain worker to Sepolia/Solidity contract
 
 ## Attack Surfaces
 
@@ -60,6 +63,7 @@ The backend does not decrypt messages, call Signal cryptography, store private k
 - One-time prekey upload route
 - Prekey bundle fetch route
 - Message send/list/fetch/forward/revoke/delete routes
+- Blockchain anchor status/create/verify routes
 - Pydantic validation and error reporting
 - JWT Bearer parsing
 - Refresh-token rotation database state
@@ -76,6 +80,7 @@ The backend does not decrypt messages, call Signal cryptography, store private k
 | Spoofing | Forged JWT or sender ID spoofing | JWT signature, expiry, required claim, and token type validation; sender identity comes from `current_user.id` only |
 | Tampering | Non-sender revokes a message | Service-layer sender/recipient checks and safe 404 responses for inaccessible objects |
 | Repudiation | User denies auth/key/message action | Audit logs for auth success/failure, key relay events, message success events, and denied message operations |
+| Repudiation | User disputes whether an encrypted message record existed at a time | Pending blockchain anchors derive Keccak hashes from canonical encrypted records; a separate worker can confirm them on Sepolia |
 | Information disclosure | Password hashes, tokens, plaintext, private keys, or audit secrets leak | Response schemas, validation sanitization, audit detail allowlist, no plaintext/private key storage |
 | Denial of service | Brute-force login or message spam | In-memory fixed-window rate limits and strict request size limits |
 | Elevation of privilege | User fetches another user's message | Current-user dependency and repository visibility predicates |
@@ -122,6 +127,14 @@ Threat: API responses or audit logs expose passwords, password hashes, refresh-t
 
 Mitigation: response schemas omit password/session hashes; user discovery hides email/key material; audit details are allowlisted; validation errors are sanitized. Message responses intentionally include opaque encrypted `wire_payload_json` only for authorized users.
 
+### Blockchain Integrity Evidence
+
+Threat: a party later disputes whether an encrypted message record existed or claims the backend changed it.
+
+Mitigation: message send and forward create pending `blockchain_anchors` records. The backend derives a contract-compatible `record_id` from the message ID and a Keccak digest from canonical encrypted message metadata. Status and verification endpoints expose anchor metadata only to authorized users.
+
+Residual risk: FastAPI does not submit transactions. A separate worker must write pending anchors to Sepolia and update confirmation fields. The demo Solidity contract should restrict writes and prevent unintended updates before final deployment.
+
 ### Honest-But-Curious Server
 
 Threat: backend/operator can inspect database contents.
@@ -160,6 +173,7 @@ Residual risk: compromised clients can read plaintext before encryption/after de
 - Base64 validation for public key material.
 - Async SQLAlchemy ORM queries instead of string-built SQL.
 - Audit log sanitization.
+- Automatic pending blockchain anchors for encrypted message records.
 - Rate limiting.
 - Basic security headers.
 - CORS configuration hardening.
@@ -174,6 +188,8 @@ Residual risk: compromised clients can read plaintext before encryption/after de
 - Public TLS terminates at the gateway, not inside FastAPI.
 - FastAPI does not currently set HSTS or enforce HTTPS.
 - Backend cannot prove ciphertext cryptographically used a claimed prekey.
+- Blockchain anchors remain pending until an external worker confirms them on Sepolia.
+- The current demo Solidity contract must be hardened before production-style deployment.
 - Backend does not protect against a fully compromised client device.
 - No admin audit-log viewer.
 - Secret management depends on deployment environment handling.

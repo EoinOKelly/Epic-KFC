@@ -61,6 +61,7 @@ Common safe errors:
 | `404` | `Target device not found` | Missing/inactive target user or device for prekey bundle |
 | `409` | `Username or email is unavailable` | Duplicate registration |
 | `409` | `One-time prekey already exists` | Duplicate prekey for same user/device/prekey ID |
+| `404` | `Anchor not found` | Missing blockchain anchor or anchor linked to a message hidden from current user |
 | `429` | `Too many requests` | Rate limit exceeded |
 
 ## Auth Endpoints
@@ -288,6 +289,7 @@ Rules:
 - Recipient user must exist and be active.
 - `consumed_one_time_prekey_id`, when present, must refer to a recipient/device prekey already marked used.
 - `wire_payload_json` maximum size is 64 KiB.
+- A pending blockchain anchor is created automatically in the same transaction as the message.
 
 `wire_payload_json` must contain a JSON object matching:
 
@@ -321,9 +323,34 @@ Sender-deleted and globally deleted messages are excluded.
 
 Returns a message only if the current user is the sender or visible recipient.
 
+### `GET /api/v1/messages/{message_id}/anchor`
+
+Returns the latest blockchain anchor for a message only if the current user can access that message.
+
+Response:
+
+```json
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "message_id": "00000000-0000-0000-0000-000000000000",
+  "batch_id": null,
+  "record_id": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "digest": "0x1111111111111111111111111111111111111111111111111111111111111111",
+  "merkle_root": null,
+  "transaction_hash": null,
+  "contract_address": null,
+  "chain": "sepolia",
+  "status": "pending",
+  "created_at": "2026-06-02T12:00:00Z",
+  "anchored_at": null
+}
+```
+
 ### `POST /api/v1/messages/{message_id}/forward`
 
 Requires access to the original message and stores a new encrypted payload for a new recipient.
+
+A forwarded message is a new encrypted message row and receives its own pending blockchain anchor. The backend does not decrypt the original message or copy plaintext.
 
 ### `POST /api/v1/messages/{message_id}/revoke`
 
@@ -337,6 +364,77 @@ Hides a message from the current user only:
 - Recipient delete sets `recipient_deleted_at`.
 
 It does not immediately hard-delete the other party's copy.
+
+## Blockchain Anchor Endpoints
+
+All blockchain routes require authentication. They store and return integrity metadata only. They do not submit Ethereum transactions.
+
+### `POST /api/v1/blockchain/anchors`
+
+Creates or reuses a pending anchor for an accessible message. This route is mainly a manual retry/demo path because message send and forward already create pending anchors automatically.
+
+Request:
+
+```json
+{
+  "message_id": "00000000-0000-0000-0000-000000000000"
+}
+```
+
+Response:
+
+- `201 Created` when a new pending anchor is created
+- `200 OK` when an existing anchor is reused
+
+The response shape is `BlockchainAnchorResponse`.
+
+### `GET /api/v1/blockchain/anchors/{anchor_id}`
+
+Returns anchor status only if the current user can access the linked message.
+
+Status values:
+
+- `pending`
+- `confirmed`
+- `failed`
+
+### `POST /api/v1/blockchain/verify`
+
+Checks supplied digest/root metadata against confirmed backend anchor records.
+
+Request:
+
+```json
+{
+  "digest": "0x1111111111111111111111111111111111111111111111111111111111111111",
+  "record_id": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "merkle_root": null,
+  "transaction_hash": null,
+  "chain": "sepolia"
+}
+```
+
+Response:
+
+```json
+{
+  "valid": true,
+  "chain": "sepolia",
+  "status": "confirmed",
+  "anchor_id": "00000000-0000-0000-0000-000000000000",
+  "message_id": "00000000-0000-0000-0000-000000000000",
+  "batch_id": null,
+  "record_id": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "digest": "0x1111111111111111111111111111111111111111111111111111111111111111",
+  "merkle_root": null,
+  "transaction_hash": "0x2222222222222222222222222222222222222222222222222222222222222222",
+  "contract_address": "0x3333333333333333333333333333333333333333",
+  "anchored_at": "2026-06-02T12:30:00Z",
+  "verified_at": "2026-06-02T12:31:00Z"
+}
+```
+
+This endpoint does not contact Sepolia live. A separate blockchain worker is responsible for writing pending anchors to the Solidity contract and updating the database with confirmation metadata.
 
 ## Explicitly Rejected Input
 
@@ -353,4 +451,4 @@ Request schemas reject unexpected fields including:
 - raw refresh-token storage fields
 - password hash fields
 
-The backend stores encrypted relay payloads, public keys, token-session hashes, and audit metadata only.
+The backend stores encrypted relay payloads, public keys, token-session hashes, blockchain integrity metadata, and audit metadata only.

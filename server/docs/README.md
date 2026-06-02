@@ -19,6 +19,8 @@ Core backend documentation:
 - `docs/security/security_test_results.md`
 - `docs/security/vulnerability_report.md`
 
+Blockchain anchor behavior is documented in the API contract, backend architecture, database design, operations runbook, and security reports. FastAPI creates pending anchor rows for sent/forwarded messages, while Sepolia submission remains a separate worker/script concern.
+
 Compatibility pointer:
 
 - `docs/security/network_architecture.md` points to the canonical network architecture document under `docs/architecture`.

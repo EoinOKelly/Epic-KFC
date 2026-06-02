@@ -4,9 +4,9 @@
 
 The backend is a FastAPI server for authenticated API interaction and encrypted direct 1:1 message relay.
 
-It authenticates users, validates requests, enforces object-level access control, stores public key material, stores encrypted relay payloads, rotates refresh tokens, and records audit/security events.
+It authenticates users, validates requests, enforces object-level access control, stores public key material, stores encrypted relay payloads, rotates refresh tokens, creates pending blockchain integrity anchors, and records audit/security events.
 
-It does not decrypt messages, store plaintext messages, store private keys, store Signal ratchet/session state, perform Signal cryptographic operations, support group chats, or submit blockchain transactions.
+It does not decrypt messages, store plaintext messages, store private keys, store Signal ratchet/session state, perform Signal cryptographic operations, support group chats, or submit blockchain transactions from FastAPI request handlers.
 
 ## Runtime Layers
 
@@ -46,6 +46,7 @@ flowchart TD
     Repos --> DB[("PostgreSQL Docker Container")]
 
     Services --> Audit["Audit Logging"]
+    Services --> Anchors["Pending Blockchain Anchors"]
     DB --> Tables["Users, Refresh Sessions, Device Keys, Prekeys, Messages, Anchors, Audit Logs"]
 ```
 
@@ -89,11 +90,28 @@ The backend never stores private keys or client-side Signal session state.
 5. The service verifies sender and recipient devices are active.
 6. If `consumed_one_time_prekey_id` is provided, it must match a prekey already consumed for the recipient user/device.
 7. The backend stores `wire_payload_json` as an opaque encrypted payload.
-8. Sender/recipient list and fetch routes apply direct object-level access checks.
-9. Sender revocation hides the message from the recipient by setting `access_revoked_at`.
-10. Sender and recipient deletion are per-user visibility changes, not immediate hard deletion.
+8. The backend derives a blockchain `record_id` and `digest` from encrypted/canonical message metadata and creates a pending anchor row.
+9. Sender/recipient list and fetch routes apply direct object-level access checks.
+10. Sender revocation hides the message from the recipient by setting `access_revoked_at`.
+11. Sender and recipient deletion are per-user visibility changes, not immediate hard deletion.
 
 The backend validates the wire payload structure but does not decrypt it.
+
+## Blockchain Anchor Flow
+
+The backend provides integrity-evidence metadata for encrypted messages:
+
+1. Message send or forward stores a new encrypted direct message.
+2. In the same database transaction, the service computes `record_id = keccak256("message:" + message_id)`.
+3. The service computes `digest = keccak256(canonical encrypted message record)`.
+4. The service creates or reuses a `blockchain_anchors` row with `status="pending"` and `chain="sepolia"`.
+5. The API returns quickly without contacting Sepolia.
+6. A separate worker/script should read pending anchors, call the Solidity contract, and update `transaction_hash`, `contract_address`, `status`, and `anchored_at`.
+7. Clients can check status through `GET /api/v1/messages/{message_id}/anchor` or `GET /api/v1/blockchain/anchors/{anchor_id}`.
+
+`POST /api/v1/blockchain/anchors` is kept as a manual retry/demo endpoint. `POST /api/v1/blockchain/verify` checks submitted digest/root metadata against confirmed backend records; it does not perform a live chain query.
+
+No plaintext message content is placed in the digest input or on chain. The current sibling blockchain folder contains the Solidity/demo side, but the FastAPI app does not call those scripts directly.
 
 ## Database Access Pattern
 
@@ -112,6 +130,7 @@ The application refuses to start database sessions unless `DATABASE_URL` is set 
 - Strict Pydantic request models with `extra="forbid"`.
 - Base64 and UUID validation for key and path data.
 - LibSignal-style `wire_payload_json` structural validation.
+- Automatic pending blockchain anchors using Ethereum Keccak over canonical encrypted message records.
 - SQLAlchemy ORM expressions instead of string-built SQL.
 - Sanitized validation errors that avoid echoing secret inputs.
 - Security headers: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and `Cache-Control`.
@@ -126,6 +145,7 @@ The application refuses to start database sessions unless `DATABASE_URL` is set 
 - No private key storage.
 - No server-side Signal ratchet/session state.
 - No group chat or conversation model.
-- No blockchain transaction submission route.
+- No direct Ethereum transaction submission from FastAPI request handlers.
+- No blockchain worker implemented in the backend package yet.
 - No admin audit-log viewer.
 - No distributed rate limiter.

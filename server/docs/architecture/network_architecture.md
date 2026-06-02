@@ -160,7 +160,7 @@ The implemented backend depends on:
 - Nginx on the team VM
 - PostgreSQL
 
-No backend route currently calls an external blockchain node, email provider, cloud KMS, or third-party messaging service. The `blockchain_anchors` table stores possible proof metadata only.
+No backend route currently calls an external blockchain node, email provider, cloud KMS, or third-party messaging service. Message send and forward create pending blockchain anchor rows in PostgreSQL, but Sepolia submission belongs to a separate worker/script. That worker should be the only component that holds blockchain wallet credentials and calls the Solidity contract.
 
 ## TLS Evidence Utility
 
@@ -181,5 +181,6 @@ Successful evidence includes resolved IP addresses, TLS version, cipher suite, c
 - The gateway-to-VM hop is internal HTTP.
 - FastAPI HTTPS/HSTS enforcement is not implemented in application code.
 - In-memory rate limiting is not distributed.
+- Blockchain anchor confirmation is not completed by the FastAPI request path.
 - PostgreSQL and FastAPI run on the same VM for the prototype.
 - Certificate renewal and gateway configuration are operational responsibilities outside this repository.

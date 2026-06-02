@@ -11,7 +11,7 @@ The schema supports:
 - Public device key relay
 - Public one-time prekey relay
 - Opaque encrypted direct message relay
-- Optional blockchain proof metadata storage
+- Automatic pending blockchain proof metadata storage
 - Audit/security event logging
 
 The backend refuses database sessions unless `DATABASE_URL` uses the `postgresql+asyncpg://` scheme.
@@ -96,7 +96,10 @@ erDiagram
     blockchain_anchors {
         uuid id PK
         uuid message_id FK
+        uuid batch_id
+        string record_id
         string digest
+        string merkle_root
         string transaction_hash
         string contract_address
         string chain
@@ -269,28 +272,38 @@ Indexes/constraints:
 
 ### `blockchain_anchors`
 
-Purpose: optional storage for blockchain proof/digest metadata associated with messages.
+Purpose: integrity proof metadata associated with encrypted messages or future batches.
 
 Important columns:
 
 - `message_id`
+- `batch_id`
+- `record_id`
 - `digest`
+- `merkle_root`
 - `transaction_hash`
 - `contract_address`
 - `chain`
 - `status`
+- `created_at`
 - `anchored_at`
 
 Security relevance:
 
-- Stores metadata only.
-- No current FastAPI route submits blockchain transactions.
-- Schema validation exists for Ethereum-style digest, transaction hash, and contract address fields.
+- Stores hashes and transaction metadata only.
+- Message send and forward create pending anchors automatically.
+- `record_id` is derived as `keccak256("message:" + message_id)` for message anchors.
+- `digest` is derived from a canonical encrypted message record, including opaque `wire_payload_json` and metadata only.
+- No plaintext, private keys, raw tokens, or ratchet state are stored in anchor rows.
+- No FastAPI request handler submits blockchain transactions; a separate worker is expected to confirm pending anchors.
 
 Indexes:
 
 - `ix_blockchain_anchors_message_id`
+- `ix_blockchain_anchors_batch_id`
+- `ix_blockchain_anchors_record_id`
 - `ix_blockchain_anchors_digest`
+- `ix_blockchain_anchors_merkle_root`
 - `ix_blockchain_anchors_transaction_hash`
 - `ix_blockchain_anchors_status`
 
@@ -344,6 +357,7 @@ Stored:
 - Public one-time prekeys
 - Encrypted opaque message relay payloads
 - Message metadata
+- Blockchain anchor record IDs, digests, roots, transaction metadata, and statuses
 - Audit metadata
 
 Not stored:
