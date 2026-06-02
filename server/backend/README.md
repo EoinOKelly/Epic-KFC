@@ -46,6 +46,10 @@ ACCESS_TOKEN_EXPIRE_MINUTES=15
 REFRESH_TOKEN_EXPIRE_DAYS=7
 RATE_LIMIT_ENABLED=true
 SECURITY_HEADERS_ENABLED=true
+ENFORCE_HTTPS=false
+TRUST_X_FORWARDED_PROTO=false
+HSTS_ENABLED=true
+HSTS_MAX_AGE_SECONDS=31536000
 ALLOWED_ORIGINS=["http://localhost:3000"]
 CORS_ALLOW_CREDENTIALS=false
 ```
@@ -121,6 +125,15 @@ nohup .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 > backend.log 
 
 There is also a systemd installer at `deploy/install-api-service.sh`. If the VM uses Nginx as the public HTTP listener, bind Uvicorn to `127.0.0.1:8000` or firewall port `8000` so FastAPI is not exposed directly.
 
+Install or update the Nginx reverse proxy and edge rate limits on the VM:
+
+```bash
+cd ~/epic_project/Epic-KFC
+bash server/backend/deploy/install-nginx-api-config.sh
+```
+
+Nginx handles coarse IP-based abuse limits before requests reach Python. FastAPI still keeps authenticated per-user limits for actions such as message send, forward, and key upload.
+
 ## Tests And Checks
 
 Run static checks:
@@ -178,7 +191,7 @@ FastAPI does not call Sepolia, hold a wallet private key, or call the Solidity c
 ## Known Limitations
 
 - No MFA.
-- In-memory rate limiting is single-process only.
+- FastAPI in-memory rate limiting is single-process only; the provided Nginx config adds VM edge IP limits.
 - Refresh sessions are stored in PostgreSQL rather than Redis.
 - FastAPI does not currently terminate TLS itself; public HTTPS is provided by the gateway/proxy layer.
 - The backend stores and returns opaque encrypted `wire_payload_json` to authorized users, but cannot prove cryptographically that a payload used a claimed one-time prekey.

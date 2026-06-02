@@ -45,8 +45,9 @@ Public internet traffic to the gateway is encrypted. Traffic from the gateway to
 3. Gateway terminates TLS and forwards the request to the VM on port `80`.
 4. Nginx receives HTTP on port `80`.
 5. Nginx proxies to FastAPI on `127.0.0.1:8000`.
-6. FastAPI validates authentication, request shape, object authorization, and rate limits.
-7. FastAPI uses SQLAlchemy/asyncpg to query PostgreSQL.
+6. Nginx applies coarse IP-based abuse limits before forwarding API traffic.
+7. FastAPI validates authentication, request shape, object authorization, and authenticated per-user rate limits.
+8. FastAPI uses SQLAlchemy/asyncpg to query PostgreSQL.
 
 ## VM Ports
 
@@ -73,9 +74,24 @@ sudo ss -tulpn | grep ':5432'
 Nginx should be the public VM process that receives traffic from the gateway and forwards it to FastAPI:
 
 ```nginx
+limit_req_zone $binary_remote_addr zone=epic_login_ip:10m rate=1r/m;
+limit_req_zone $binary_remote_addr zone=epic_api_ip:10m rate=300r/m;
+
 server {
     listen 80;
     server_name kfc.theburkenator.com;
+
+    limit_req_status 429;
+
+    location = /api/v1/auth/login {
+        limit_req zone=epic_login_ip burst=5 nodelay;
+        proxy_pass http://127.0.0.1:8000;
+    }
+
+    location /api/ {
+        limit_req zone=epic_api_ip burst=120;
+        proxy_pass http://127.0.0.1:8000;
+    }
 
     location / {
         proxy_pass http://127.0.0.1:8000;
@@ -87,7 +103,14 @@ server {
 }
 ```
 
-The exact VM config can differ, but the security requirement is that clients do not connect directly to Uvicorn.
+The repo includes a fuller Nginx config at `backend/deploy/nginx/epic-messaging-api.conf`. It applies IP-based limits to auth, refresh, prekey bundle, message send, and general API traffic.
+
+The exact VM config can differ, but the security requirements are:
+
+- Clients do not connect directly to Uvicorn.
+- Nginx rejects obvious IP-based floods before FastAPI work is spent.
+- FastAPI still applies authenticated per-user limits after `get_current_user`.
+- Proxy headers are set by Nginx. FastAPI should only trust forwarded scheme/IP headers from a trusted proxy.
 
 ## FastAPI Connectivity
 
@@ -103,7 +126,7 @@ Recommended VM command behind Nginx:
 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-The current `backend/deploy/install-api-service.sh` writes a systemd service using `--host 0.0.0.0 --port 8000`. If that installer is used for submission, either change the generated `ExecStart` to bind `127.0.0.1` or firewall port `8000` so Uvicorn is not reachable directly from outside the VM.
+`backend/deploy/install-api-service.sh` now writes a systemd service using `--host 127.0.0.1 --port 8000`, matching the documented Nginx proxy architecture.
 
 ## PostgreSQL Connectivity
 
@@ -150,6 +173,19 @@ Implemented in code:
 
 The gateway/Nginx layer should still redirect HTTP to HTTPS and set its own HSTS policy for public traffic. The FastAPI controls provide defense in depth and testable evidence.
 
+## Layered Rate Limiting
+
+The implemented design uses two layers:
+
+| Layer | Identity | Purpose |
+| --- | --- | --- |
+| Nginx `limit_req` | Client IP as seen by Nginx | Cheap edge protection for login/register/refresh floods, prekey scraping, message spam, and broad API bursts |
+| FastAPI in-memory limiter | Direct IP for unauthenticated routes, `current_user.id` for authenticated routes | Testable project control and per-user limits after JWT authentication |
+
+This is stronger than relying on FastAPI's in-memory limiter alone. Nginx protects the API before Python work is spent, while FastAPI can enforce limits that require knowing the authenticated user.
+
+Production note: if the provided gateway forwards many users through one source IP, Nginx may see the gateway IP instead of the true client IP. In that case, configure Nginx `real_ip_header` and `set_real_ip_from` only for trusted gateway addresses. Do not trust arbitrary client-supplied `X-Forwarded-For` values.
+
 ## External Services
 
 The implemented backend depends on:
@@ -178,7 +214,7 @@ Successful evidence includes resolved IP addresses, TLS version, cipher suite, c
 - Public TLS terminates at the provided gateway, not inside FastAPI.
 - The gateway-to-VM hop is internal HTTP.
 - FastAPI HTTPS/HSTS enforcement depends on `ENFORCE_HTTPS`, `TRUST_X_FORWARDED_PROTO`, and `HSTS_ENABLED` being enabled in production.
-- In-memory rate limiting is not distributed.
+- FastAPI in-memory rate limiting is not distributed; Nginx provides the VM edge IP limit.
 - Blockchain anchor confirmation is not completed by the FastAPI request path.
 - PostgreSQL and FastAPI run on the same VM for the prototype.
 - Certificate renewal and gateway configuration are operational responsibilities outside this repository.

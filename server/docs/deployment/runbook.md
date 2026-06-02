@@ -24,13 +24,6 @@ https://kfc.theburkenator.com/docs
 
 ## SSH Into The VM
 
-Use the SSH details provided for the team VM:
-
-```bash
-ssh <user>@<vm-hostname-or-ip>
-```
-
-Do not paste real private keys, passwords, or tokens into docs.
 
 ## Pull Latest Code
 
@@ -119,7 +112,7 @@ sudo systemctl restart epic-messaging-api
 sudo journalctl -u epic-messaging-api -f
 ```
 
-Security note: the installer currently writes Uvicorn as `--host 0.0.0.0 --port 8000`. For the documented architecture, change the generated service to `--host 127.0.0.1 --port 8000` or firewall port `8000`.
+Security note: the installer writes Uvicorn as `--host 127.0.0.1 --port 8000`, so Nginx remains the public VM listener.
 
 Edit service:
 
@@ -131,6 +124,15 @@ sudo systemctl restart epic-messaging-api
 
 ## Nginx Checks
 
+Install or update the repo-provided Nginx API proxy with edge rate limits:
+
+```bash
+cd ~/epic_project/Epic-KFC
+bash server/backend/deploy/install-nginx-api-config.sh
+```
+
+This installs `server/backend/deploy/nginx/epic-messaging-api.conf`, tests the Nginx configuration, and reloads Nginx. It is separate from restarting FastAPI.
+
 Check listener:
 
 ```bash
@@ -140,7 +142,7 @@ sudo ss -tulpn | grep ':80'
 Inspect relevant config:
 
 ```bash
-sudo nginx -T | grep -n "server_name\|proxy_pass\|listen"
+sudo nginx -T | grep -n "server_name\|proxy_pass\|listen\|limit_req"
 ```
 
 Restart Nginx:
@@ -161,6 +163,16 @@ Expected proxy shape:
 ```text
 Gateway HTTPS -> VM port 80 -> Nginx -> http://127.0.0.1:8000
 ```
+
+Expected rate-limit shape:
+
+- Auth register/login: `1r/m` per Nginx client IP with a small burst for short retry/demo flows.
+- Refresh: `2r/m` per Nginx client IP with burst.
+- Prekey bundle fetch: `60r/m` per Nginx client IP.
+- Message send: `120r/m` per Nginx client IP.
+- FastAPI still enforces authenticated per-user limits after JWT validation.
+
+If the provided gateway hides the real client IP, configure Nginx real-IP handling only for trusted gateway IPs. Do not trust arbitrary `X-Forwarded-For` values from the public internet.
 
 ## PostgreSQL Docker Checks
 
@@ -217,6 +229,19 @@ Public URL:
 ```bash
 curl -I https://kfc.theburkenator.com/docs
 ```
+
+Nginx rate-limit smoke check for auth abuse:
+
+```bash
+for i in $(seq 1 8); do
+  curl -s -o /dev/null -w "%{http_code}\n" \
+    -H "Content-Type: application/json" \
+    -d '{"username_or_email":"missing-user","password":"incorrect-password"}' \
+    https://kfc.theburkenator.com/api/v1/auth/login
+done
+```
+
+Expected: early requests return `401`, then repeated requests from the same IP return `429`.
 
 TLS probe:
 

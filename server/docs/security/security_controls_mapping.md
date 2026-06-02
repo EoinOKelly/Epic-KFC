@@ -13,7 +13,7 @@ This document maps the backend implementation to the cybersecurity brief areas a
 | Sensitive data exposure | Response schemas omit password hashes and refresh-token hashes; user discovery hides email/key material; audit details are allowlisted; validation errors are sanitized | `backend/app/main.py`, `backend/app/services/audit_service.py`, `backend/tests/security/test_sensitive_data_security.py` |
 | Security misconfiguration | `.env.example`; real `.env` ignored; wildcard production CORS rejected; placeholder production secrets rejected; HTTPS enforcement/HSTS controls; PostgreSQL URL scheme enforced | `backend/.env.example`, `backend/.gitignore`, `backend/app/core/config.py`, `backend/app/main.py`, `backend/app/db/session.py`, `backend/tests/integration/test_security_headers.py` |
 | Vulnerable components | `pip-audit`, `bandit`, and `ruff` local checks; latest backend virtualenv and requirements audits found no known vulnerabilities | `backend/requirements.txt`, `docs/security/vulnerability_report.md`, `docs/security/security_test_results.md` |
-| Rate-limit abuse | Fixed-window in-memory rate limits for register, login, refresh, key upload/fetch, user lookup, message send/forward/read | `backend/app/core/rate_limit.py`, `backend/app/api/deps.py`, `backend/tests/security/test_rate_limit_security.py` |
+| Rate-limit abuse | Nginx IP-based edge limits plus FastAPI fixed-window per-IP/per-user limits for register, login, refresh, key upload/fetch, user lookup, message send/forward/read | `backend/deploy/nginx/epic-messaging-api.conf`, `backend/app/core/rate_limit.py`, `backend/app/api/deps.py`, `backend/tests/security/test_rate_limit_security.py` |
 | Auditability / repudiation | Best-effort audit logs for auth, key relay, message success, and message denial events | `backend/app/services/audit_service.py`, `backend/app/models/audit_log.py`, `backend/tests/integration/test_audit_logging.py` |
 | Blockchain integrity evidence | Automatic pending anchors for sent/forwarded encrypted messages; Keccak record IDs and digests; status/verify APIs without plaintext-on-chain | `backend/app/services/blockchain_anchor_service.py`, `backend/app/core/blockchain_hashing.py`, `backend/app/api/v1/blockchain.py` |
 | Network architecture | HTTPS public gateway, Nginx VM listener, FastAPI internal app port, PostgreSQL Docker localhost binding recommendation | `docs/architecture/network_architecture.md`, `docs/deployment/runbook.md` |
@@ -26,15 +26,16 @@ This document maps the backend implementation to the cybersecurity brief areas a
 - Message send and forward create pending blockchain anchors automatically, but FastAPI does not call Sepolia or hold blockchain wallet keys.
 - The backend cannot prove that a ciphertext cryptographically used a claimed prekey; it only validates that the referenced prekey exists for the recipient device and was previously consumed.
 - Public TLS still terminates at the gateway/Nginx layer, while FastAPI can enforce HTTPS/HSTS using `ENFORCE_HTTPS`, `TRUST_X_FORWARDED_PROTO`, and `HSTS_ENABLED`.
+- Nginx handles coarse IP-based abuse controls; FastAPI handles authenticated per-user limits.
 
 ## Gaps And Follow-Up Controls
 
 | Gap | Risk | Recommended improvement |
 | --- | --- | --- |
 | No MFA | Stolen credentials can still be used | Add MFA or WebAuthn for production |
-| In-memory rate limiter | Limits do not work across multiple API processes | Use Redis, Nginx, or API gateway rate limiting |
+| FastAPI in-memory rate limiter | Per-user FastAPI limits do not work across multiple API processes | Keep Nginx edge limits for the VM; use Redis or API gateway limits for multi-instance production |
 | HTTPS/HSTS flags must be enabled at deploy time | App-level transport hardening is bypassed if production env vars are left at development defaults | Set `ENFORCE_HTTPS=true`, `TRUST_X_FORWARDED_PROTO=true`, and `HSTS_ENABLED=true` behind the TLS gateway |
-| Uvicorn service template binds `0.0.0.0` | Port `8000` could be exposed if firewall/Nginx are misconfigured | Bind `127.0.0.1` or firewall `8000` |
+| Nginx real client IP depends on gateway behavior | If the gateway hides client IPs, IP limits may apply to gateway traffic as a whole | Configure Nginx real-IP handling only for trusted gateway IPs and document the observed headers |
 | Dependency scan evidence can go stale | Vulnerable packages may be missed after dependency changes | Re-run `pip-audit` immediately before submission |
 | No admin audit viewer | Audit records require DB/operator access | Add RBAC-protected audit viewer if needed |
 | No blockchain confirmation worker in backend package | Pending anchors remain pending until a separate process writes to Sepolia and updates DB status | Implement a worker that reads pending anchors, calls the contract, and records transaction metadata |
