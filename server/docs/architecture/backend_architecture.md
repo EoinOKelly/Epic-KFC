@@ -111,12 +111,12 @@ The backend provides integrity-evidence metadata for encrypted messages:
 3. The service computes `digest = keccak256(canonical encrypted message record)`, including forward lineage when present.
 4. The service creates or reuses a `blockchain_anchors` row with `status="pending"` and `chain="sepolia"`.
 5. The API returns quickly without contacting Sepolia.
-6. A separate worker/script should read pending anchors, call the Solidity contract, and update `transaction_hash`, `contract_address`, `status`, and `anchored_at`.
+6. The backend blockchain worker reads pending anchors, calls the Solidity contract, and updates `transaction_hash`, `contract_address`, `status`, and `anchored_at`.
 7. Clients can check status through `GET /api/v1/messages/{message_id}/anchor` or `GET /api/v1/blockchain/anchors/{anchor_id}`.
 
 `POST /api/v1/blockchain/anchors` is kept as a manual retry/demo endpoint. `POST /api/v1/blockchain/verify` checks submitted digest/root metadata against confirmed backend records; it does not perform a live chain query.
 
-No plaintext message content is placed in the digest input or on chain. The current sibling blockchain folder contains the Solidity/demo side, but the FastAPI app does not call those scripts directly.
+No plaintext message content is placed in the digest input or on chain. The current sibling blockchain folder contains the Solidity/demo side, while `app.workers.blockchain_worker` is the backend-owned process that submits pending anchors.
 
 ## Database Access Pattern
 
@@ -151,6 +151,6 @@ The application refuses to start database sessions unless `DATABASE_URL` is set 
 - No server-side Signal ratchet/session state.
 - No group chat or conversation model.
 - No direct Ethereum transaction submission from FastAPI request handlers.
-- No blockchain worker implemented in the backend package yet.
+- Blockchain submission is asynchronous; pending anchors only become confirmed while the backend worker is running with valid Sepolia credentials.
 - No admin audit-log viewer.
 - No distributed rate limiter.

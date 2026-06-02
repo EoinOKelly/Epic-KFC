@@ -1,0 +1,19 @@
+[Unit]
+Description=Epic Messaging blockchain anchor worker
+Documentation=https://github.com/EoinOKelly/Epic-KFC
+After=network-online.target docker.service epic-messaging-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=student
+Group=student
+WorkingDirectory=/home/student/epic_project/Epic-KFC/server/backend
+EnvironmentFile=/home/student/epic_project/Epic-KFC/server/backend/.env
+ExecStart=/home/student/epic_project/Epic-KFC/server/backend/.venv/bin/python -m app.workers.blockchain_worker
+Restart=always
+RestartSec=10
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

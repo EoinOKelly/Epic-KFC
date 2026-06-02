@@ -253,7 +253,7 @@ source .venv/bin/activate
 
 ## Blockchain Anchor Operations
 
-The FastAPI backend creates pending `blockchain_anchors` rows automatically when direct messages are sent or forwarded. The API server does not submit transactions to Sepolia and should not hold blockchain wallet private keys.
+The FastAPI backend creates pending `blockchain_anchors` rows automatically when direct messages are sent or forwarded. A separate backend worker process submits those pending records to Sepolia and updates confirmation metadata.
 
 Useful database checks:
 
@@ -276,13 +276,47 @@ transaction_hash = NULL
 anchored_at = NULL
 ```
 
-A separate worker/script should:
+A confirmed row after the worker runs should contain:
+
+```text
+status = confirmed
+transaction_hash = 0x...
+contract_address = 0x...
+anchored_at = <block timestamp>
+```
+
+The backend worker:
 
 1. Read pending anchors from PostgreSQL.
 2. Call the Solidity contract with the backend-generated `record_id` and `digest` or future `merkle_root`.
 3. Update `status`, `transaction_hash`, `contract_address`, and `anchored_at`.
 
-The current sibling `blockchain` folder contains Solidity/demo scripts. Those scripts are not called by FastAPI automatically.
+Configure `server/backend/.env` with:
+
+```dotenv
+BLOCKCHAIN_WORKER_ENABLED=true
+SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY
+DEPLOYER_PRIVATE_KEY=0xYOUR_SEPOLIA_PRIVATE_KEY
+MESSAGE_FIDELITY_ADDRESS=0xYOUR_MESSAGE_FIDELITY_CONTRACT
+```
+
+Run one batch manually:
+
+```bash
+cd ~/epic_project/Epic-KFC/server/backend
+source .venv/bin/activate
+python -m app.workers.blockchain_worker --once
+```
+
+Install the long-running worker service:
+
+```bash
+cd ~/epic_project/Epic-KFC
+bash server/backend/deploy/install-blockchain-worker-service.sh
+sudo journalctl -u epic-messaging-blockchain-worker -f
+```
+
+The sibling `blockchain` folder still contains Solidity deployment/demo scripts and the fidelity UI. FastAPI does not call those scripts during request handling.
 
 ## Test Commands On VM
 

@@ -35,6 +35,16 @@ class Settings(BaseSettings):
     hsts_max_age_seconds: int = Field(default=31_536_000, ge=0)
     allowed_origins: list[str] | str = Field(default_factory=list)
     cors_allow_credentials: bool = False
+    blockchain_worker_enabled: bool = False
+    sepolia_rpc_url: str | None = None
+    deployer_private_key: str | None = None
+    message_fidelity_address: str | None = None
+    blockchain_worker_poll_interval_seconds: float = Field(default=15.0, gt=0)
+    blockchain_worker_batch_size: int = Field(default=10, ge=1, le=100)
+    blockchain_worker_receipt_timeout_seconds: int = Field(default=180, ge=1)
+    blockchain_worker_chain_id: int = Field(default=11155111, ge=1)
+    blockchain_worker_gas_limit: int = Field(default=150_000, ge=21_000)
+    blockchain_worker_mark_failed_on_error: bool = False
 
     model_config = SettingsConfigDict(
         env_file=(".env", "backend/.env"),
@@ -78,6 +88,8 @@ class Settings(BaseSettings):
                 "REFRESH_TOKEN_HASH_SECRET",
                 self.refresh_token_hash_secret,
             )
+        if self.blockchain_worker_enabled:
+            _validate_blockchain_worker_settings(self)
         return self
 
 
@@ -97,6 +109,21 @@ def _validate_production_secret(name: str, value: str | None) -> None:
     placeholder_markers = ("change_me", "changeme", "placeholder", "local_only")
     if any(marker in normalized for marker in placeholder_markers):
         raise ValueError(f"{name} must not use a placeholder value in production.")
+
+
+def _validate_blockchain_worker_settings(settings: Settings) -> None:
+    """Reject incomplete worker configuration when the worker is enabled."""
+    missing: list[str] = []
+    if not settings.sepolia_rpc_url:
+        missing.append("SEPOLIA_RPC_URL")
+    if not settings.deployer_private_key:
+        missing.append("DEPLOYER_PRIVATE_KEY")
+    if not settings.message_fidelity_address:
+        missing.append("MESSAGE_FIDELITY_ADDRESS")
+
+    if missing:
+        joined = ", ".join(missing)
+        raise ValueError(f"Blockchain worker is enabled but missing: {joined}.")
 
 
 @lru_cache

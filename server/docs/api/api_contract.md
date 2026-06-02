@@ -371,7 +371,7 @@ It does not immediately hard-delete the other party's copy.
 
 ## Blockchain Anchor Endpoints
 
-All blockchain routes require authentication. They store and return integrity metadata only. They do not submit Ethereum transactions.
+All blockchain routes require authentication. They store and return integrity metadata only. FastAPI request handlers do not submit Ethereum transactions; the backend blockchain worker submits pending anchors asynchronously.
 
 ### `POST /api/v1/blockchain/anchors`
 
@@ -438,7 +438,7 @@ Response:
 }
 ```
 
-This endpoint does not contact Sepolia live. A separate blockchain worker is responsible for writing pending anchors to the Solidity contract and updating the database with confirmation metadata.
+This endpoint does not contact Sepolia live. The backend blockchain worker writes pending anchors to the Solidity contract and updates the database with confirmation metadata.
 
 ## Explicitly Rejected Input
 

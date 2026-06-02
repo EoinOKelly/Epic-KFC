@@ -18,3 +18,4 @@ bandit
 pip-audit
 pytest-asyncio
 eth-hash[pycryptodome]
+web3>=6

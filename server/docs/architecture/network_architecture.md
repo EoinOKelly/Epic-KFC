@@ -194,7 +194,7 @@ The implemented backend depends on:
 - Nginx on the team VM
 - PostgreSQL
 
-No backend route currently calls an external blockchain node, email provider, cloud KMS, or third-party messaging service. Message send and forward create pending blockchain anchor rows in PostgreSQL, but Sepolia submission belongs to a separate worker/script. That worker should be the only component that holds blockchain wallet credentials and calls the Solidity contract.
+No FastAPI request route currently calls an external blockchain node, email provider, cloud KMS, or third-party messaging service. Message send and forward create pending blockchain anchor rows in PostgreSQL, while the backend blockchain worker submits those rows to Sepolia. That worker should be the only backend component that holds blockchain wallet credentials and calls the Solidity contract.
 
 ## TLS Evidence Utility
 

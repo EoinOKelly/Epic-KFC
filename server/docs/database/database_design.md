@@ -299,7 +299,7 @@ Security relevance:
 - `record_id` is derived as `keccak256("message:" + message_id)` for message anchors.
 - `digest` is derived from a canonical encrypted message record, including opaque `wire_payload_json`, forwarding lineage when present, and metadata only.
 - No plaintext, private keys, raw tokens, or ratchet state are stored in anchor rows.
-- No FastAPI request handler submits blockchain transactions; a separate worker is expected to confirm pending anchors.
+- No FastAPI request handler submits blockchain transactions; the backend blockchain worker confirms pending anchors.
 
 Indexes:
 

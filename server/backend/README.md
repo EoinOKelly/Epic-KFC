@@ -52,6 +52,16 @@ HSTS_ENABLED=true
 HSTS_MAX_AGE_SECONDS=31536000
 ALLOWED_ORIGINS=["http://localhost:3000"]
 CORS_ALLOW_CREDENTIALS=false
+BLOCKCHAIN_WORKER_ENABLED=false
+SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY
+DEPLOYER_PRIVATE_KEY=0xYOUR_SEPOLIA_PRIVATE_KEY
+MESSAGE_FIDELITY_ADDRESS=0xYOUR_MESSAGE_FIDELITY_CONTRACT
+BLOCKCHAIN_WORKER_POLL_INTERVAL_SECONDS=15
+BLOCKCHAIN_WORKER_BATCH_SIZE=10
+BLOCKCHAIN_WORKER_RECEIPT_TIMEOUT_SECONDS=180
+BLOCKCHAIN_WORKER_CHAIN_ID=11155111
+BLOCKCHAIN_WORKER_GAS_LIMIT=150000
+BLOCKCHAIN_WORKER_MARK_FAILED_ON_ERROR=false
 ```
 
 Do not commit a real `.env`. The backend `.gitignore` excludes `.env`, `.env.local`, and `.env.*` while keeping `.env.example`.
@@ -173,7 +183,27 @@ Available blockchain metadata endpoints:
 - `GET /api/v1/blockchain/anchors/{anchor_id}`
 - `POST /api/v1/blockchain/verify`
 
-FastAPI does not call Sepolia, hold a wallet private key, or call the Solidity contract directly. A separate worker/script still needs to read pending anchors, call the blockchain contract, and update `transaction_hash`, `contract_address`, `status`, and `anchored_at`.
+FastAPI request handlers do not call Sepolia or call the Solidity contract directly. The backend-owned blockchain worker reads pending anchors, calls `MessageFidelity.storeHash(record_id, digest)`, and updates `transaction_hash`, `contract_address`, `status`, and `anchored_at`.
+
+Run the worker once for a manual/demo batch:
+
+```bash
+cd server/backend
+source .venv/bin/activate
+python -m app.workers.blockchain_worker --once
+```
+
+Run it continuously:
+
+```bash
+python -m app.workers.blockchain_worker
+```
+
+On the VM, install it as a systemd service after `.env` contains Sepolia credentials and `web3` is installed:
+
+```bash
+bash server/backend/deploy/install-blockchain-worker-service.sh
+```
 
 ## Documentation Map
 
@@ -195,5 +225,5 @@ FastAPI does not call Sepolia, hold a wallet private key, or call the Solidity c
 - Refresh sessions are stored in PostgreSQL rather than Redis.
 - FastAPI does not currently terminate TLS itself; public HTTPS is provided by the gateway/proxy layer.
 - The backend stores and returns opaque encrypted `wire_payload_json` to authorized users, but cannot prove cryptographically that a payload used a claimed one-time prekey.
-- Blockchain anchoring currently creates pending database evidence automatically, but the Sepolia submission/confirmation worker is still a separate missing deployment piece.
+- Blockchain anchoring requires the separate backend worker process to be running before pending anchors become confirmed Sepolia transactions.
 - There is no admin audit-log viewer route.

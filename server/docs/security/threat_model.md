@@ -48,7 +48,7 @@ The backend does not decrypt messages, call Signal cryptography, store private k
 - Verified JWT subject to object-level authorization checks
 - Client cryptography package to backend relay storage
 - Backend audit/event data to operator review
-- FastAPI pending anchor metadata to a future blockchain worker
+- FastAPI pending anchor metadata to the backend blockchain worker
 - Blockchain worker to Sepolia/Solidity contract
 
 ## Attack Surfaces
@@ -133,7 +133,7 @@ Threat: a party later disputes whether an encrypted message record existed or cl
 
 Mitigation: message send and forward create pending `blockchain_anchors` records. The backend derives a contract-compatible `record_id` from the message ID and a Keccak digest from canonical encrypted message metadata, including `forwarded_from_message_id` when present. Status and verification endpoints expose anchor metadata only to authorized users.
 
-Residual risk: FastAPI does not submit transactions. A separate worker must write pending anchors to Sepolia and update confirmation fields. The demo Solidity contract should restrict writes and prevent unintended updates before final deployment.
+Residual risk: FastAPI request handlers do not submit transactions. The backend blockchain worker must be running with valid Sepolia credentials to write pending anchors to Sepolia and update confirmation fields. The demo Solidity contract should restrict writes and prevent unintended updates before final deployment.
 
 ### Honest-But-Curious Server
 

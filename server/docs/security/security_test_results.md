@@ -33,7 +33,7 @@ Verification recorded in this workspace on 2026-06-02:
 - `alembic upgrade head --sql`: rendered successfully
 - `alembic current`: blocked locally because PostgreSQL was not listening on `localhost:5432`
 - `pytest tests/integration/test_blockchain_routes.py -vv -rs`: skipped locally because the guarded PostgreSQL test database was unavailable
-- `npm test` in the sibling blockchain folder: blocked locally because Hardhat dependencies were not installed
+
 
 Database-backed integration/security tests require `TEST_DATABASE_URL` to be configured, to be different from `DATABASE_URL`, and to point at a database name containing `test`. Run the same commands on the VM or local environment with a migrated PostgreSQL test database before final submission, then replace the skipped or blocked counts with full pass counts.
 
@@ -68,21 +68,6 @@ Database-backed integration/security tests require `TEST_DATABASE_URL` to be con
 - The backend virtualenv and declared requirements currently have no known vulnerabilities according to `pip-audit`.
 - Message send and forward now create pending blockchain anchors automatically.
 - Blockchain verification currently checks backend metadata, not live Sepolia state.
-
-## Evidence Placeholders
-
-- Unit test output after blockchain anchor implementation: `48 passed`
-- Local unit/header suite without test DB: `56 passed`
-- Bandit static scan: passed
-- Dependency audit: `No known vulnerabilities found`
-- Full local suite attempt: interrupted after `48 passed, 2 skipped` because PostgreSQL test DB was unavailable
-- Full DB-backed security test output: pending rerun with `TEST_DATABASE_URL`
-- Full DB-backed suite output: pending rerun with `TEST_DATABASE_URL`
-- Blockchain route integration output: pending rerun with `TEST_DATABASE_URL`
-- Hardhat/contract test output: pending dependency install in sibling `blockchain` folder
-- Optional curl/httpie manual check: not recorded yet
-- Optional OWASP ZAP baseline summary: not recorded yet
-- Optional public TLS probe output: not recorded yet
 
 ## Residual Risks
 

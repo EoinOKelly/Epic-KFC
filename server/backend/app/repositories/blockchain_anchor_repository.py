@@ -119,15 +119,32 @@ async def list_pending(
     db: AsyncSession,
     *,
     limit: int = 100,
+    for_update: bool = False,
 ) -> list[BlockchainAnchor]:
-    """Return pending anchors for a future blockchain worker."""
-    result = await db.execute(
+    """Return pending anchors for the blockchain worker."""
+    statement = (
         select(BlockchainAnchor)
         .where(BlockchainAnchor.status == "pending")
         .order_by(BlockchainAnchor.created_at, BlockchainAnchor.id)
         .limit(limit)
     )
+    if for_update:
+        statement = statement.with_for_update(skip_locked=True)
+
+    result = await db.execute(statement)
     return list(result.scalars().all())
+
+
+async def get_next_pending_for_update(db: AsyncSession) -> BlockchainAnchor | None:
+    """Return and lock the oldest pending anchor for one worker transaction."""
+    result = await db.execute(
+        select(BlockchainAnchor)
+        .where(BlockchainAnchor.status == "pending")
+        .order_by(BlockchainAnchor.created_at, BlockchainAnchor.id)
+        .limit(1)
+        .with_for_update(skip_locked=True)
+    )
+    return result.scalar_one_or_none()
 
 
 async def update_anchor_status(
