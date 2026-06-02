@@ -15,7 +15,8 @@ public:
     void setSecretProtectionRequired(bool required);
     void setSecretPassphrase(QString passphrase);
     void clearSecretPassphrase();
-    void useAccountScopedPath(const QString& accountId);
+    Result<std::optional<QString>> lastAccountId() const;
+    Result<bool> useAccountScopedPath(const QString& accountId, bool rememberAccount = true);
     Result<bool> reload();
 
     Result<bool> saveSession(const AuthSession& session);
@@ -43,9 +44,11 @@ public:
 private:
     Result<bool> load();
     Result<bool> save() const;
+    Result<bool> rememberLastAccountId(const QString& accountId) const;
     Result<QJsonObject> protectSecrets(QJsonObject root) const;
     Result<QJsonObject> unprotectSecrets(QJsonObject root) const;
 
+    QString m_indexPath;
     QString m_path;
     bool m_secretProtectionRequired{false};
     QString m_secretPassphrase;

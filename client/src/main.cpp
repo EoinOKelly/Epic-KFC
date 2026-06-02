@@ -42,6 +42,31 @@ int main(int argc, char* argv[]) {
 
     EventBus events;
     JsonLocalStore store(config.statePath, config.mode == ClientMode::Real);
+    const bool accountScopedState = config.mode == ClientMode::Real && !config.statePathExplicit;
+    if (accountScopedState) {
+        const auto lastAccount = store.lastAccountId();
+        if (lastAccount.succeeded() && lastAccount.value().has_value()) {
+            const auto scoped = store.useAccountScopedPath(*lastAccount.value(), false);
+            if (scoped.failed()) {
+                QTextStream(stderr) << scoped.error().message << '\n';
+                return 1;
+            }
+
+            QTextStream(stdout) << "Enter local state password to restore the previous session, or press Enter to skip.\n";
+            QTextStream(stdout) << AppText::PasswordPrompt;
+            QTextStream(stdout).flush();
+            QTextStream input(stdin);
+            const QString password = input.readLine();
+            if (!password.isEmpty()) {
+                store.setSecretPassphrase(password);
+                const auto loaded = store.reload();
+                if (loaded.failed()) {
+                    QTextStream(stderr) << loaded.error().message << '\n';
+                    return 1;
+                }
+            }
+        }
+    }
     std::unique_ptr<ICryptoProvider> cryptoProvider;
     std::unique_ptr<HttpClient> httpClient;
     std::unique_ptr<IAuthGateway> httpAuthGateway;
@@ -86,9 +111,11 @@ int main(int argc, char* argv[]) {
         messageGateway = mockMessageGateway.get();
     }
 
-    const bool accountScopedState = config.mode == ClientMode::Real && !config.statePathExplicit;
     SessionService sessionService(events, *authGateway, store, accountScopedState);
     if (httpClient) {
+        if (const auto session = sessionService.currentSession(); session.has_value()) {
+            httpClient->setTokens(session->tokens);
+        }
         httpClient->setTokenUpdateHandler([&sessionService](const TokenSet& tokens) {
             sessionService.updateTokens(tokens);
         });

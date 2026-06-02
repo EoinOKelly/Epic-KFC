@@ -153,6 +153,7 @@ inline const QString KnownUsers = "knownUsers";
 inline const QString TrustPins = "trustPins";
 inline const QString Messages = "messages";
 inline const QString Sessions = "sessions";
+inline const QString LastAccountId = "lastAccountId";
 inline const QString Id = "id";
 inline const QString UserId = "userId";
 inline const QString Username = "username";

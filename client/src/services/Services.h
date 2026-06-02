@@ -41,6 +41,7 @@ public:
     Result<DeviceKeyMaterial> currentDevice();
     Result<std::optional<TrustPin>> trustPin(const QString& userId, int deviceId) const;
     Result<PreKeyBundle> cachedBundle(const QString& userId, int deviceId) const;
+    void trustedBundle(const QString& userId, int deviceId, GatewayCallback<PreKeyBundle> callback);
 
 private:
     void uploadOneTimePreKeys();

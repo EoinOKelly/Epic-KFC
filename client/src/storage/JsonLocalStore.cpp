@@ -397,7 +397,8 @@ Result<bool> unprotectStrings(QJsonObject& object, const std::vector<QString>& k
 }
 
 JsonLocalStore::JsonLocalStore(QString path, bool secretProtectionRequired)
-    : m_path(std::move(path))
+    : m_indexPath(path)
+    , m_path(std::move(path))
     , m_secretProtectionRequired(secretProtectionRequired) {
     load();
 }
@@ -414,10 +415,33 @@ void JsonLocalStore::clearSecretPassphrase() {
     m_secretPassphrase.clear();
 }
 
-void JsonLocalStore::useAccountScopedPath(const QString& accountId) {
-    const QFileInfo currentPath(m_path);
+Result<std::optional<QString>> JsonLocalStore::lastAccountId() const {
+    QFile file(m_indexPath);
+    if (!file.exists()) {
+        return Result<std::optional<QString>>::success(std::nullopt);
+    }
+    if (!file.open(QIODevice::ReadOnly)) {
+        return Result<std::optional<QString>>::failure({ErrorCode::StorageError, QString("Could not read %1.").arg(m_indexPath)});
+    }
+    const QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
+    const QString accountId = root.value(StorageKeys::LastAccountId).toString();
+    if (accountId.isEmpty()) {
+        return Result<std::optional<QString>>::success(std::nullopt);
+    }
+    return Result<std::optional<QString>>::success(accountId);
+}
+
+Result<bool> JsonLocalStore::useAccountScopedPath(const QString& accountId, bool rememberAccount) {
+    if (rememberAccount) {
+        const auto remembered = rememberLastAccountId(accountId);
+        if (remembered.failed()) {
+            return remembered;
+        }
+    }
+    const QFileInfo currentPath(m_indexPath);
     const QString fileName = QString("%1-%2").arg(safeStateName(accountId), AppText::DefaultStateFile);
     m_path = currentPath.absoluteDir().filePath(fileName);
+    return Result<bool>::success(true);
 }
 
 Result<bool> JsonLocalStore::reload() {
@@ -743,6 +767,25 @@ Result<bool> JsonLocalStore::save() const {
     QFile file(m_path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         return Result<bool>::failure({ErrorCode::StorageError, QString("Could not write %1.").arg(m_path)});
+    }
+    file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    return Result<bool>::success(true);
+}
+
+Result<bool> JsonLocalStore::rememberLastAccountId(const QString& accountId) const {
+    QDir directory = QFileInfo(m_indexPath).absoluteDir();
+    const bool directoryReady = directory.exists() || directory.mkpath(".");
+    if (!directoryReady) {
+        return Result<bool>::failure({ErrorCode::StorageError, QString("Could not create %1.").arg(directory.path())});
+    }
+
+    QJsonObject root{
+        {StorageKeys::RootVersion, 1},
+        {StorageKeys::LastAccountId, accountId}
+    };
+    QFile file(m_indexPath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return Result<bool>::failure({ErrorCode::StorageError, QString("Could not write %1.").arg(m_indexPath)});
     }
     file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
     return Result<bool>::success(true);

@@ -351,7 +351,12 @@ void testEncryptedLocalStore() {
     };
     const auto savedAccountSession = accountScoped.saveSession(accountSession);
     const auto accountStateIsSeparate = QFile::exists(accountPath);
-    expect(savedAccountSession.succeeded() && accountStateIsSeparate, "encrypted store scopes default state by account");
+    JsonLocalStore accountIndex(path, true);
+    const auto lastAccount = accountIndex.lastAccountId();
+    const bool accountIndexSaved = lastAccount.succeeded()
+        && lastAccount.value().has_value()
+        && *lastAccount.value() == "user/2";
+    expect(savedAccountSession.succeeded() && accountStateIsSeparate && accountIndexSaved, "encrypted store scopes default state by account");
 
     QFile::remove(path);
     QFile::remove(accountPath);
