@@ -99,9 +99,9 @@ Residual risk: gateway-to-VM traffic is internal HTTP after TLS termination.
 
 Threat: modifies traffic, redirects clients, or attempts downgrade/MITM attacks.
 
-Mitigation: clients should validate the public certificate and hostname. Nginx/gateway should be configured to preserve the intended host and forward only to the internal FastAPI port. JWT signatures prevent modified Bearer tokens from authenticating.
+Mitigation: clients should validate the public certificate and hostname. Nginx/gateway should be configured to preserve the intended host and forward only to the internal FastAPI port. FastAPI can reject plain HTTP with `ENFORCE_HTTPS=true`, trust the TLS gateway's `X-Forwarded-Proto` only when configured, and emit HSTS on HTTPS responses. JWT signatures prevent modified Bearer tokens from authenticating.
 
-Residual risk: FastAPI code does not currently enforce HTTPS or HSTS itself; that must be handled by the gateway/Nginx layer.
+Residual risk: public TLS still terminates at the gateway, and FastAPI HTTPS/HSTS controls depend on production environment flags being enabled correctly.
 
 ### Broken Authentication
 
@@ -186,7 +186,7 @@ Residual risk: compromised clients can read plaintext before encryption/after de
 - No Redis-backed session/rate-limit store.
 - PostgreSQL and backend run on the same VM for the prototype.
 - Public TLS terminates at the gateway, not inside FastAPI.
-- FastAPI does not currently set HSTS or enforce HTTPS.
+- FastAPI HTTPS/HSTS controls depend on production environment flags being enabled correctly.
 - Backend cannot prove ciphertext cryptographically used a claimed prekey.
 - Blockchain anchors remain pending until an external worker confirms them on Sepolia.
 - The current demo Solidity contract must be hardened before production-style deployment.

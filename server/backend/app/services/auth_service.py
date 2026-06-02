@@ -113,7 +113,7 @@ async def create_login_tokens(
         return LoginTokenResult(
             access_token=access_token,
             refresh_token=refresh_token,
-            token_type="bearer",
+            token_type="bearer",  # nosec B106
             expires_in=_access_token_expires_in_seconds(),
         )
     except Exception:
@@ -159,7 +159,7 @@ async def refresh_access_token(
         return RefreshTokenResult(
             access_token=access_token,
             refresh_token=new_refresh_token,
-            token_type="bearer",
+            token_type="bearer",  # nosec B106
             expires_in=_access_token_expires_in_seconds(),
         )
     except AuthError:

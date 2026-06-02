@@ -5,20 +5,29 @@ Date documented: 2026-06-02
 ## Automated Test Commands
 
 ```bash
-ruff check app tests alembic
-python -m compileall app tests alembic
-pytest tests/security -vv
-pytest tests/unit tests/integration tests/security -q
+.venv/bin/ruff check app tests alembic scripts
+.venv/bin/python -m compileall app tests scripts alembic
+.venv/bin/bandit -q -r app scripts
+.venv/bin/pip-audit --progress-spinner off --cache-dir /private/tmp/pip-audit-cache
+.venv/bin/pip-audit --progress-spinner off --cache-dir /private/tmp/pip-audit-cache -r requirements.txt
+.venv/bin/pytest tests/security -vv
+.venv/bin/pytest tests/unit tests/integration/test_security_headers.py -q
+.venv/bin/pytest tests/unit tests/integration tests/security -q
 ```
 
 ## Current Result Summary
 
-The security evidence pack adds pytest tests for authentication, access control, input validation, injection resistance, sensitive data exposure, audit logging, and rate limiting.
+The security evidence pack adds pytest tests for authentication, access control, input validation, injection resistance, sensitive data exposure, audit logging, transport hardening, TLS evidence helpers, and rate limiting.
 
 Verification recorded in this workspace on 2026-06-02:
 
-- `ruff check app tests alembic`: passed
-- `python -m compileall app tests alembic`: passed
+- `.venv/bin/ruff check app tests alembic scripts`: passed
+- `.venv/bin/python -m compileall app tests scripts alembic`: passed
+- `.venv/bin/bandit -q -r app scripts`: passed
+- `.venv/bin/pip-audit --progress-spinner off --cache-dir /private/tmp/pip-audit-cache`: no known vulnerabilities found
+- `.venv/bin/pip-audit --progress-spinner off --cache-dir /private/tmp/pip-audit-cache -r requirements.txt`: no known vulnerabilities found
+- `.venv/bin/pytest tests/unit tests/integration/test_security_headers.py -q`: 56 passed
+- `.venv/bin/pytest tests/unit tests/integration tests/security -q`: interrupted locally after 48 passed, 2 skipped because the unavailable PostgreSQL test database caused repeated connection timeouts
 - `pytest tests/unit -q`: 48 passed after the blockchain-anchor implementation
 - `alembic history`: passed
 - `alembic upgrade head --sql`: rendered successfully
@@ -38,7 +47,8 @@ Database-backed integration/security tests require `TEST_DATABASE_URL` to be con
 | Rate limiting | `tests/security/test_rate_limit_security.py` | Repeated abuse returns `429` with safe errors |
 | Blockchain anchors | `tests/integration/test_blockchain_routes.py` | Pending anchors are created/reused, anchor status is protected by message access, verification checks metadata |
 | TLS utility | `tests/unit/test_tls_connection_probe.py` | Host resolution/certificate-name formatting utility behavior covered |
-| Security headers | `tests/integration/test_security_headers.py` | Core hardening headers present and wildcard production CORS rejected |
+| Security headers / HTTPS | `tests/integration/test_security_headers.py` | Core hardening headers present, HSTS emitted for HTTPS, optional HTTPS enforcement works, wildcard production CORS rejected |
+| Vulnerable components | `pip-audit` and `pip-audit -r requirements.txt` | No known vulnerabilities in the backend virtualenv or declared requirements |
 
 ## Key Controls Verified
 
@@ -53,19 +63,25 @@ Database-backed integration/security tests require `TEST_DATABASE_URL` to be con
 - User lookup hides email, public key material, password hashes, and refresh-token hashes.
 - Audit logs record security events without storing passwords, tokens, key material, or encrypted wire payloads.
 - Rate limiting mitigates brute-force login, registration spam, refresh abuse, and message spam at a basic local-project level.
+- HTTPS enforcement can reject plain HTTP, HSTS is emitted on HTTPS responses, and production settings reject placeholder JWT/refresh-token secrets.
+- Bandit produced no findings after suppressing known false positives for non-secret OAuth/hash-prefix literals.
+- The backend virtualenv and declared requirements currently have no known vulnerabilities according to `pip-audit`.
 - Message send and forward now create pending blockchain anchors automatically.
 - Blockchain verification currently checks backend metadata, not live Sepolia state.
 
 ## Evidence Placeholders
 
 - Unit test output after blockchain anchor implementation: `48 passed`
+- Local unit/header suite without test DB: `56 passed`
+- Bandit static scan: passed
+- Dependency audit: `No known vulnerabilities found`
+- Full local suite attempt: interrupted after `48 passed, 2 skipped` because PostgreSQL test DB was unavailable
 - Full DB-backed security test output: pending rerun with `TEST_DATABASE_URL`
 - Full DB-backed suite output: pending rerun with `TEST_DATABASE_URL`
 - Blockchain route integration output: pending rerun with `TEST_DATABASE_URL`
 - Hardhat/contract test output: pending dependency install in sibling `blockchain` folder
 - Optional curl/httpie manual check: not recorded yet
 - Optional OWASP ZAP baseline summary: not recorded yet
-- Optional `pip-audit` output: not recorded yet
 - Optional public TLS probe output: not recorded yet
 
 ## Residual Risks
@@ -76,6 +92,6 @@ Database-backed integration/security tests require `TEST_DATABASE_URL` to be con
 - Redis-backed session/rate-limit storage is not implemented.
 - No production WAF is configured by this backend.
 - No admin audit-log viewer is exposed.
-- Automated dependency vulnerability scanning is not included yet.
-- FastAPI does not currently enforce HTTPS/HSTS in application code; TLS policy depends on gateway/Nginx configuration.
+- Dependency scan evidence should be refreshed immediately before submission.
+- FastAPI HTTPS/HSTS enforcement is implemented but depends on production env flags being enabled behind the gateway/Nginx configuration.
 - Blockchain anchors remain pending until a separate worker submits them to Sepolia and updates confirmation metadata.

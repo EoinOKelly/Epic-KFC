@@ -138,19 +138,17 @@ Implemented in code:
 - CORS is only installed when `ALLOWED_ORIGINS` is non-empty.
 - `APP_ENV=production` rejects `ALLOWED_ORIGINS=["*"]`.
 - `CORS_ALLOW_CREDENTIALS=false` is the default.
+- `ENFORCE_HTTPS=true` rejects plain HTTP at FastAPI with `426 HTTPS is required`.
+- `TRUST_X_FORWARDED_PROTO=true` lets a trusted TLS gateway signal that the original client request used HTTPS.
+- `HSTS_ENABLED=true` emits `Strict-Transport-Security` on HTTPS requests.
 - Security headers are added when `SECURITY_HEADERS_ENABLED=true`:
   - `X-Content-Type-Options: nosniff`
   - `X-Frame-Options: DENY`
   - `Referrer-Policy: no-referrer`
   - `Cache-Control: no-store`
+  - `Permissions-Policy: geolocation=(), microphone=(), camera=()`
 
-Not currently implemented in FastAPI code:
-
-- FastAPI does not currently enforce `ENFORCE_HTTPS`.
-- FastAPI does not currently inspect `X-Forwarded-Proto`.
-- FastAPI does not currently set `Strict-Transport-Security`.
-
-Those controls should be applied at the gateway/Nginx layer if required for production hardening.
+The gateway/Nginx layer should still redirect HTTP to HTTPS and set its own HSTS policy for public traffic. The FastAPI controls provide defense in depth and testable evidence.
 
 ## External Services
 
@@ -179,7 +177,7 @@ Successful evidence includes resolved IP addresses, TLS version, cipher suite, c
 
 - Public TLS terminates at the provided gateway, not inside FastAPI.
 - The gateway-to-VM hop is internal HTTP.
-- FastAPI HTTPS/HSTS enforcement is not implemented in application code.
+- FastAPI HTTPS/HSTS enforcement depends on `ENFORCE_HTTPS`, `TRUST_X_FORWARDED_PROTO`, and `HSTS_ENABLED` being enabled in production.
 - In-memory rate limiting is not distributed.
 - Blockchain anchor confirmation is not completed by the FastAPI request path.
 - PostgreSQL and FastAPI run on the same VM for the prototype.

@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 7
     rate_limit_enabled: bool = True
     security_headers_enabled: bool = True
+    enforce_https: bool = False
+    trust_x_forwarded_proto: bool = False
+    hsts_enabled: bool = True
+    hsts_max_age_seconds: int = Field(default=31_536_000, ge=0)
     allowed_origins: list[str] | str = Field(default_factory=list)
     cors_allow_credentials: bool = False
 
@@ -59,11 +63,40 @@ class Settings(BaseSettings):
         raise ValueError("ALLOWED_ORIGINS must be a list or comma-separated string.")
 
     @model_validator(mode="after")
-    def validate_production_cors(self) -> Self:
-        """Reject wildcard CORS origins in production."""
-        if self.app_env.lower() == "production" and "*" in self.allowed_origins:
+    def validate_security_settings(self) -> Self:
+        """Reject unsafe production and CORS settings."""
+        if self.cors_allow_credentials and "*" in self.allowed_origins:
+            raise ValueError(
+                "ALLOWED_ORIGINS must not contain '*' when CORS_ALLOW_CREDENTIALS is true."
+            )
+
+        if _is_production(self.app_env) and "*" in self.allowed_origins:
             raise ValueError("ALLOWED_ORIGINS must not contain '*' in production.")
+        if _is_production(self.app_env):
+            _validate_production_secret("JWT_SECRET_KEY", self.jwt_secret_key)
+            _validate_production_secret(
+                "REFRESH_TOKEN_HASH_SECRET",
+                self.refresh_token_hash_secret,
+            )
         return self
+
+
+def _is_production(app_env: str) -> bool:
+    """Return whether the configured environment is production-like."""
+    return app_env.strip().lower() in {"prod", "production"}
+
+
+def _validate_production_secret(name: str, value: str | None) -> None:
+    """Reject missing, short, or placeholder secrets in production."""
+    if not value:
+        raise ValueError(f"{name} must be set in production.")
+    if len(value) < 32:
+        raise ValueError(f"{name} must be at least 32 characters in production.")
+
+    normalized = value.lower()
+    placeholder_markers = ("change_me", "changeme", "placeholder", "local_only")
+    if any(marker in normalized for marker in placeholder_markers):
+        raise ValueError(f"{name} must not use a placeholder value in production.")
 
 
 @lru_cache

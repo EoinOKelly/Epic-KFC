@@ -17,7 +17,7 @@ from app.core.config import settings
 
 JWT_ACCESS_TYPE = "access"
 JWT_ALLOWED_ALGORITHM = "HS256"
-REFRESH_TOKEN_HASH_PREFIX = "hmac_sha256:"
+REFRESH_TOKEN_HASH_PREFIX = "hmac_sha256:"  # nosec B105
 
 
 class TokenServiceError(Exception):
