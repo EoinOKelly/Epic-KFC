@@ -3,22 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Message Fidelity Checker</title>
+  <title>Message Fidelity — Merkle</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <main class="card">
     <header>
-      <h1>Message Fidelity</h1>
+      <h1>Merkle Message Fidelity</h1>
       <p class="subtitle">
-        Compare a locally computed <code>keccak256</code> digest with the value anchored on Sepolia.
+        One Merkle root on Sepolia proves an entire conversation. Verify any single message with a Merkle proof.
       </p>
     </header>
 
     <section class="field">
       <label for="rpcUrl">Sepolia RPC URL</label>
       <input id="rpcUrl" type="url" placeholder="https://sepolia.infura.io/v3/..." />
-      <span class="hint">Public RPC or your Infura/Alchemy endpoint (read-only is enough).</span>
     </section>
 
     <section class="field">
@@ -27,19 +26,32 @@
     </section>
 
     <section class="field">
-      <label for="recordLabel">Record ID label</label>
-      <input id="recordLabel" type="text" placeholder="conversation:alice-bob" />
-      <span class="hint">Hashed to <code>bytes32</code> via <code>keccak256(utf8Bytes(label))</code> (ethers <code>id()</code>).</span>
+      <label for="userA">User A ID (UUID)</label>
+      <input id="userA" type="text" placeholder="alice user uuid" />
     </section>
 
     <section class="field">
-      <label for="messageText">Message text (local digest)</label>
-      <textarea id="messageText" rows="5" placeholder="Paste message plaintext to hash locally…"></textarea>
+      <label for="userB">User B ID (UUID)</label>
+      <input id="userB" type="text" placeholder="bob user uuid" />
+    </section>
+
+    <section class="field">
+      <label for="messagesJson">Messages JSON</label>
+      <textarea id="messagesJson" rows="8" spellcheck="false">[
+  { "messageId": "uuid-1", "plaintext": "hello", "createdAt": "2026-01-01T00:00:00.000Z" },
+  { "messageId": "uuid-2", "plaintext": "world", "createdAt": "2026-01-01T00:01:00.000Z" }
+]</textarea>
+      <span class="hint">Array of <code>{ messageId, plaintext, createdAt? }</code> — same format as <code>anchorConversationOnChain</code>.</span>
+    </section>
+
+    <section class="field">
+      <label for="verifyMessageId">Message ID to verify</label>
+      <input id="verifyMessageId" type="text" placeholder="uuid-1" />
     </section>
 
     <div class="actions">
       <button type="button" id="loadDeployment" class="secondary">Load deployment.json</button>
-      <button type="button" id="verifyBtn">Verify fidelity</button>
+      <button type="button" id="verifyBtn">Verify Merkle proof</button>
     </div>
 
     <output id="result" class="result hidden" aria-live="polite"></output>
@@ -51,6 +63,7 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.umd.min.js"></script>
+  <script src="merkle-browser.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -11,6 +11,7 @@ CS4455 secure messaging app. This folder is the shared reference for all teams.
 | [integration.md](./integration.md) | All devs | How each minor connects to `cryptography/` |
 | [threat-model.md](./threat-model.md) | Crypto, interview prep | Attackers, guarantees, limitations |
 | [interview-prep.md](./interview-prep.md) | Crypto lead | Likely viva questions and short answers |
+| [AI_PROMPTS.md](./AI_PROMPTS.md) | Module leads / report | Key AI prompts used during development (edited for clarity) |
 
 ## Repo layout
 

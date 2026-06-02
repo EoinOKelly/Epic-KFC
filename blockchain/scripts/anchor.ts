@@ -1,11 +1,7 @@
 import { ethers } from "hardhat";
+import { hashMessageLeaf } from "../src/merkle";
+import { buildConversationMerkleTree, deriveConversationRecordId } from "../src/conversation";
 
-/**
- * Anchor a message digest on Sepolia (demo / integration helper).
- *
- *   npx hardhat run scripts/anchor.ts --network sepolia -- \
- *     --contract 0xYourAddress --label "conversation:alice-bob" --message "hello"
- */
 async function main() {
   const args = process.argv.slice(2);
   const getArg = (flag: string) => {
@@ -14,23 +10,31 @@ async function main() {
   };
 
   const contractAddress = getArg("--contract") ?? process.env.MESSAGE_FIDELITY_ADDRESS;
-  const label = getArg("--label");
+  const userA = getArg("--userA");
+  const userB = getArg("--userB");
+  const messageId = getArg("--messageId");
   const message = getArg("--message");
 
-  if (!contractAddress || !label || message === undefined) {
+  if (!contractAddress || !userA || !userB || !messageId || message === undefined) {
     throw new Error(
-      "Usage: --contract <addr> --label <recordIdLabel> --message <text>"
+      "Usage: --contract <addr> --userA <uuid> --userB <uuid> --messageId <uuid> --message <text>"
     );
   }
 
-  const recordId = ethers.id(label);
-  const contentHash = ethers.keccak256(ethers.toUtf8Bytes(message));
+  const recordId = deriveConversationRecordId(userA, userB);
+  const tree = buildConversationMerkleTree([
+    { messageId, plaintext: message, createdAt: new Date().toISOString() },
+  ]);
 
   const fidelity = await ethers.getContractAt("MessageFidelity", contractAddress);
-  const tx = await fidelity.storeHash(recordId, contentHash);
+  const tx = await fidelity.storeHash(recordId, tree.root);
   console.log("Tx:", tx.hash);
   await tx.wait();
-  console.log("Anchored", { recordId, contentHash });
+  console.log("Anchored Merkle root", {
+    recordId,
+    merkleRoot: tree.root,
+    leaf: hashMessageLeaf(messageId, message),
+  });
 }
 
 main().catch((err) => {

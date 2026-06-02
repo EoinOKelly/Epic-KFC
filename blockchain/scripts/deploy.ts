@@ -2,13 +2,6 @@ import { ethers } from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
 
-/**
- * Deploy MessageFidelity to Sepolia and write address + ABI snippet for the fidelity UI.
- *
- * Usage:
- *   cp .env.example .env   # fill SEPOLIA_RPC_URL and DEPLOYER_PRIVATE_KEY
- *   npm run deploy:sepolia
- */
 async function main() {
   const [deployer] = await ethers.getSigners();
   const balance = await ethers.provider.getBalance(deployer.address);
@@ -42,8 +35,10 @@ async function main() {
     network: "sepolia",
     chainId: 11155111,
     contractAddress: address,
+    messageFidelityAddress: address,
     deployedAt: new Date().toISOString(),
     deployer: deployer.address,
+    envHint: "Set MESSAGE_FIDELITY_ADDRESS in blockchain/.env",
   };
 
   fs.writeFileSync(

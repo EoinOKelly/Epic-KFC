@@ -1,6 +1,9 @@
 {
   "network": "sepolia",
   "chainId": 11155111,
-  "contractAddress": "",
-  "note": "Run npm run deploy:sepolia to populate contractAddress"
+  "contractAddress": "0x69d3D7D9E50141faef9AC957D6450a4ccb37c404",
+  "messageFidelityAddress": "0x69d3D7D9E50141faef9AC957D6450a4ccb37c404",
+  "deployedAt": "2026-06-01T19:11:25.780Z",
+  "deployer": "0x925029Bab37aB27BE775A05524C58b619DE43899",
+  "envHint": "Set MESSAGE_FIDELITY_ADDRESS in blockchain/.env"
 }
