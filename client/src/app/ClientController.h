@@ -21,6 +21,8 @@ public:
     void handleCommand(const SlashCommand& command);
     void registerUser(const QString& username, const QString& email, const QString& password);
     void login(const QString& usernameOrEmail, const QString& password);
+    void openConversation(const QString& username, int page = 1);
+    void sendMessage(const QString& recipientUsername, const QString& body);
     void beginMessageComposition(const QString& recipientUsername);
     void submitComposedMessage(const QString& recipientUsername, const QString& body);
     void cancelComposition();

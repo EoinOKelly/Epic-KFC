@@ -12,6 +12,7 @@ public:
 
 signals:
     void slashCommandReceived(SlashCommand command);
+    void conversationTargetChanged(QString username);
     void operationStarted(QString message);
     void statusMessage(QString message);
     void commandFailed(ClientError error);

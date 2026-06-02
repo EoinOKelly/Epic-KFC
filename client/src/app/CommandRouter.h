@@ -31,6 +31,8 @@ private:
     void handleRegisterPassword(const QString& line);
     void handleLoginPassword(const QString& line);
     void handleMessageComposition(const QString& line);
+    void handleMsgCommand(const SlashCommand& command);
+    void handleSendCommand(const SlashCommand& command);
     bool commandHasArgumentCount(const SlashCommand& command, int minimum, int maximum = -1);
 
     EventBus& m_events;
@@ -41,6 +43,7 @@ private:
     QString m_pendingUsername;
     QString m_pendingEmail;
     QString m_pendingLoginIdentifier;
+    QString m_activeConversationUsername;
     QString m_compositionRecipientUsername;
     std::vector<QString> m_compositionLines;
 };

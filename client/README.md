@@ -196,8 +196,8 @@ All actions start with `/`.
 /conversations
 /inbox
 /sent
-/msg <username>
-/send <username>
+/msg <username> [message]
+/send [message]
 /read <username> [page]
 /forward <messageId> <username>
 /revoke <messageId>
@@ -210,8 +210,22 @@ All actions start with `/`.
 /exit
 ```
 
-`/register`, `/login`, `/msg`, and `/send` enter prompt modes. Message composition
-accepts slash-prefixed body text until `/send` submits or `/cancel` aborts.
+`/register` and `/login` enter password prompt modes. `/msg <username>` opens
+that conversation and changes the prompt to `[username] >`. Once a conversation
+is active, plain text sends a one-line message to that user, while `/send` by
+itself opens multi-line composition. Message composition accepts slash-prefixed
+body text until `/send` submits or `/cancel` aborts.
+
+Examples:
+
+```text
+/msg alice
+hello alice
+/send
+first line
+second line
+/send
+```
 
 Mock mode resolves usernames locally. Real mode resolves usernames through the
 production `GET /api/v1/users/by-username/{username}` endpoint and then uses the

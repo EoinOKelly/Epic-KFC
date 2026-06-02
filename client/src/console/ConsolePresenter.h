@@ -20,4 +20,5 @@ private:
 
     QTextStream m_output;
     bool m_showRawErrors{false};
+    QString m_activeConversationUsername;
 };

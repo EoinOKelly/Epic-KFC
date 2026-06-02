@@ -36,6 +36,7 @@ inline const QString OperationInProgress = "Operation still in progress. Please 
 inline const QString StartupUsage =
     "Usage: client [--debug] [--debug-errors] [--mode mock|real] [--api-url https://host/api/v1] [--device-id 1] [--state-path path]";
 inline const QString Prompt = "> ";
+inline const QString ConversationPrompt = "[%1] > ";
 inline const QString PasswordPrompt = "password> ";
 inline const QString MessagePrompt = "message> ";
 inline const QString Greeting = "Epic KFC secure messaging client. Type /help to begin.";
@@ -120,8 +121,8 @@ inline const QString Help =
     "  /conversations\n"
     "  /inbox\n"
     "  /sent\n"
-    "  /msg <username>\n"
-    "  /send <username>\n"
+    "  /msg <username> [message]\n"
+    "  /send [message]\n"
     "  /read <username> [page]\n"
     "  /forward <messageId> <username>\n"
     "  /revoke <messageId>\n"
