@@ -22,6 +22,7 @@ This plan covers the FastAPI backend for the secure messaging project. The backe
 - Fake test users, fake devices, fake prekeys, and fake opaque encrypted payloads
 - Test JWT and refresh-token secrets monkeypatched for repeatability
 - In-memory rate limiter reset between tests
+- Optional VM/public endpoint checks against `https://kfc.theburkenator.com` only with permission
 
 ## Target Endpoints
 
@@ -40,6 +41,7 @@ This plan covers the FastAPI backend for the secure messaging project. The backe
 - `POST /api/v1/messages/{message_id}/forward`
 - `POST /api/v1/messages/{message_id}/revoke`
 - `DELETE /api/v1/messages/{message_id}`
+- `GET /api/v1/users/by-username/{username}`
 
 ## Tools
 
@@ -49,6 +51,8 @@ This plan covers the FastAPI backend for the secure messaging project. The backe
 - Postman or Insomnia collections if manual demonstrations are needed
 - OWASP ZAP baseline scan as an optional manual check against a local running API
 - Manual review for sensitive data exposure in responses and audit logs
+- `backend/scripts/check_tls_connection.py` for hostname resolution and certificate-verified TLS evidence
+- `ruff`, `bandit`, and `pip-audit` for static/dependency review
 
 ## Test Categories
 
@@ -59,6 +63,8 @@ This plan covers the FastAPI backend for the secure messaging project. The backe
 - Sensitive data exposure
 - Rate limiting and API abuse
 - Audit logging evidence
+- Network/TLS evidence
+- Vulnerable component scan evidence
 
 ## Expected Results
 
@@ -68,8 +74,61 @@ This plan covers the FastAPI backend for the secure messaging project. The backe
 - Direct message routes reject unsupported group/conversation fields.
 - Malformed encrypted payloads and malformed public key fields are rejected.
 - Injection-style payloads do not bypass authentication and do not expose database errors.
-- Responses and audit logs do not expose passwords, hashes, tokens, private keys, plaintext, or wire payloads.
+- Responses and audit logs do not expose passwords, hashes, tokens, private keys, or plaintext.
+- Audit logs do not store encrypted `wire_payload_json`; authorized message responses intentionally return encrypted `wire_payload_json` to sender/recipient users.
 - Repeated abusive requests return `429 Too Many Requests` with `Retry-After`.
+- Public TLS probe verifies hostname and certificate chain.
+- Dependency scan findings are recorded and remediated or accepted with rationale.
+
+## Automated Commands
+
+Run from `server/backend`:
+
+```bash
+ruff check app tests alembic
+python -m compileall app tests alembic
+pytest tests/security -vv
+pytest tests/unit tests/integration tests/security -q
+```
+
+Optional dependency/static scan commands:
+
+```bash
+bandit -r app
+pip-audit
+```
+
+## Manual Test Examples
+
+Run the API locally first:
+
+```bash
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Check OpenAPI docs:
+
+```bash
+curl -i http://127.0.0.1:8000/docs
+```
+
+Check missing Bearer token behavior:
+
+```bash
+curl -i http://127.0.0.1:8000/api/v1/auth/me
+```
+
+Check public TLS evidence if authorized:
+
+```bash
+.venv/bin/python scripts/check_tls_connection.py kfc.theburkenator.com --port 443
+```
+
+Optional ZAP baseline against local app only:
+
+```bash
+docker run --rm -t ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://host.docker.internal:8000
+```
 
 ## Safety Notes
 

@@ -17,3 +17,4 @@ ruff
 bandit
 pip-audit
 pytest-asyncio
+eth-hash[pycryptodome]

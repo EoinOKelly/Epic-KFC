@@ -11,6 +11,9 @@ from app.schemas.auth import (
 from app.schemas.blockchain_anchor import (
     BlockchainAnchorCreateRequest,
     BlockchainAnchorResponse,
+    BlockchainMessageAnchorCreateRequest,
+    BlockchainVerifyRequest,
+    BlockchainVerifyResponse,
 )
 from app.schemas.common import (
     ErrorResponse,
@@ -41,6 +44,9 @@ __all__ = [
     "AuditLogResponse",
     "BlockchainAnchorCreateRequest",
     "BlockchainAnchorResponse",
+    "BlockchainMessageAnchorCreateRequest",
+    "BlockchainVerifyRequest",
+    "BlockchainVerifyResponse",
     "DeviceKeyResponse",
     "DeviceKeyUploadRequest",
     "ErrorResponse",

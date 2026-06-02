@@ -15,6 +15,7 @@ from app.repositories import (
     user_repository,
 )
 from app.schemas.message import MessageCreateRequest
+from app.services.blockchain_anchor_service import create_pending_anchor_for_message
 
 
 class MessageAccessDeniedError(Exception):
@@ -54,6 +55,7 @@ async def send_message(
             wire_payload_json=request_data.wire_payload_json,
             consumed_one_time_prekey_id=request_data.consumed_one_time_prekey_id,
         )
+        await create_pending_anchor_for_message(db, message)
         await db.commit()
         await db.refresh(message)
         return message
@@ -181,6 +183,7 @@ async def forward_message(
             wire_payload_json=request_data.wire_payload_json,
             consumed_one_time_prekey_id=request_data.consumed_one_time_prekey_id,
         )
+        await create_pending_anchor_for_message(db, forwarded)
         await db.commit()
         await db.refresh(forwarded)
         return forwarded

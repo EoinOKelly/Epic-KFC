@@ -2,6 +2,7 @@
 
 from app.repositories import (
     audit_log_repository,
+    blockchain_anchor_repository,
     device_key_repository,
     message_repository,
     one_time_prekey_repository,
@@ -11,6 +12,7 @@ from app.repositories import (
 
 __all__ = [
     "audit_log_repository",
+    "blockchain_anchor_repository",
     "device_key_repository",
     "message_repository",
     "one_time_prekey_repository",

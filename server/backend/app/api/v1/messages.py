@@ -12,12 +12,14 @@ from app.api.deps import enforce_user_rate_limit, get_current_user, get_db
 from app.core import rate_limit
 from app.models.user import User
 from app.schemas.common import PaginationParams, SuccessResponse
+from app.schemas.blockchain_anchor import BlockchainAnchorResponse
 from app.schemas.message import (
     DirectMessageCreateRequest,
     DirectMessageForwardRequest,
     MessageResponse,
 )
-from app.services import audit_service, message_service
+from app.services import audit_service, blockchain_anchor_service, message_service
+from app.services.blockchain_anchor_service import BlockchainAnchorNotFoundError
 from app.services.message_service import (
     InvalidDeviceError,
     InvalidPreKeyError,
@@ -150,6 +152,54 @@ async def get_message(
         resource_id=message.id,
     )
     return MessageResponse.model_validate(message)
+
+
+@router.get("/{message_id}/anchor", response_model=BlockchainAnchorResponse)
+async def get_message_anchor(
+    message_id: UUID,
+    http_request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> BlockchainAnchorResponse:
+    """Return the latest blockchain anchor for an accessible direct message."""
+    actor_user_id = current_user.id
+    await enforce_user_rate_limit(
+        actor_user_id,
+        "messages.anchor",
+        rate_limit.BLOCKCHAIN_READ_RATE_LIMIT,
+    )
+    try:
+        anchor = await blockchain_anchor_service.get_latest_message_anchor_for_user(
+            db,
+            current_user,
+            message_id,
+        )
+    except BlockchainAnchorNotFoundError as exc:
+        await _record_audit_event(
+            db,
+            http_request,
+            actor_user_id=actor_user_id,
+            event_type="message.anchor_fetch_denied",
+            success=False,
+            resource_type="message",
+            resource_id=message_id,
+            details={"reason": "not_found_or_inaccessible"},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Anchor not found",
+        ) from exc
+
+    await _record_audit_event(
+        db,
+        http_request,
+        actor_user_id=actor_user_id,
+        event_type="message.anchor_fetched",
+        success=True,
+        resource_type="blockchain_anchor",
+        resource_id=anchor.id,
+    )
+    return BlockchainAnchorResponse.model_validate(anchor)
 
 
 @router.post(
