@@ -31,6 +31,7 @@ inline const QString DebugRealModeConflict = "--debug starts mock mode and canno
 inline const QString DebugApiUrlConflict = "--debug starts mock mode and cannot be combined with --api-url.";
 inline const QString TlsRequired = "Real mode requires HTTPS with certificate validation.";
 inline const QString HttpRequestTimedOut = "Request timed out while contacting the backend.";
+inline const QString OperationInProgress = "Operation still in progress. Please wait for it to finish.";
 inline const QString StartupUsage =
     "Usage: client [--debug] [--mode mock|real] [--api-url https://host/api/v1] [--device-id 1] [--state-path path]";
 inline const QString Prompt = "> ";

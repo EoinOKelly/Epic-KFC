@@ -37,6 +37,7 @@ private:
     ClientController& m_controller;
     SlashCommandParser m_parser;
     InputMode m_inputMode{InputMode::Command};
+    bool m_operationInProgress{false};
     QString m_pendingUsername;
     QString m_pendingEmail;
     QString m_pendingLoginIdentifier;

@@ -26,7 +26,7 @@ void ClientController::handleCommand(const SlashCommand& command) {
         emit m_events.statusMessage(AppText::Help);
         return;
     case CommandType::Logout:
-        emit m_events.statusMessage(AppText::LoggingOut);
+        emit m_events.operationStarted(AppText::LoggingOut);
         m_sessionService.logout();
         return;
     case CommandType::Whoami:
@@ -44,19 +44,19 @@ void ClientController::handleCommand(const SlashCommand& command) {
         }
         return;
     case CommandType::Conversations:
-        emit m_events.statusMessage(AppText::LoadingConversations);
+        emit m_events.operationStarted(AppText::LoadingConversations);
         m_messageService.listConversations();
         return;
     case CommandType::Inbox:
-        emit m_events.statusMessage(AppText::LoadingUnreadInbox);
+        emit m_events.operationStarted(AppText::LoadingUnreadInbox);
         m_messageService.listUnreadSenders();
         return;
     case CommandType::Sync:
-        emit m_events.statusMessage(AppText::SyncingMessages);
+        emit m_events.operationStarted(AppText::SyncingMessages);
         m_messageService.listReceived();
         return;
     case CommandType::Sent:
-        emit m_events.statusMessage(AppText::LoadingSentMessages);
+        emit m_events.operationStarted(AppText::LoadingSentMessages);
         m_messageService.listSent();
         return;
     case CommandType::Read:
@@ -70,43 +70,43 @@ void ClientController::handleCommand(const SlashCommand& command) {
                 });
                 return;
             }
-            emit m_events.statusMessage(AppText::LoadingConversation);
+            emit m_events.operationStarted(AppText::LoadingConversation);
             m_messageService.readConversation(command.arguments.at(0), page);
         }
         return;
     case CommandType::Forward:
         if (command.arguments.size() == 2) {
-            emit m_events.statusMessage(AppText::ForwardingMessage);
+            emit m_events.operationStarted(AppText::ForwardingMessage);
             m_messageService.forward(command.arguments.at(0), command.arguments.at(1));
         }
         return;
     case CommandType::Revoke:
         if (command.arguments.size() == 1) {
-            emit m_events.statusMessage(AppText::RevokingMessage);
+            emit m_events.operationStarted(AppText::RevokingMessage);
             m_messageService.revoke(command.arguments.at(0));
         }
         return;
     case CommandType::DeleteMessage:
         if (command.arguments.size() == 1) {
-            emit m_events.statusMessage(AppText::DeletingMessage);
+            emit m_events.operationStarted(AppText::DeletingMessage);
             m_messageService.deleteMessage(command.arguments.at(0));
         }
         return;
     case CommandType::Download:
         if (command.arguments.size() == 2) {
-            emit m_events.statusMessage(AppText::ExportingMessage);
+            emit m_events.operationStarted(AppText::ExportingMessage);
             m_messageService.download(command.arguments.at(0), command.arguments.at(1));
         }
         return;
     case CommandType::Trust:
         if (command.arguments.size() == 1) {
-            emit m_events.statusMessage(AppText::CheckingTrust);
+            emit m_events.operationStarted(AppText::CheckingTrust);
             m_keyService.trustUsername(command.arguments.at(0));
         }
         return;
     case CommandType::Verify:
         if (command.arguments.size() == 1) {
-            emit m_events.statusMessage(AppText::VerifyingMessage);
+            emit m_events.operationStarted(AppText::VerifyingMessage);
             m_messageService.verify(command.arguments.at(0));
         }
         return;
@@ -125,12 +125,12 @@ void ClientController::handleCommand(const SlashCommand& command) {
 }
 
 void ClientController::registerUser(const QString& username, const QString& email, const QString& password) {
-    emit m_events.statusMessage(AppText::RegisteringUser);
+    emit m_events.operationStarted(AppText::RegisteringUser);
     m_sessionService.registerUser(username, email, password);
 }
 
 void ClientController::login(const QString& usernameOrEmail, const QString& password) {
-    emit m_events.statusMessage(AppText::LoggingIn);
+    emit m_events.operationStarted(AppText::LoggingIn);
     m_sessionService.login(usernameOrEmail, password);
 }
 
@@ -143,7 +143,7 @@ void ClientController::submitComposedMessage(const QString& recipientUsername, c
         emit m_events.commandFailed({ErrorCode::InvalidCommand, AppText::EmptyMessage});
         return;
     }
-    emit m_events.statusMessage(AppText::SendingMessage);
+    emit m_events.operationStarted(AppText::SendingMessage);
     m_messageService.send(recipientUsername, body);
 }
 

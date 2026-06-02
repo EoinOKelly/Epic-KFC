@@ -49,9 +49,77 @@ CommandRouter::CommandRouter(EventBus& events, ClientController& controller, QOb
     : QObject(parent)
     , m_events(events)
     , m_controller(controller) {
+    connect(&m_events, &EventBus::operationStarted, this, [this]() {
+        m_operationInProgress = true;
+    });
+    connect(&m_events, &EventBus::statusMessage, this, [this]() {
+        m_operationInProgress = false;
+    });
+    connect(&m_events, &EventBus::commandFailed, this, [this]() {
+        m_operationInProgress = false;
+    });
+    connect(&m_events, &EventBus::sessionStarted, this, [this]() {
+        m_operationInProgress = false;
+    });
+    connect(&m_events, &EventBus::sessionEnded, this, [this]() {
+        m_operationInProgress = false;
+    });
+    connect(&m_events, &EventBus::trustPinCreated, this, [this]() {
+        m_operationInProgress = false;
+    });
+    connect(&m_events, &EventBus::trustPinMatched, this, [this]() {
+        m_operationInProgress = false;
+    });
+    connect(&m_events, &EventBus::trustPinMismatch, this, [this]() {
+        m_operationInProgress = false;
+    });
+    connect(&m_events, &EventBus::conversationListUpdated, this, [this]() {
+        m_operationInProgress = false;
+    });
+    connect(&m_events, &EventBus::unreadInboxUpdated, this, [this]() {
+        m_operationInProgress = false;
+    });
+    connect(&m_events, &EventBus::conversationLogOpened, this, [this]() {
+        m_operationInProgress = false;
+    });
+    connect(&m_events, &EventBus::messageListUpdated, this, [this]() {
+        m_operationInProgress = false;
+    });
+    connect(&m_events, &EventBus::messageSent, this, [this]() {
+        m_operationInProgress = false;
+    });
+    connect(&m_events, &EventBus::messageForwarded, this, [this]() {
+        m_operationInProgress = false;
+    });
+    connect(&m_events, &EventBus::messageRevoked, this, [this]() {
+        m_operationInProgress = false;
+    });
+    connect(&m_events, &EventBus::messageDeleted, this, [this]() {
+        m_operationInProgress = false;
+    });
+    connect(&m_events, &EventBus::messageDownloaded, this, [this]() {
+        m_operationInProgress = false;
+    });
+    connect(&m_events, &EventBus::fidelityStatusUpdated, this, [this]() {
+        m_operationInProgress = false;
+    });
+    connect(&m_events, &EventBus::backendUnavailable, this, [this]() {
+        m_operationInProgress = false;
+    });
+    connect(&m_events, &EventBus::cryptoOperationFailed, this, [this]() {
+        m_operationInProgress = false;
+    });
 }
 
 void CommandRouter::handleLine(const QString& line) {
+    const bool commandInputWhileBusy = m_inputMode == InputMode::Command && m_operationInProgress;
+    if (commandInputWhileBusy) {
+        if (!line.trimmed().isEmpty()) {
+            emit m_events.operationStarted(AppText::OperationInProgress);
+        }
+        return;
+    }
+
     switch (m_inputMode) {
     case InputMode::Command:
         handleCommandMode(line);

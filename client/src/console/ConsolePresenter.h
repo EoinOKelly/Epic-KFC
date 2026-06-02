@@ -13,6 +13,7 @@ public:
 
 private:
     void printPrompt();
+    void printOperation(const QString& message);
     void printMessage(const QString& message);
     void printError(const ClientError& error);
 

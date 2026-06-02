@@ -5,6 +5,9 @@
 ConsolePresenter::ConsolePresenter(EventBus& events, QObject* parent)
     : QObject(parent)
     , m_output(stdout) {
+    connect(&events, &EventBus::operationStarted, this, [this](const QString& message) {
+        printOperation(message);
+    });
     connect(&events, &EventBus::statusMessage, this, [this](const QString& message) {
         printMessage(message);
     });
@@ -135,6 +138,10 @@ ConsolePresenter::ConsolePresenter(EventBus& events, QObject* parent)
 
 void ConsolePresenter::printPrompt() {
     m_output << AppText::Prompt << Qt::flush;
+}
+
+void ConsolePresenter::printOperation(const QString& message) {
+    m_output << message << '\n' << Qt::flush;
 }
 
 void ConsolePresenter::printMessage(const QString& message) {
