@@ -188,7 +188,7 @@ QJsonObject messageToJson(const LocalMessage& message) {
         {StorageKeys::RecipientDeletedAt, message.recipientDeletedAt},
         {StorageKeys::DeletedAt, message.deletedAt},
         {StorageKeys::ReadAt, message.readAt},
-        {StorageKeys::LocalPlaintext, message.localPlaintext},
+        {StorageKeys::LocalSenderCopyWirePayloadJson, message.localSenderCopyWirePayloadJson},
         {"direction", message.direction == MessageDirection::Sent ? "sent" : "received"}
     };
 }
@@ -210,7 +210,7 @@ LocalMessage messageFromJson(const QJsonObject& object) {
         object.value(StorageKeys::RecipientDeletedAt).toString(),
         object.value(StorageKeys::DeletedAt).toString(),
         object.value(StorageKeys::ReadAt).toString(),
-        object.value(StorageKeys::LocalPlaintext).toString(),
+        object.value(StorageKeys::LocalSenderCopyWirePayloadJson).toString(),
         object.value("direction").toString() == "sent" ? MessageDirection::Sent : MessageDirection::Received
     };
 }
@@ -544,13 +544,13 @@ Result<bool> JsonLocalStore::saveMessage(const LocalMessage& message) {
         m_messages.push_back(message);
     } else {
         const QString previousReadAt = it->readAt;
-        const QString previousLocalPlaintext = it->localPlaintext;
+        const QString previousLocalSenderCopy = it->localSenderCopyWirePayloadJson;
         *it = message;
         if (it->readAt.isEmpty()) {
             it->readAt = previousReadAt;
         }
-        if (it->localPlaintext.isEmpty()) {
-            it->localPlaintext = previousLocalPlaintext;
+        if (it->localSenderCopyWirePayloadJson.isEmpty()) {
+            it->localSenderCopyWirePayloadJson = previousLocalSenderCopy;
         }
     }
     return save();
@@ -808,17 +808,6 @@ Result<QJsonObject> JsonLocalStore::protectSecrets(QJsonObject root) const {
     }
     root.insert(StorageKeys::TrustPins, trustPins);
 
-    QJsonArray messages;
-    for (const auto value : root.value(StorageKeys::Messages).toArray()) {
-        QJsonObject message = value.toObject();
-        const auto messageResult = protectString(message, StorageKeys::LocalPlaintext, m_secretPassphrase, salt);
-        if (messageResult.failed()) {
-            return Result<QJsonObject>::failure(messageResult.error());
-        }
-        messages.push_back(message);
-    }
-    root.insert(StorageKeys::Messages, messages);
-
     return Result<QJsonObject>::success(root);
 }
 
@@ -875,17 +864,6 @@ Result<QJsonObject> JsonLocalStore::unprotectSecrets(QJsonObject root) const {
         trustPins.push_back(trustPin);
     }
     root.insert(StorageKeys::TrustPins, trustPins);
-
-    QJsonArray messages;
-    for (const auto value : root.value(StorageKeys::Messages).toArray()) {
-        QJsonObject message = value.toObject();
-        const auto messageResult = unprotectString(message, StorageKeys::LocalPlaintext, m_secretPassphrase, m_secretSalt);
-        if (messageResult.failed()) {
-            return Result<QJsonObject>::failure(messageResult.error());
-        }
-        messages.push_back(message);
-    }
-    root.insert(StorageKeys::Messages, messages);
 
     return Result<QJsonObject>::success(root);
 }

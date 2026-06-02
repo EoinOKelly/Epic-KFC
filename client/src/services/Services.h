@@ -81,6 +81,8 @@ private:
     void openConversationFromCache(const UserAddress& address, const QString& username, int page);
     void sendToAddress(const UserAddress& recipientAddress, const QString& plaintext);
     void forwardToAddress(const QString& messageId, const UserAddress& recipientAddress);
+    PreKeyBundle selfPreKeyBundleFor(const DeviceKeyMaterial& device) const;
+    Result<QString> createLocalSenderCopy(const DeviceKeyMaterial& device, const QString& plaintext);
     LocalMessage draftFor(const QString& recipientUserId, int recipientDeviceId, const QString& wirePayloadJson) const;
 
     EventBus& m_events;

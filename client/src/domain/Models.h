@@ -168,7 +168,7 @@ struct LocalMessage {
     QString recipientDeletedAt;
     QString deletedAt;
     QString readAt;
-    QString localPlaintext;
+    QString localSenderCopyWirePayloadJson;
     MessageDirection direction{MessageDirection::Received};
 };
 

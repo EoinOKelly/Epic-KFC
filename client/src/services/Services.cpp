@@ -391,15 +391,20 @@ void MessageService::sendToAddress(const UserAddress& recipientAddress, const QS
         emit m_events.cryptoOperationFailed(encrypted.error());
         return;
     }
+    const auto localSenderCopy = createLocalSenderCopy(device.value(), plaintext);
+    if (localSenderCopy.failed()) {
+        emit m_events.cryptoOperationFailed(localSenderCopy.error());
+        return;
+    }
 
     const LocalMessage draft = draftFor(recipientAddress.userId, recipientAddress.deviceId, encrypted.value().wirePayloadJson);
-    m_messageGateway.sendMessage(m_sessionService.accessToken(), draft, encrypted.value().consumedOneTimePreKeyId, [this, plaintext](Result<LocalMessage> result) {
+    m_messageGateway.sendMessage(m_sessionService.accessToken(), draft, encrypted.value().consumedOneTimePreKeyId, [this, localSenderCopy](Result<LocalMessage> result) {
         if (result.failed()) {
             emit m_events.commandFailed(result.error());
             return;
         }
         LocalMessage savedMessage = result.value();
-        savedMessage.localPlaintext = plaintext;
+        savedMessage.localSenderCopyWirePayloadJson = localSenderCopy.value();
         const auto saved = m_store.saveMessage(savedMessage);
         if (saved.failed()) {
             emit m_events.commandFailed(saved.error());
@@ -487,14 +492,19 @@ void MessageService::forwardToAddress(const QString& messageId, const UserAddres
         emit m_events.cryptoOperationFailed(encrypted.error());
         return;
     }
+    const auto localSenderCopy = createLocalSenderCopy(device.value(), plaintext.value());
+    if (localSenderCopy.failed()) {
+        emit m_events.cryptoOperationFailed(localSenderCopy.error());
+        return;
+    }
     const LocalMessage draft = draftFor(recipientAddress.userId, recipientAddress.deviceId, encrypted.value().wirePayloadJson);
-    m_messageGateway.forwardMessage(m_sessionService.accessToken(), messageId, draft, encrypted.value().consumedOneTimePreKeyId, [this, plaintext](Result<LocalMessage> result) {
+    m_messageGateway.forwardMessage(m_sessionService.accessToken(), messageId, draft, encrypted.value().consumedOneTimePreKeyId, [this, localSenderCopy](Result<LocalMessage> result) {
         if (result.failed()) {
             emit m_events.commandFailed(result.error());
             return;
         }
         LocalMessage savedMessage = result.value();
-        savedMessage.localPlaintext = plaintext.value();
+        savedMessage.localSenderCopyWirePayloadJson = localSenderCopy.value();
         const auto saved = m_store.saveMessage(savedMessage);
         if (saved.failed()) {
             emit m_events.commandFailed(saved.error());
@@ -630,7 +640,19 @@ void MessageService::openConversationFromCache(const UserAddress& address, const
         ConversationLogEntry entry{message, {}, std::nullopt};
         const bool sentByCurrentUser = message.senderUserId == m_sessionService.currentUserId();
         if (sentByCurrentUser) {
-            entry.plaintext = message.localPlaintext.isEmpty() ? AppText::SentMessageCiphertextOnly : message.localPlaintext;
+            if (message.localSenderCopyWirePayloadJson.isEmpty()) {
+                entry.plaintext = AppText::SentMessageCiphertextOnly;
+            } else {
+                LocalMessage senderCopy = message;
+                senderCopy.wirePayloadJson = message.localSenderCopyWirePayloadJson;
+                senderCopy.consumedOneTimePreKeyId = std::nullopt;
+                const auto plaintext = m_cryptoProvider.decrypt(m_sessionService.currentUserId(), device.value(), senderCopy, std::nullopt);
+                if (plaintext.succeeded()) {
+                    entry.plaintext = plaintext.value();
+                } else {
+                    entry.decryptError = plaintext.error();
+                }
+            }
             entries.push_back(entry);
             continue;
         }
@@ -650,6 +672,29 @@ void MessageService::openConversationFromCache(const UserAddress& address, const
         return;
     }
     emit m_events.conversationLogOpened(username, address.userId, entries, safePage, pageCount);
+}
+
+PreKeyBundle MessageService::selfPreKeyBundleFor(const DeviceKeyMaterial& device) const {
+    return {
+        m_sessionService.currentUserId(),
+        device.registrationId,
+        device.deviceId,
+        device.identityKey,
+        device.identitySigningKey,
+        device.signedPreKeyId,
+        device.signedPreKey,
+        device.signedPreKeySignature,
+        std::nullopt,
+        {}
+    };
+}
+
+Result<QString> MessageService::createLocalSenderCopy(const DeviceKeyMaterial& device, const QString& plaintext) {
+    const auto encrypted = m_cryptoProvider.encrypt(m_sessionService.currentUserId(), device, selfPreKeyBundleFor(device), plaintext);
+    if (encrypted.failed()) {
+        return Result<QString>::failure(encrypted.error());
+    }
+    return Result<QString>::success(encrypted.value().wirePayloadJson);
 }
 
 LocalMessage MessageService::draftFor(const QString& recipientUserId, int recipientDeviceId, const QString& wirePayloadJson) const {

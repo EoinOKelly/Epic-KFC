@@ -139,6 +139,51 @@ void testCryptoWireShape() {
     const auto decrypted = crypto.decrypt("bob", bob.value(), received, std::nullopt);
     expect(decrypted.succeeded() && decrypted.value() == "hello", "crypto decrypts first X3DH message");
 
+    PreKeyBundle selfBundle{
+        "alice",
+        alice.value().registrationId,
+        alice.value().deviceId,
+        alice.value().identityKey,
+        alice.value().identitySigningKey,
+        alice.value().signedPreKeyId,
+        alice.value().signedPreKey,
+        alice.value().signedPreKeySignature,
+        std::nullopt,
+        {}
+    };
+    const auto selfEncrypted = crypto.encrypt("alice", alice.value(), selfBundle, "local sender copy");
+    LocalMessage selfCopy{
+        "message-2",
+        "alice",
+        alice.value().deviceId,
+        "bob",
+        bob.value().deviceId,
+        selfEncrypted.succeeded() ? selfEncrypted.value().wirePayloadJson : QString{},
+        std::nullopt,
+        QDateTime::currentDateTimeUtc(),
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        MessageDirection::Sent
+    };
+    const auto selfDecrypted = selfEncrypted.succeeded()
+        ? crypto.decrypt("alice", alice.value(), selfCopy, std::nullopt)
+        : Result<QString>::failure({ErrorCode::CryptoError, "Self encryption failed."});
+    expect(selfDecrypted.succeeded() && selfDecrypted.value() == "local sender copy", "crypto decrypts local sender copy");
+
+    if (selfEncrypted.succeeded()) {
+        QJsonObject tamperedSelf = wireBodyFromEnvelope(selfEncrypted.value().wirePayloadJson);
+        tamperedSelf.insert("authTag", QString::fromLatin1(QByteArray("tampered-auth-tag").toBase64()));
+        selfCopy.wirePayloadJson = envelopeWithBody(selfEncrypted.value().wirePayloadJson, tamperedSelf);
+        const auto rejectedSelf = crypto.decrypt("alice", alice.value(), selfCopy, std::nullopt);
+        expect(rejectedSelf.failed(), "crypto rejects tampered local sender copy");
+    } else {
+        expect(false, "crypto rejects tampered local sender copy");
+    }
+
     QJsonObject tampered = wire;
     tampered.insert("authTag", QString::fromLatin1(QByteArray("tampered-auth-tag").toBase64()));
     received.wirePayloadJson = envelopeWithBody(encrypted.value().wirePayloadJson, tampered);
@@ -234,7 +279,7 @@ void testEncryptedLocalStore() {
         {},
         {},
         {},
-        "locally cached sent body",
+        "encrypted-local-sender-copy",
         MessageDirection::Received
     };
 
@@ -291,7 +336,7 @@ void testEncryptedLocalStore() {
         && loadedTrustPin.value()->identityKey == "trusted-identity-secret"
         && loadedMessage.succeeded()
         && loadedMessage.value().has_value()
-        && loadedMessage.value()->localPlaintext == "locally cached sent body"
+        && loadedMessage.value()->localSenderCopyWirePayloadJson == "encrypted-local-sender-copy"
         && conversations.succeeded()
         && !conversations.value().empty()
         && conversations.value().front().peerUsername == "bobUsername";
