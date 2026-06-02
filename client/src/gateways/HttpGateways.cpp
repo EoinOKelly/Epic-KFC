@@ -269,6 +269,7 @@ QUrl HttpClient::urlFor(const QString& path) const {
 QNetworkRequest HttpClient::requestFor(const QString& path, const QString& accessToken) const {
     QNetworkRequest request(urlFor(path));
     request.setHeader(QNetworkRequest::ContentTypeHeader, AppText::JsonContentType);
+    request.setTransferTimeout(AppText::HttpRequestTimeoutMilliseconds);
     const QString effectiveAccessToken = !accessToken.isEmpty() && !m_tokens.accessToken.isEmpty()
         ? m_tokens.accessToken
         : accessToken;
@@ -290,6 +291,9 @@ ClientError HttpClient::errorForReply(QNetworkReply& reply, const QByteArray& re
     }
     if (reply.error() == QNetworkReply::SslHandshakeFailedError) {
         return {ErrorCode::TlsError, message};
+    }
+    if (reply.error() == QNetworkReply::TimeoutError) {
+        return {ErrorCode::NetworkError, AppText::HttpRequestTimedOut};
     }
     if (statusCode == 401) {
         return {ErrorCode::AuthRequired, QString("HTTP %1: %2").arg(statusCode).arg(message)};

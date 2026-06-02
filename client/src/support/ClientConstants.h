@@ -13,6 +13,7 @@ inline const QString RealMode = "real";
 inline const QString ApiPrefix = "/api/v1";
 inline const QString BearerPrefix = "Bearer ";
 inline const QString JsonContentType = "application/json";
+inline constexpr int HttpRequestTimeoutMilliseconds = 30000;
 inline const QString ModeFlag = "--mode";
 inline const QString DebugFlag = "--debug";
 inline const QString ApiUrlFlag = "--api-url";
@@ -29,6 +30,7 @@ inline const QString InvalidDeviceId = "Device id must be a positive integer.";
 inline const QString DebugRealModeConflict = "--debug starts mock mode and cannot be combined with --mode real.";
 inline const QString DebugApiUrlConflict = "--debug starts mock mode and cannot be combined with --api-url.";
 inline const QString TlsRequired = "Real mode requires HTTPS with certificate validation.";
+inline const QString HttpRequestTimedOut = "Request timed out while contacting the backend.";
 inline const QString StartupUsage =
     "Usage: client [--debug] [--mode mock|real] [--api-url https://host/api/v1] [--device-id 1] [--state-path path]";
 inline const QString Prompt = "> ";
