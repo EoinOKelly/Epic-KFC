@@ -32,6 +32,10 @@ The client starts in real mode by default against the team HTTPS endpoint:
 
 Real mode requires HTTPS and does not disable Qt certificate validation.
 
+For rubric-facing architecture, class design, ownership, STL/modern C++ usage,
+security integration, validation evidence, and interview defence notes, see
+`docs/client_rubric_documentation.pdf`.
+
 ## Build
 
 The client is a CMake project. Build commands below are run from the repository

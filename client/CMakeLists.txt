@@ -10,6 +10,14 @@ find_package(Qt${QT_VERSION_MAJOR}
         Network
 )
 
+if(WIN32)
+    find_program(WINDEPLOYQT_EXECUTABLE
+        NAMES windeployqt
+        HINTS "${CMAKE_PREFIX_PATH}/bin"
+    )
+    get_filename_component(CLIENT_QT_ROOT "${Qt${QT_VERSION_MAJOR}_DIR}/../../.." ABSOLUTE)
+endif()
+
 option(CLIENT_REQUIRE_OPENSSL "Require OpenSSL-backed native crypto for real mode" ON)
 
 set(CLIENT_OPENSSL_CACHE_VARIABLES
@@ -45,6 +53,12 @@ find_package(OpenSSL QUIET COMPONENTS Crypto)
 
 if(NOT OpenSSL_FOUND AND MINGW AND EXISTS "C:/Qt/Tools/mingw1310_64/opt")
     set(OPENSSL_ROOT_DIR "C:/Qt/Tools/mingw1310_64/opt" CACHE PATH "OpenSSL root directory")
+    find_package(OpenSSL QUIET COMPONENTS Crypto)
+endif()
+
+set(CLIENT_LOCAL_VCPKG_OPENSSL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/out/vcpkg_installed/x64-windows")
+if(NOT OpenSSL_FOUND AND MSVC AND EXISTS "${CLIENT_LOCAL_VCPKG_OPENSSL_ROOT}")
+    set(OPENSSL_ROOT_DIR "${CLIENT_LOCAL_VCPKG_OPENSSL_ROOT}" CACHE PATH "OpenSSL root directory")
     find_package(OpenSSL QUIET COMPONENTS Crypto)
 endif()
 
@@ -137,6 +151,55 @@ target_link_libraries(${PROJECT_NAME}
         Qt::Network
 )
 
+function(client_deploy_windows_runtime target_name)
+    if(NOT WIN32)
+        return()
+    endif()
+
+    if(MSVC)
+        add_custom_command(TARGET ${target_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_FILE:Qt::Core>"
+                "$<TARGET_FILE:Qt::Network>"
+                "$<TARGET_FILE_DIR:${target_name}>"
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                "$<TARGET_FILE_DIR:${target_name}>/networkinformation"
+                "$<TARGET_FILE_DIR:${target_name}>/tls"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CLIENT_QT_ROOT}/plugins/networkinformation/qnetworklistmanager.dll"
+                "$<TARGET_FILE_DIR:${target_name}>/networkinformation"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CLIENT_QT_ROOT}/plugins/tls/qcertonlybackend.dll"
+                "${CLIENT_QT_ROOT}/plugins/tls/qschannelbackend.dll"
+                "$<TARGET_FILE_DIR:${target_name}>/tls"
+            COMMENT "Deploying Qt runtime for ${target_name}"
+            VERBATIM
+        )
+    elseif(WINDEPLOYQT_EXECUTABLE)
+        add_custom_command(TARGET ${target_name} POST_BUILD
+            COMMAND "${WINDEPLOYQT_EXECUTABLE}"
+                --no-translations
+                --no-system-d3d-compiler
+                --no-opengl-sw
+                "$<TARGET_FILE:${target_name}>"
+            COMMENT "Deploying Qt runtime for ${target_name}"
+            VERBATIM
+        )
+    endif()
+
+    if(MSVC AND OPENSSL_ROOT_DIR)
+        add_custom_command(TARGET ${target_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<$<CONFIG:Debug>:${OPENSSL_ROOT_DIR}/debug/bin/libcrypto-3-x64.dll>$<$<NOT:$<CONFIG:Debug>>:${OPENSSL_ROOT_DIR}/bin/libcrypto-3-x64.dll>"
+                "$<TARGET_FILE_DIR:${target_name}>"
+            COMMENT "Deploying OpenSSL runtime for ${target_name}"
+            VERBATIM
+        )
+    endif()
+endfunction()
+
+client_deploy_windows_runtime(${PROJECT_NAME})
+
 set_target_properties(${PROJECT_NAME}
     PROPERTIES
         VS_DEBUGGER_COMMAND_ARGUMENTS "$<$<CONFIG:Debug>:--debug-errors>"
@@ -156,6 +219,7 @@ if(CLIENT_BUILD_TESTS)
             Qt::Core
             Qt::Network
     )
+    client_deploy_windows_runtime(client_tests)
     add_test(NAME client_tests COMMAND client_tests)
 endif()
 
