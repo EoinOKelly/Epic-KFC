@@ -26,6 +26,7 @@ void ClientController::handleCommand(const SlashCommand& command) {
         emit m_events.statusMessage(AppText::Help);
         return;
     case CommandType::Logout:
+        emit m_events.conversationTargetChanged({});
         emit m_events.operationStarted(AppText::LoggingOut);
         m_sessionService.logout();
         return;
@@ -70,8 +71,7 @@ void ClientController::handleCommand(const SlashCommand& command) {
                 });
                 return;
             }
-            emit m_events.operationStarted(AppText::LoadingConversation);
-            m_messageService.readConversation(command.arguments.at(0), page);
+            openConversation(command.arguments.at(0), page);
         }
         return;
     case CommandType::Forward:
@@ -134,17 +134,29 @@ void ClientController::login(const QString& usernameOrEmail, const QString& pass
     m_sessionService.login(usernameOrEmail, password);
 }
 
-void ClientController::beginMessageComposition(const QString& recipientUsername) {
-    emit m_events.messagePrepared(recipientUsername, m_config.deviceId, {});
+void ClientController::openConversation(const QString& username, int page) {
+    emit m_events.conversationTargetChanged(username);
+    emit m_events.operationStarted(AppText::LoadingConversation);
+    m_messageService.readConversation(username, page);
 }
 
-void ClientController::submitComposedMessage(const QString& recipientUsername, const QString& body) {
+void ClientController::sendMessage(const QString& recipientUsername, const QString& body) {
     if (body.trimmed().isEmpty()) {
         emit m_events.commandFailed({ErrorCode::InvalidCommand, AppText::EmptyMessage});
         return;
     }
+    emit m_events.conversationTargetChanged(recipientUsername);
     emit m_events.operationStarted(AppText::SendingMessage);
     m_messageService.send(recipientUsername, body);
+}
+
+void ClientController::beginMessageComposition(const QString& recipientUsername) {
+    emit m_events.conversationTargetChanged(recipientUsername);
+    emit m_events.messagePrepared(recipientUsername, m_config.deviceId, {});
+}
+
+void ClientController::submitComposedMessage(const QString& recipientUsername, const QString& body) {
+    sendMessage(recipientUsername, body);
 }
 
 void ClientController::cancelComposition() {

@@ -34,30 +34,52 @@ Real mode requires HTTPS and does not disable Qt certificate validation.
 
 ## Build
 
-Required dependencies:
+The client is a CMake project. Build commands below are run from the repository
+root unless stated otherwise.
+
+Required dependencies on every OS:
 
 - CMake 3.16+
 - A C++20 compiler
 - Qt 6 or Qt 5 with Core and Network
 - OpenSSL 3 development libraries for real native crypto
 
-MSVC real mode needs an MSVC-compatible OpenSSL install. The OpenSSL binaries
-bundled under `C:\Qt\Tools\mingw*_64\opt` are MinGW libraries and cannot be
-linked into the Visual Studio build.
-
-Visual Studio with vcpkg OpenSSL example:
-
-```powershell
-vcpkg install openssl:x64-windows
-cmake -S client -B client\out\build\debug -DCMAKE_PREFIX_PATH=C:\Qt\6.9.1\msvc2022_64 -DCMAKE_TOOLCHAIN_FILE=C:\path\to\vcpkg\scripts\buildsystems\vcpkg.cmake -DCLIENT_BUILD_TESTS=ON
-cmake --build client\out\build\debug --parallel 4
-```
-
 Production builds require OpenSSL by default. A mock-only build can be configured
 with `-DCLIENT_REQUIRE_OPENSSL=OFF`, but real mode will refuse to start without
 native crypto.
 
-Windows with Qt MinGW example:
+### Windows: Visual Studio / MSVC
+
+Use this path when building from Visual Studio or with the MSVC compiler.
+
+MSVC real mode needs an MSVC-compatible OpenSSL install. The OpenSSL binaries
+bundled under `C:\Qt\Tools\mingw*_64\opt` are MinGW libraries and cannot be
+linked into the Visual Studio build.
+
+Example using Qt for MSVC and vcpkg OpenSSL:
+
+```powershell
+vcpkg install openssl:x64-windows
+cmake -S client -B client\out\build\debug -G Ninja -DCMAKE_PREFIX_PATH=C:\Qt\6.9.1\msvc2022_64 -DCMAKE_TOOLCHAIN_FILE=C:\path\to\vcpkg\scripts\buildsystems\vcpkg.cmake -DCLIENT_BUILD_TESTS=ON
+cmake --build client\out\build\debug --parallel 4
+```
+
+Run the tests:
+
+```powershell
+$env:PATH='C:\Qt\6.9.1\msvc2022_64\bin;C:\Users\Cian\source\repos\Epic-KFC\client\out\vcpkg_installed\x64-windows\bin;' + $env:PATH
+client\out\build\debug\client_tests.exe
+```
+
+This repository also includes the local helper used during development:
+
+```powershell
+cmd.exe /c client\out\build-vs-client.bat
+```
+
+### Windows: Qt MinGW
+
+Use this path when using the MinGW compiler bundled with Qt.
 
 ```powershell
 $env:PATH='C:\Qt\Tools\mingw1310_64\bin;C:\Qt\6.9.1\mingw_64\bin;' + $env:PATH
@@ -65,11 +87,66 @@ cmake -S client -B client\out\build\mingw-debug -G "MinGW Makefiles" -DCMAKE_PRE
 cmake --build client\out\build\mingw-debug --parallel 4
 ```
 
-Linux example:
+Run the tests:
+
+```powershell
+$env:PATH='C:\Qt\Tools\mingw1310_64\bin;C:\Qt\6.9.1\mingw_64\bin;C:\Qt\Tools\mingw1310_64\opt\bin;' + $env:PATH
+client\out\build\mingw-debug\client_tests.exe
+```
+
+### Linux
+
+Install a C++ compiler, CMake, Qt Core/Network development packages, and OpenSSL
+development headers. Package names vary by distribution.
+
+Ubuntu/Debian example:
 
 ```bash
-cmake -S client -B client/out/build/debug -DCLIENT_BUILD_TESTS=ON
-cmake --build client/out/build/debug --parallel 4
+sudo apt update
+sudo apt install build-essential cmake ninja-build qt6-base-dev libssl-dev
+```
+
+Fedora example:
+
+```bash
+sudo dnf install gcc-c++ cmake ninja-build qt6-qtbase-devel openssl-devel
+```
+
+Configure and build:
+
+```bash
+cmake -S client -B client/out/build/linux-debug -G Ninja -DCLIENT_BUILD_TESTS=ON
+cmake --build client/out/build/linux-debug --parallel 4
+```
+
+Run the tests:
+
+```bash
+client/out/build/linux-debug/client_tests
+```
+
+### macOS
+
+Install Xcode command-line tools, CMake, Qt, and OpenSSL. Homebrew is the simplest
+setup path:
+
+```bash
+xcode-select --install
+brew install cmake ninja qt openssl@3
+```
+
+Configure and build. `CMAKE_PREFIX_PATH` points CMake at Homebrew Qt, while
+`OPENSSL_ROOT_DIR` points it at Homebrew OpenSSL:
+
+```bash
+cmake -S client -B client/out/build/macos-debug -G Ninja -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)" -DCLIENT_BUILD_TESTS=ON
+cmake --build client/out/build/macos-debug --parallel 4
+```
+
+Run the tests:
+
+```bash
+client/out/build/macos-debug/client_tests
 ```
 
 ## Run
@@ -119,8 +196,8 @@ All actions start with `/`.
 /conversations
 /inbox
 /sent
-/msg <username>
-/send <username>
+/msg <username> [message]
+/send [message]
 /read <username> [page]
 /forward <messageId> <username>
 /revoke <messageId>
@@ -133,8 +210,22 @@ All actions start with `/`.
 /exit
 ```
 
-`/register`, `/login`, `/msg`, and `/send` enter prompt modes. Message composition
-accepts slash-prefixed body text until `/send` submits or `/cancel` aborts.
+`/register` and `/login` enter password prompt modes. `/msg <username>` opens
+that conversation and changes the prompt to `[username] >`. Once a conversation
+is active, plain text sends a one-line message to that user, while `/send` by
+itself opens multi-line composition. Message composition accepts slash-prefixed
+body text until `/send` submits or `/cancel` aborts.
+
+Examples:
+
+```text
+/msg alice
+hello alice
+/send
+first line
+second line
+/send
+```
 
 Mock mode resolves usernames locally. Real mode resolves usernames through the
 production `GET /api/v1/users/by-username/{username}` endpoint and then uses the
