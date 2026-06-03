@@ -1,8 +1,11 @@
+#include "app/EventBus.h"
 #include "app/StartupConfig.h"
 #include "app/SlashCommandParser.h"
 #include "crypto/MockCryptoProvider.h"
 #include "crypto/NativeSignalCryptoProvider.h"
 #include "domain/Models.h"
+#include "gateways/Gateways.h"
+#include "services/Services.h"
 #include "storage/JsonLocalStore.h"
 #include "support/ClientConstants.h"
 
@@ -13,6 +16,7 @@
 #include <QJsonObject>
 
 #include <iostream>
+#include <memory>
 
 namespace {
 int failures = 0;
@@ -30,6 +34,167 @@ QJsonObject wireBodyFromEnvelope(const QString& wirePayloadJson) {
     const QJsonObject envelope = QJsonDocument::fromJson(wirePayloadJson.toUtf8()).object();
     const QByteArray body = QByteArray::fromBase64(envelope.value(CryptoText::WireBodyB64).toString().toLatin1());
     return QJsonDocument::fromJson(body).object();
+}
+
+class TestAuthGateway : public IAuthGateway {
+public:
+    void registerUser(const QString&, const QString&, const QString&, GatewayCallback<UserProfile> callback) override {
+        callback(Result<UserProfile>::failure({ErrorCode::OperationFailed, "not used"}));
+    }
+
+    void login(const QString&, const QString&, GatewayCallback<AuthSession> callback) override {
+        callback(Result<AuthSession>::failure({ErrorCode::OperationFailed, "not used"}));
+    }
+
+    void currentUser(const QString&, GatewayCallback<UserProfile> callback) override {
+        callback(Result<UserProfile>::failure({ErrorCode::OperationFailed, "not used"}));
+    }
+
+    void logout(const QString&, GatewayCallback<bool> callback) override {
+        callback(Result<bool>::success(true));
+    }
+};
+
+class TestKeyGateway : public IKeyGateway {
+public:
+    void upsertDeviceKeys(const QString&, const DeviceKeyMaterial&, GatewayCallback<bool> callback) override {
+        callback(Result<bool>::failure({ErrorCode::OperationFailed, "not used"}));
+    }
+
+    void uploadOneTimePreKeys(const QString&, int, const std::vector<OneTimePreKey>&, GatewayCallback<bool> callback) override {
+        callback(Result<bool>::failure({ErrorCode::OperationFailed, "not used"}));
+    }
+
+    void fetchPreKeyBundle(const QString&, const QString&, int, GatewayCallback<PreKeyBundle> callback) override {
+        callback(Result<PreKeyBundle>::failure({ErrorCode::OperationFailed, "not used"}));
+    }
+};
+
+class TestUserDirectoryGateway : public IUserDirectoryGateway {
+public:
+    void resolveUsername(const QString&, const QString& username, int defaultDeviceId, GatewayCallback<UserAddress> callback) override {
+        callback(Result<UserAddress>::success({username, username, defaultDeviceId}));
+    }
+};
+
+class TestMessageGateway : public IMessageGateway {
+public:
+    Result<BlockchainAnchor> anchorResult = Result<BlockchainAnchor>::failure({ErrorCode::NotFound, "Anchor not found"});
+    Result<BlockchainVerification> verificationResult = Result<BlockchainVerification>::failure({ErrorCode::OperationFailed, "not configured"});
+    bool fetchCalled{false};
+    bool verifyCalled{false};
+
+    void sendMessage(const QString&, const LocalMessage&, std::optional<int>, GatewayCallback<LocalMessage> callback) override {
+        callback(Result<LocalMessage>::failure({ErrorCode::OperationFailed, "not used"}));
+    }
+
+    void listReceived(const QString&, GatewayCallback<MessageList> callback) override {
+        callback(Result<MessageList>::success({}));
+    }
+
+    void listSent(const QString&, GatewayCallback<MessageList> callback) override {
+        callback(Result<MessageList>::success({}));
+    }
+
+    void getMessage(const QString&, const QString&, GatewayCallback<LocalMessage> callback) override {
+        callback(Result<LocalMessage>::failure({ErrorCode::OperationFailed, "not used"}));
+    }
+
+    void forwardMessage(const QString&, const QString&, const LocalMessage&, std::optional<int>, GatewayCallback<LocalMessage> callback) override {
+        callback(Result<LocalMessage>::failure({ErrorCode::OperationFailed, "not used"}));
+    }
+
+    void revokeMessage(const QString&, const QString&, GatewayCallback<LocalMessage> callback) override {
+        callback(Result<LocalMessage>::failure({ErrorCode::OperationFailed, "not used"}));
+    }
+
+    void deleteMessage(const QString&, const QString&, GatewayCallback<bool> callback) override {
+        callback(Result<bool>::failure({ErrorCode::OperationFailed, "not used"}));
+    }
+
+    void fetchMessageAnchor(const QString&, const QString&, GatewayCallback<BlockchainAnchor> callback) override {
+        fetchCalled = true;
+        callback(anchorResult);
+    }
+
+    void verifyAnchor(const QString&, const BlockchainAnchor&, GatewayCallback<BlockchainVerification> callback) override {
+        verifyCalled = true;
+        callback(verificationResult);
+    }
+};
+
+struct VerificationFixture {
+    QString statePath;
+    EventBus events;
+    TestAuthGateway authGateway;
+    TestKeyGateway keyGateway;
+    TestUserDirectoryGateway userDirectoryGateway;
+    TestMessageGateway messageGateway;
+    MockCryptoProvider cryptoProvider;
+    JsonLocalStore store;
+    SessionService sessionService;
+    KeyService keyService;
+    MessageService messageService;
+    QString fidelityStatus;
+    std::optional<ClientError> commandError;
+
+    explicit VerificationFixture(QString path)
+        : statePath(std::move(path))
+        , store(statePath, false)
+        , sessionService(events, authGateway, store, false)
+        , keyService(events, keyGateway, userDirectoryGateway, cryptoProvider, store, sessionService, 1)
+        , messageService(events, messageGateway, userDirectoryGateway, cryptoProvider, store, sessionService, keyService, 1) {
+        QObject::connect(&events, &EventBus::fidelityStatusUpdated, &events, [this](const QString&, const QString& status) {
+            fidelityStatus = status;
+        });
+        QObject::connect(&events, &EventBus::commandFailed, &events, [this](const ClientError& error) {
+            commandError = error;
+        });
+    }
+};
+
+BlockchainAnchor testAnchor(const QString& status) {
+    return {
+        "anchor-1",
+        "ccd07804-e033-4a7b-9ae9-24af64997c91",
+        "0x0000000000000000000000000000000000000000000000000000000000000001",
+        "0x1111111111111111111111111111111111111111111111111111111111111111",
+        {},
+        "0x2222222222222222222222222222222222222222222222222222222222222222",
+        "0x3333333333333333333333333333333333333333",
+        "sepolia",
+        status,
+        {}
+    };
+}
+
+BlockchainVerification testVerification(bool valid) {
+    return {
+        valid,
+        "sepolia",
+        "confirmed",
+        "anchor-1",
+        "ccd07804-e033-4a7b-9ae9-24af64997c91",
+        "0x0000000000000000000000000000000000000000000000000000000000000001",
+        "0x1111111111111111111111111111111111111111111111111111111111111111",
+        "0x2222222222222222222222222222222222222222222222222222222222222222",
+        "0x3333333333333333333333333333333333333333",
+        "2026-06-03T12:00:00Z"
+    };
+}
+
+std::unique_ptr<VerificationFixture> createVerificationFixture(const QString& fileName) {
+    const QString path = QDir::current().filePath(fileName);
+    QFile::remove(path);
+
+    JsonLocalStore seed(path, false);
+    const AuthSession session{
+        {"user-1", "alice", "alice@example.test"},
+        {"access-token", "refresh-token", "bearer", 3600}
+    };
+    seed.saveSession(session);
+
+    return std::make_unique<VerificationFixture>(path);
 }
 
 QString envelopeWithBody(const QString& wirePayloadJson, const QJsonObject& body) {
@@ -372,6 +537,56 @@ void testEncryptedLocalStore() {
     expect(true, "encrypted store test skipped without OpenSSL");
 #endif
 }
+
+void testBlockchainVerificationFlow() {
+    const QString messageId = "ccd07804-e033-4a7b-9ae9-24af64997c91";
+
+    {
+        auto fixture = createVerificationFixture("client-test-verify-pending.json");
+        fixture->messageGateway.anchorResult = Result<BlockchainAnchor>::success(testAnchor("pending"));
+        fixture->messageService.verify(messageId);
+        const bool pendingReported = fixture->messageGateway.fetchCalled
+            && !fixture->messageGateway.verifyCalled
+            && fixture->fidelityStatus.contains("pending", Qt::CaseInsensitive);
+        expect(pendingReported, "verify reports pending anchors without backend verification call");
+        QFile::remove(fixture->statePath);
+    }
+
+    {
+        auto fixture = createVerificationFixture("client-test-verify-confirmed.json");
+        fixture->messageGateway.anchorResult = Result<BlockchainAnchor>::success(testAnchor("confirmed"));
+        fixture->messageGateway.verificationResult = Result<BlockchainVerification>::success(testVerification(true));
+        fixture->messageService.verify(messageId);
+        const bool confirmedVerified = fixture->messageGateway.fetchCalled
+            && fixture->messageGateway.verifyCalled
+            && fixture->fidelityStatus.contains("verified", Qt::CaseInsensitive)
+            && fixture->fidelityStatus.contains("0x2222", Qt::CaseInsensitive);
+        expect(confirmedVerified, "verify checks confirmed anchors through blockchain endpoint");
+        QFile::remove(fixture->statePath);
+    }
+
+    {
+        auto fixture = createVerificationFixture("client-test-verify-mismatch.json");
+        fixture->messageGateway.anchorResult = Result<BlockchainAnchor>::success(testAnchor("confirmed"));
+        fixture->messageGateway.verificationResult = Result<BlockchainVerification>::success(testVerification(false));
+        fixture->messageService.verify(messageId);
+        const bool mismatchReported = fixture->messageGateway.verifyCalled
+            && fixture->fidelityStatus.contains("failed", Qt::CaseInsensitive);
+        expect(mismatchReported, "verify reports confirmed anchor mismatches");
+        QFile::remove(fixture->statePath);
+    }
+
+    {
+        auto fixture = createVerificationFixture("client-test-verify-missing.json");
+        fixture->messageGateway.anchorResult = Result<BlockchainAnchor>::failure({ErrorCode::NotFound, "Anchor not found"});
+        fixture->messageService.verify(messageId);
+        const bool missingReported = fixture->messageGateway.fetchCalled
+            && !fixture->messageGateway.verifyCalled
+            && fixture->fidelityStatus.contains("No blockchain anchor", Qt::CaseInsensitive);
+        expect(missingReported, "verify reports missing anchors clearly");
+        QFile::remove(fixture->statePath);
+    }
+}
 }
 
 int main(int argc, char* argv[]) {
@@ -383,6 +598,7 @@ int main(int argc, char* argv[]) {
     testCryptoWireShape();
     testMockCrypto();
     testEncryptedLocalStore();
+    testBlockchainVerificationFlow();
 
     return failures == 0 ? 0 : 1;
 }

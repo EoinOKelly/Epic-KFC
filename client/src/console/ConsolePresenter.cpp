@@ -9,6 +9,9 @@ ConsolePresenter::ConsolePresenter(EventBus& events, bool showRawErrors, QObject
     connect(&events, &EventBus::operationStarted, this, [this](const QString& message) {
         printOperation(message);
     });
+    connect(&events, &EventBus::conversationTargetChanged, this, [this](const QString& username) {
+        m_activeConversationUsername = username;
+    });
     connect(&events, &EventBus::statusMessage, this, [this](const QString& message) {
         printMessage(message);
     });
@@ -141,6 +144,10 @@ ConsolePresenter::ConsolePresenter(EventBus& events, bool showRawErrors, QObject
 }
 
 void ConsolePresenter::printPrompt() {
+    if (!m_activeConversationUsername.isEmpty()) {
+        m_output << QString(AppText::ConversationPrompt).arg(m_activeConversationUsername) << Qt::flush;
+        return;
+    }
     m_output << AppText::Prompt << Qt::flush;
 }
 
