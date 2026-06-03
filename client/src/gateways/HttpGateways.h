@@ -101,6 +101,7 @@ public:
     void verifyAnchor(const QString& accessToken, const BlockchainAnchor& anchor, GatewayCallback<BlockchainVerification> callback) override;
 
 private:
+    void fetchMessages(const QString& accessToken, const QString& suffix, MessageDirection direction, int offset, MessageList collected, GatewayCallback<MessageList> callback);
     QJsonObject sendBodyFor(const LocalMessage& draft, std::optional<int> consumedPreKeyId) const;
     LocalMessage messageFromJson(const QJsonObject& object, MessageDirection direction) const;
     MessageList messageListFromJson(const QJsonArray& array, MessageDirection direction) const;

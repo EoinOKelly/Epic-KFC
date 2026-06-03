@@ -35,12 +35,10 @@ QString wrapWirePayload(const QJsonObject& payload, int counter, int registratio
     const QByteArray rawPayload = QJsonDocument(payload).toJson(QJsonDocument::Compact);
     QJsonObject envelope{
         {CryptoText::WireFormat, CryptoText::WireFormatValue},
-        {CryptoText::WireType, counter == 0 ? CryptoText::WirePreKeyWhisperMessageType : CryptoText::WireWhisperMessageType},
+        {CryptoText::WireType, CryptoText::WirePreKeyWhisperMessageType},
         {CryptoText::WireBodyB64, QString::fromLatin1(rawPayload.toBase64())}
     };
-    if (counter == 0) {
-        envelope.insert(CryptoText::WireRegistrationId, registrationId);
-    }
+    envelope.insert(CryptoText::WireRegistrationId, registrationId);
     return QString::fromUtf8(QJsonDocument(envelope).toJson(QJsonDocument::Compact));
 }
 
@@ -324,7 +322,7 @@ Result<EncryptedPayload> NativeSignalCryptoProvider::encrypt(
         return Result<EncryptedPayload>::failure({ErrorCode::CryptoError, AppText::EmptyMessage});
     }
 
-    const int counter = nextCounter(recipientBundle.userId, recipientBundle.deviceId);
+    const int counter = 0;
     const int previousCounter = 0;
     const RawKeyPair ratchetKey = generateRawKeyPair(EVP_PKEY_X25519);
     const RawKeyPair ephemeralKey = generateRawKeyPair(EVP_PKEY_X25519);
@@ -361,13 +359,11 @@ Result<EncryptedPayload> NativeSignalCryptoProvider::encrypt(
         {CryptoText::WireRatchetPublicKey, toBase64(ratchetPublicKey)}
     };
 
-    if (counter == 0) {
-        const QByteArray ephemeral = ephemeralKey.publicKey;
-        root.insert(CryptoText::WireX3dh, QJsonObject{
-            {CryptoText::WireIdentityKey, senderDevice.identityKey},
-            {CryptoText::WireEphemeralKey, toBase64(ephemeral)}
-        });
-    }
+    const QByteArray ephemeral = ephemeralKey.publicKey;
+    root.insert(CryptoText::WireX3dh, QJsonObject{
+        {CryptoText::WireIdentityKey, senderDevice.identityKey},
+        {CryptoText::WireEphemeralKey, toBase64(ephemeral)}
+    });
 
     return Result<EncryptedPayload>::success({
         wrapWirePayload(root, counter, recipientBundle.registrationId),

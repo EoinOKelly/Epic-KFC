@@ -15,6 +15,9 @@
 
 namespace {
 constexpr int ConflictStatusCode = 409;
+constexpr int MessagePageLimit = 100;
+constexpr int InitialMessageOffset = 0;
+constexpr bool Http2AllowedForAuthenticatedRest = false;
 
 QString withoutTrailingSlash(QString value) {
     while (value.endsWith('/')) {
@@ -56,6 +59,10 @@ QString keyPath(const QString& suffix) {
 
 QString messagePath(const QString& suffix) {
     return QString("/messages%1").arg(suffix);
+}
+
+QString pagedMessagePath(const QString& suffix, int offset) {
+    return messagePath(QString("%1?limit=%2&offset=%3").arg(suffix).arg(MessagePageLimit).arg(offset));
 }
 
 QString blockchainPath(const QString& suffix) {
@@ -195,7 +202,7 @@ void HttpClient::send(const QString& method, const QString& path, const QString&
     });
 
     QObject::connect(reply, &QNetworkReply::finished, reply, [this, reply, method, path, accessToken, body, alreadyRetried, callback = std::move(callback)]() mutable {
-        const QByteArray responseBody = reply->readAll();
+        const QByteArray responseBody = reply->isOpen() ? reply->readAll() : QByteArray();
         if (reply->error() != QNetworkReply::NoError) {
             const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
             const bool canRefresh = statusCode == 401
@@ -274,6 +281,7 @@ QNetworkRequest HttpClient::requestFor(const QString& path, const QString& acces
     QNetworkRequest request(urlFor(path));
     request.setHeader(QNetworkRequest::ContentTypeHeader, AppText::JsonContentType);
     request.setTransferTimeout(AppText::HttpRequestTimeoutMilliseconds);
+    request.setAttribute(QNetworkRequest::Http2AllowedAttribute, Http2AllowedForAuthenticatedRest);
     const QString effectiveAccessToken = !accessToken.isEmpty() && !m_tokens.accessToken.isEmpty()
         ? m_tokens.accessToken
         : accessToken;
@@ -534,23 +542,11 @@ void HttpMessageGateway::sendMessage(const QString& accessToken, const LocalMess
 }
 
 void HttpMessageGateway::listReceived(const QString& accessToken, GatewayCallback<MessageList> callback) {
-    m_client.get(messagePath("/received?limit=50&offset=0"), accessToken, [this, callback = std::move(callback)](Result<QJsonDocument> result) mutable {
-        if (result.failed()) {
-            callback(Result<MessageList>::failure(result.error()));
-            return;
-        }
-        callback(Result<MessageList>::success(messageListFromJson(result.value().array(), MessageDirection::Received)));
-    });
+    fetchMessages(accessToken, "/received", MessageDirection::Received, InitialMessageOffset, {}, std::move(callback));
 }
 
 void HttpMessageGateway::listSent(const QString& accessToken, GatewayCallback<MessageList> callback) {
-    m_client.get(messagePath("/sent?limit=50&offset=0"), accessToken, [this, callback = std::move(callback)](Result<QJsonDocument> result) mutable {
-        if (result.failed()) {
-            callback(Result<MessageList>::failure(result.error()));
-            return;
-        }
-        callback(Result<MessageList>::success(messageListFromJson(result.value().array(), MessageDirection::Sent)));
-    });
+    fetchMessages(accessToken, "/sent", MessageDirection::Sent, InitialMessageOffset, {}, std::move(callback));
 }
 
 void HttpMessageGateway::getMessage(const QString& accessToken, const QString& messageId, GatewayCallback<LocalMessage> callback) {
@@ -617,6 +613,25 @@ void HttpMessageGateway::verifyAnchor(const QString& accessToken, const Blockcha
             return;
         }
         callback(Result<BlockchainVerification>::success(verificationFromJson(result.value().object())));
+    });
+}
+
+void HttpMessageGateway::fetchMessages(const QString& accessToken, const QString& suffix, MessageDirection direction, int offset, MessageList collected, GatewayCallback<MessageList> callback) {
+    m_client.get(pagedMessagePath(suffix, offset), accessToken, [this, accessToken, suffix, direction, offset, collected = std::move(collected), callback = std::move(callback)](Result<QJsonDocument> result) mutable {
+        if (result.failed()) {
+            callback(Result<MessageList>::failure(result.error()));
+            return;
+        }
+
+        MessageList page = messageListFromJson(result.value().array(), direction);
+        const bool lastPage = static_cast<int>(page.size()) < MessagePageLimit;
+        collected.insert(collected.end(), page.begin(), page.end());
+        if (lastPage) {
+            callback(Result<MessageList>::success(collected));
+            return;
+        }
+
+        fetchMessages(accessToken, suffix, direction, offset + MessagePageLimit, std::move(collected), std::move(callback));
     });
 }
 

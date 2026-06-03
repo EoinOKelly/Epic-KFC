@@ -22,13 +22,24 @@
 #include <vector>
 
 namespace {
+bool showRawQtMessages = false;
+const QString Http2LogCategory = QStringLiteral("qt.network.http2");
+const QString NetworkLogCategoryPrefix = QStringLiteral("qt.network");
+
 std::vector<QString> applicationArguments() {
     const QStringList qtArguments = QCoreApplication::arguments();
     return {qtArguments.cbegin(), qtArguments.cend()};
 }
 
-void quietQtMessageHandler(QtMsgType type, const QMessageLogContext&, const QString& message) {
-    if (type == QtWarningMsg) {
+bool isNoisyNetworkLog(const QMessageLogContext& context) {
+    const QString category = QString::fromUtf8(context.category);
+    return category == Http2LogCategory || category.startsWith(NetworkLogCategoryPrefix);
+}
+
+void clientQtMessageHandler(QtMsgType type, const QMessageLogContext& context, const QString& message) {
+    const bool shouldHideWarning = type == QtWarningMsg && !showRawQtMessages;
+    const bool shouldHideNetworkLog = type == QtWarningMsg && isNoisyNetworkLog(context);
+    if (shouldHideWarning || shouldHideNetworkLog) {
         return;
     }
     QTextStream(stderr) << message << '\n';
@@ -48,10 +59,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     const StartupConfig config = parsedConfig.value();
-    if (!config.showRawErrors) {
-        qInstallMessageHandler(quietQtMessageHandler);
-        QLoggingCategory::setFilterRules(QStringLiteral("qt.network.warning=false\nqt.network.http2.warning=false\n"));
-    }
+    showRawQtMessages = config.showRawErrors;
+    qInstallMessageHandler(clientQtMessageHandler);
+    QLoggingCategory::setFilterRules(QStringLiteral("qt.network.warning=false\nqt.network.http2.warning=false\n"));
 
     EventBus events;
     JsonLocalStore store(config.statePath, config.mode == ClientMode::Real);
