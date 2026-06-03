@@ -255,7 +255,7 @@ void CommandRouter::handleCommandMode(const QString& line) {
         }
         return;
     case CommandType::Download:
-        if (commandHasArgumentCount(command, 2, 2)) {
+        if (commandHasArgumentCount(command, 1, 1)) {
             m_controller.handleCommand(command);
         }
         return;

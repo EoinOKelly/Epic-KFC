@@ -240,8 +240,8 @@ void testParser() {
     const auto back = parser.parse("/back");
     expect(back.succeeded() && back.value().type == CommandType::Back, "parser accepts back command");
 
-    const auto quoted = parser.parse("/download msg-1 \"C:/Temp/out file.txt\"");
-    expect(quoted.succeeded() && quoted.value().arguments.at(1) == "C:/Temp/out file.txt", "parser handles quoted arguments");
+    const auto quoted = parser.parse("/msg bob \"hello there\"");
+    expect(quoted.succeeded() && quoted.value().arguments.at(1) == "hello there", "parser handles quoted arguments");
 
     const auto rejected = parser.parse("login alice");
     expect(rejected.failed(), "parser rejects non-slash command");

@@ -93,9 +93,9 @@ void ClientController::handleCommand(const SlashCommand& command) {
         }
         return;
     case CommandType::Download:
-        if (command.arguments.size() == 2) {
+        if (command.arguments.size() == 1) {
             emit m_events.operationStarted(AppText::ExportingMessage);
-            m_messageService.download(command.arguments.at(0), command.arguments.at(1));
+            m_messageService.download(command.arguments.at(0));
         }
         return;
     case CommandType::Trust:

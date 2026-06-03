@@ -129,7 +129,7 @@ inline const QString Help =
     "  /forward <messageId> <username>\n"
     "  /revoke <messageId>\n"
     "  /delete <messageId>\n"
-    "  /download <messageId> <path>\n"
+    "  /download <messageId>\n"
     "  /trust <username>\n"
     "  /verify <messageId>\n"
     "  /sync\n"

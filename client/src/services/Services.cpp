@@ -2,6 +2,7 @@
 
 #include "support/ClientConstants.h"
 
+#include <QDir>
 #include <QFile>
 #include <QRegularExpression>
 #include <QTextStream>
@@ -25,6 +26,12 @@ bool isAlreadyUploadedPreKeyError(const ClientError& error) {
 bool isValidEthereumTransactionHash(const QString& value) {
     static const QRegularExpression pattern(QStringLiteral("^0x[0-9a-fA-F]{64}$"));
     return pattern.match(value).hasMatch();
+}
+
+QString downloadPathForMessage(const QString& messageId) {
+    QString safeMessageId = messageId;
+    safeMessageId.replace(QRegularExpression("[^A-Za-z0-9_-]"), "_");
+    return QDir::current().filePath(QString("message-%1.txt").arg(safeMessageId));
 }
 }
 
@@ -597,7 +604,7 @@ void MessageService::deleteMessage(const QString& messageId) {
     });
 }
 
-void MessageService::download(const QString& messageId, const QString& path) {
+void MessageService::download(const QString& messageId) {
     const auto found = m_store.findMessage(messageId);
     if (found.failed() || !found.value().has_value()) {
         emit m_events.commandFailed({ErrorCode::NotFound, "Message must be cached before download. Use /read first."});
@@ -613,6 +620,7 @@ void MessageService::download(const QString& messageId, const QString& path) {
         emit m_events.cryptoOperationFailed(plaintext.error());
         return;
     }
+    const QString path = downloadPathForMessage(messageId);
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
         emit m_events.commandFailed({ErrorCode::StorageError, QString("Could not write %1.").arg(path)});

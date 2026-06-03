@@ -73,7 +73,7 @@ public:
     void forward(const QString& messageId, const QString& recipientUsername);
     void revoke(const QString& messageId);
     void deleteMessage(const QString& messageId);
-    void download(const QString& messageId, const QString& path);
+    void download(const QString& messageId);
     void verify(const QString& messageId);
 
 private:

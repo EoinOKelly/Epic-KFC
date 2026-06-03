@@ -208,7 +208,7 @@ All actions start with `/`.
 /forward <messageId> <username>
 /revoke <messageId>
 /delete <messageId>
-/download <messageId> <path>
+/download <messageId>
 /trust <username>
 /verify <messageId>
 /sync
@@ -236,6 +236,9 @@ second line
 Mock mode resolves usernames locally. Real mode resolves usernames through the
 production `GET /api/v1/users/by-username/{username}` endpoint and then uses the
 returned user/device metadata for trust and message commands.
+
+`/download <messageId>` exports the decrypted message to the directory where the
+client process is running. The generated filename is `message-<messageId>.txt`.
 
 `/verify <messageId>` checks the backend blockchain anchor metadata for that
 message. If the anchor is pending or failed, the client reports that plainly. If
