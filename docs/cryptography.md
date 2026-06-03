@@ -1,8 +1,10 @@
 # Cryptographic design (CS4455)
 
-Team **kfc**. Code in `cryptography/` (`@epic-messaging/cryptography`). Threat model, flows, primitives, limits.
+Team **kfc**. Code in `cryptography/` (`@epic-messaging/cryptography`).
 
-Related: [threat-model.md](./threat-model.md) (summary table), [backend-crypto-integration.md](./backend-crypto-integration.md) (API and DB wiring), [architecture.md](./architecture.md).
+**Submission (Word):** [Cryptographic-Design-kfc.docx](./Cryptographic-Design-kfc.docx) — `python docs/scripts/build_crypto_design_docx.py`
+
+Markdown copy below. Related: [threat-model.md](./threat-model.md), [backend-crypto-integration.md](./backend-crypto-integration.md), [architecture.md](./architecture.md).
 
 ---
 
@@ -25,21 +27,25 @@ We use the four attacker classes from the CS4455 brief.
 | **C. Honest-but-curious server** | Runs our API correctly but logs everything it sees |
 | **D. Compromised server** | Full database access and arbitrary API responses |
 
-### Properties by attacker
+### Cryptographic defences by attacker
 
-| Property | A | B | C | D |
-|----------|---|---|---|---|
-| Confidentiality of past ciphertext | Yes | Yes | Yes | Yes* |
-| Integrity of ciphertext (detect tamper) | n/a | Yes (AEAD) | Yes | Yes |
-| Cryptographic sender authenticity | n/a | Partial** | Partial** | Partial** |
-| Hide who messaged whom (metadata) | No | No | No | No |
-| Forward secrecy after ratchet step | Yes | Yes | Yes | Yes† |
-| Stop server dropping messages | No | No | No | No |
-| Stop MITM on first contact without user check | No | No | No | No |
+| Defence | A | B | C | D |
+|---------|---|---|---|---|
+| Past ciphertext stays confidential | Yes | Yes | Yes | Yes* |
+| Ciphertext tampering detected | n/a | Yes | Yes | Yes |
+| Sender bound to published keys | n/a | Yes | Yes | Yes** |
+| Forward secrecy after chain advance | Yes | Yes | Yes | Yes |
 
-\*Assumes clients never uploaded private keys and the server was not given message keys.  
-\**Signed pre-keys plus TOFU on identity keys; not a full PKI.  
-†If an attacker steals current ratchet state from a device, older messages may still be protected; break-in recovery depends on how far the ratchet has moved.
+\*Server never held private keys.  
+\**Signed pre-keys plus TOFU (`/trust`); not a full PKI.
+
+### Out of scope
+
+| Topic | Status | Notes |
+|-------|--------|-------|
+| Metadata privacy | Not provided | Relay server sees participants and timing |
+| Guaranteed delivery | Not provided | Malicious server can drop messages |
+| First-contact MITM | Mitigated by TOFU | User pins identity before send |
 
 ### What a compromised server (D) can still do
 
@@ -101,7 +107,11 @@ sequenceDiagram
   Note over B: decryptFromSender
 ```
 
-Wire format: JSON `format: "libsignal-v1"` with base64 body (`serializeWireMessage` / `deserializeWireMessage`). First message uses type 3 (PreKeyWhisperMessage); later messages use type 1 (WhisperMessage). Server validation is structural only (valid JSON and base64), not decryption.
+**TypeScript package:** `serializeWireMessage` → libsignal-v1 envelope; type 3 then type 1 (PreKeyWhisperMessage / WhisperMessage protobuf in `bodyB64`).
+
+**C++ client:** same outer envelope; inner JSON with X3DH on each message today (no persisted ratchet yet; see `client/README.md`).
+
+Server validation is structural only, not decryption.
 
 ### 3.4 Storage at rest (client)
 
@@ -253,7 +263,8 @@ On-chain digests are **public**. Anchoring proves "this hash was recorded at tim
 - Metadata (participants, timing, sizes) visible to server and network observer.
 - No message revocation cryptography in this package (policy feature would be app-layer).
 - TypeScript port is less audited than official libsignal.
-- C++ client must implement the same wire format and algorithms (or call this package in a documented bridge) for end-to-end guarantees on that client.
+- C++ client: OpenSSL X3DH+GCM per message; persisted double ratchet is a planned step (client README).
+- C++ and TypeScript inner payloads are not interoperable without a shared adapter.
 - Blockchain anchoring is manual / script-driven in demos; full product integration may lag E2EE.
 
 ---

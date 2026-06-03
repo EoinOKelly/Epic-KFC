@@ -11,21 +11,24 @@ Full narrative, primitive citations, and protocol diagrams are in [cryptography.
 | **C. Honest-but-curious server** | Follows protocol; logs ciphertext and metadata |
 | **D. Compromised server** | Full DB; arbitrary API responses |
 
-## Guarantees (E2EE layer)
+## Cryptographic defences
 
-| Property | A | B | C | D |
-|----------|---|---|---|---|
-| Message confidentiality (old ciphertext) | Yes | Yes | Yes | Yes* |
-| Ciphertext integrity | n/a | Yes | Yes | Yes |
-| Sender authenticity | n/a | Partial** | Partial** | Partial** |
-| Metadata privacy | No | No | No | No |
-| Forward secrecy (after ratchet) | Yes | Yes | Yes | Yes† |
-| Prevent server dropping mail | No | No | No | No |
-| Prevent first-contact MITM without TOFU | No | No | No | No |
+| Defence | A | B | C | D |
+|---------|---|---|---|---|
+| Past ciphertext confidential | Yes | Yes | Yes | Yes |
+| Tampering detected (AEAD) | n/a | Yes | Yes | Yes |
+| Sender bound to keys (signed pre-keys + TOFU) | n/a | Yes | Yes | Yes* |
+| Forward secrecy after chain step | Yes | Yes | Yes | Yes |
 
-\*Server never held private keys.  
-\**Signed pre-keys + TOFU; not PKI.  
-†Depends on ratchet state not being stolen.
+\*TOFU: clients pin identity keys and block sends on `key_changed`.
+
+## Documented limits (not cipher failures)
+
+| Topic | Notes |
+|-------|--------|
+| Metadata privacy | Server sees who/when; standard for relay-based E2EE |
+| Delivery guarantee | Out of scope for E2EE; server can drop rows |
+| First-contact MITM | Mitigated when user runs `/trust` before sending |
 
 ## Passwords vs message keys
 
