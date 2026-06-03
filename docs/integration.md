@@ -41,7 +41,7 @@ The npm package is TypeScript. Pick one approach and document it in your README:
 | **B. Local Node helper** | Reuses this package | Extra process; awkward for grading C++ |
 | **C. Crypto only on “send” via backend** | Simple | **Not** E2EE if server encrypts |
 
-Recommended: **A** for E2EE — use this repo as the spec:
+Recommended: **A** for E2EE. Use this repo as the spec:
 
 1. Generate X25519 / Ed25519 keypairs.
 2. Implement or call libs for X3DH + ratchet **or** shell out to Node for v1 demo only.
@@ -81,7 +81,7 @@ See `blockchain/README.md` for deploy and ABI.
 
 - Terminate TLS at `*.THEBURKENATOR.COM`.
 - Certificate validation on clients.
-- E2EE is **inside** TLS: TLS protects the channel; GCM ciphertext protects content from the server.
+- E2EE sits inside TLS: TLS protects the channel to the VM; GCM ciphertext protects content from the server operator.
 
 ## TOFU in the UI
 

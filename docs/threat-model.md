@@ -1,47 +1,39 @@
-# Threat model
+# Threat model (summary)
 
-Aligned with CS4455 cryptography brief (four attacker classes).
+Full narrative, primitive citations, and protocol diagrams are in [cryptography.md](./cryptography.md). This page is a quick reference for interviews.
 
-## Attackers
+## Attackers (CS4455 brief)
 
 | Class | Capability |
 |-------|------------|
-| **A. Passive network** | Read traffic client ↔ server |
+| **A. Passive network** | Read client-server traffic |
 | **B. Active network** | Modify, drop, replay, inject traffic |
 | **C. Honest-but-curious server** | Follows protocol; logs ciphertext and metadata |
-| **D. Compromised server** | Full DB + can send arbitrary API responses |
+| **D. Compromised server** | Full DB; arbitrary API responses |
 
-## What E2EE provides
+## Guarantees (E2EE layer)
 
 | Property | A | B | C | D |
 |----------|---|---|---|---|
-| Message **confidentiality** (past ciphertext) | Yes | Yes | Yes | Yes* |
-| **Integrity** of ciphertext (detect tamper) | — | Yes (GCM) | Yes | Yes |
-| **Authenticity** of sender (cryptographic) | — | Partial** | Partial** | Partial** |
-| Hide **metadata** (who/when) | No | No | No | No |
-| **Forward secrecy** (after ratchet advance) | Yes | Yes | Yes | Yes† |
-| Prevent server **dropping** messages | No | No | No | No |
-| Prevent **MITM on first contact** without TOFU verify | No | No | No | No |
+| Message confidentiality (old ciphertext) | Yes | Yes | Yes | Yes* |
+| Ciphertext integrity | n/a | Yes | Yes | Yes |
+| Sender authenticity | n/a | Partial** | Partial** | Partial** |
+| Metadata privacy | No | No | No | No |
+| Forward secrecy (after ratchet) | Yes | Yes | Yes | Yes† |
+| Prevent server dropping mail | No | No | No | No |
+| Prevent first-contact MITM without TOFU | No | No | No | No |
 
-\*Assumes clients did not leak keys; server never had private keys.  
-\**Via signed pre-keys + TOFU on identity; not a full PKI.  
-†If long-term state on client is stolen, limited break-in recovery depends on ratchet step.
+\*Server never held private keys.  
+\**Signed pre-keys + TOFU; not PKI.  
+†Depends on ratchet state not being stolen.
 
 ## Passwords vs message keys
 
-- **Argon2id** protects the **account** if the DB leaks.
-- **Message keys** come from X3DH/ratchet, not from the password.
-- Local private keys should use `deriveKeys` + `encryptPrivateKeyForStorage` with a user passphrase (client responsibility).
-
-## Deviations from Signal (document explicitly)
-
-| Signal production | This project |
-|-------------------|--------------|
-| libsignal audited ratchet | In-repo ratchet + spec-based KDF |
-| AES-CBC + HMAC payloads | AES-256-GCM (brief requirement) |
-| PQXDH optional | Classical X25519 only |
+- **Argon2id** protects the login if the password table leaks.
+- **X3DH / ratchet** supplies message keys; not derived from the password.
+- Local private keys: `encryptPrivateKeyForStorage` under HKDF-derived keys (client duty).
 
 ## Blockchain
 
-- On-chain hashes are **public** on Sepolia.
-- Anchoring does not encrypt; it only supports **fidelity** (“this digest was recorded at time T”).
+- Sepolia stores **keccak256** digests (Merkle roots), not plaintext.
+- Public chain data proves integrity of what you anchored, not confidentiality.

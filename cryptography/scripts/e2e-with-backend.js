@@ -56,7 +56,7 @@ async function registerOrLogin(user) {
     log("auth", `registered ${user.username}`);
   } catch (err) {
     if (!String(err.message).includes("409")) throw err;
-    log("auth", `${user.username} already exists — logging in`);
+    log("auth", `${user.username} exists, logging in`);
   }
 
   const tokens = await api("/auth/login", {
@@ -108,7 +108,7 @@ async function main() {
   const aliceUserId = aliceMe.id;
   const bobUserId = bobMe.id;
 
-  log("2", "Generate local Signal devices (private keys stay in Node — not sent to server)");
+  log("2", "Generate local Signal devices");
   const aliceDevice = await generateDevice(aliceUserId, DEVICE_ID);
   const bobDevice = await generateDevice(bobUserId, DEVICE_ID);
 
@@ -128,7 +128,7 @@ async function main() {
   if (tofuResult.status === "first_use") pinIdentity(tofu, tofuResult.record);
   log("tofu", `Bob identity: ${tofuResult.status}`);
 
-  log("5", "Alice establishes session + encrypts (cryptography/ — not on server)");
+  log("5", "Alice session + encrypt");
   await establishSession(aliceDevice, bobBundle, bobUserId, DEVICE_ID);
   const plaintext = "hello bob via backend relay";
   const wire = await encryptForRecipient(aliceDevice, bobUserId, DEVICE_ID, plaintext);
@@ -165,7 +165,7 @@ async function main() {
   }
 
   log("8", "Bob replies through backend");
-  const replyText = "hello alice — reply through server";
+  const replyText = "hello alice reply through server";
   const replyWire = await encryptForRecipient(bobDevice, aliceUserId, DEVICE_ID, replyText);
   await api("/messages", {
     method: "POST",
@@ -191,7 +191,7 @@ async function main() {
   log("decrypt", `Alice read: "${replyDecrypted.toString("utf8")}"`);
 
   console.log("\n" + "=".repeat(60));
-  console.log("E2E OK — crypto + backend relay working together");
+  console.log("E2E OK: crypto + backend");
   console.log("=".repeat(60) + "\n");
 }
 

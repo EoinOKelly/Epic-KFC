@@ -6,7 +6,7 @@ Short answers if the panel pushes hard.
 
 **Policy:** use standard libraries wherever they exist (`argon2`, Node `crypto`; production E2EE should be **libsignal**).
 
-**Current state:** primitives follow that policy. **X3DH + Double Ratchet** are hand-wired in `signal/` for the project demo and brief-friendly AES-256-GCM — not ideal vs libsignal. Message bodies use **AES-256-GCM**, not Signal’s CBC+HMAC. We cite Signal specs and list migration to libsignal as the hardening path.
+**Current state:** primitives use `argon2` and Node `crypto`. X3DH and the double ratchet come from `@privacyresearch/libsignal-protocol-typescript`. User plaintext is wrapped in **AES-256-GCM** before the ratchet (the port’s internal CBC+HMAC is not our AEAD boundary). Migration to `@signalapp/libsignal-client` is the hardening path for production and PQXDH.
 
 ## “Why not HPKE?”
 
@@ -26,11 +26,11 @@ Cannot decrypt ciphertext without keys. Can **drop** messages, serve **fake pre-
 
 ## “Argon2 parameters?”
 
-64 MiB memory, 3 iterations, 4 parallelism — OWASP strong interactive tier; balances GPU resistance and login latency.
+64 MiB memory, 3 iterations, 4 parallelism (OWASP strong interactive tier).
 
 ## “Nonce reuse?”
 
-Fresh random 12-byte IV per `encryptMessage` call; ratchet gives a new message key per message. Reusing IV+key would break GCM — we avoid by construction.
+Fresh 12-byte IV per `encryptMessage`; ratchet rotates message keys. No IV reuse under the same key.
 
 ## “How does C++ use your code?”
 
@@ -38,7 +38,7 @@ Node package for backend; C++ should implement the same wire format and algorith
 
 ## “How does blockchain fit?”
 
-Client hashes conversation canonical form with **keccak256**, anchors on Sepolia. Separate from E2EE — integrity/public audit, not confidentiality.
+Client hashes conversation canonical form with **keccak256**, anchors on Sepolia. Separate from E2EE: integrity audit, not confidentiality.
 
 ## Limitations to volunteer (shows understanding)
 

@@ -1,9 +1,9 @@
-# Backend integration guide — `cryptography/` package
+# Backend integration (`cryptography/` package)
 
 How to wire the FastAPI / Postgres backend to the Epic Messaging crypto module (X3DH, double ratchet, Argon2id, local key encryption). The backend is a **relay**: it stores public keys and opaque ciphertext blobs; it never holds private keys or ratchet state.
 
-**Canonical types:** `cryptography/src/storageSchema.ts`  
-**Related docs:** [database.md](./database.md), [integration.md](./integration.md), [architecture.md](./architecture.md)
+Type definitions: `cryptography/src/storageSchema.ts`  
+See also: [database.md](./database.md), [integration.md](./integration.md), [architecture.md](./architecture.md), [cryptography.md](./cryptography.md)
 
 ---
 
@@ -29,14 +29,14 @@ npm run build
 
 ## What to keep vs change in the existing backend schema
 
-Daniel’s branch already has useful infrastructure (`users`, `refresh_sessions`, `audit_logs`, `conversations`, `blockchain_anchors`). To work with this crypto module, **add or migrate** the tables below. Tables built for a different E2EE model (`user_key_bundles`, `messages` with `nonce`/`encrypted_payload`, `message_recipients` with `encrypted_message_key`) should be **replaced or sidelined** — they do not match the Signal wire format.
+Daniel’s branch already has useful infrastructure (`users`, `refresh_sessions`, `audit_logs`, `conversations`, `blockchain_anchors`). To work with this crypto module, **add or migrate** the tables below. Tables built for a different E2EE model (`user_key_bundles`, `messages` with `nonce`/`encrypted_payload`, `message_recipients` with `encrypted_message_key`) should be replaced or sidelined; they do not match the Signal wire format.
 
 | Keep (backend infra) | Add / align (crypto contract) |
 |----------------------|-------------------------------|
 | `users` (+ `password_hash`) | `device_keys` |
 | `refresh_sessions`, `audit_logs` | `one_time_prekeys` |
 | `conversations`, `conversation_members` (optional UI/metadata) | `messages` with `wire_payload_json` |
-| `blockchain_anchors` (extend conventions below) | — |
+| `blockchain_anchors` (extend conventions below) | (see below) |
 
 Do **not** maintain a second copy of `cryptography/` inside the backend repo. Use the monorepo package at `../cryptography`.
 
@@ -52,7 +52,7 @@ Mirror `storageSchema.ts`. Suggested PostgreSQL shapes (UUIDs match existing bac
 |--------|------|--------|
 | `id` | UUID PK | |
 | `username`, `email` | text | Your existing auth fields |
-| `password_hash` | varchar(255) | PHC string from `hashPassword()` — salt is embedded |
+| `password_hash` | varchar(255) | PHC string from `hashPassword()` (salt embedded) |
 
 ### `device_keys`
 
@@ -90,12 +90,12 @@ Unique: `(user_id, device_id, prekey_id)`. Index `(user_id, device_id)` where `u
 | `message_id` | UUID PK | |
 | `sender_user_id`, `sender_device_id` | | |
 | `recipient_user_id`, `recipient_device_id` | | Inbox query index on recipient |
-| `wire_payload_json` | text / jsonb | Opaque — see wire format below |
+| `wire_payload_json` | text / jsonb | Opaque; see wire format below |
 | `created_at` | timestamptz | |
 
 Optional non-secret columns (from `MessageMetadata`): `conversation_id`, `consumed_one_time_prekey_id` for housekeeping.
 
-**Do not** split ratchet fields into `nonce` / `encrypted_payload` on the server — clients send one JSON blob.
+Do not split ratchet fields into `nonce` / `encrypted_payload` on the server. Clients send one JSON blob.
 
 ---
 
@@ -115,7 +115,7 @@ Clients POST the string returned by `serializeWireMessage()`. The server stores 
 - `type === 3`: first message to a device (establishes session; includes X3DH material inside protobuf).
 - `type === 1`: subsequent messages on an established session.
 
-Validation on the server should be **structural only** (required keys present, base64 decodable) — not decryption.
+Server validation should be structural only (required keys present, base64 decodable), not decryption.
 
 ---
 
@@ -132,13 +132,13 @@ const { hash } = await hashPassword(plainPassword);
 const ok = await verifyPassword(plainPassword, storedHash);
 ```
 
-**Option A — Python only (recommended for FastAPI):** use `argon2-cffi` with the same PHC strings (already in `requirements.txt`):
+**Option A, Python only (recommended for FastAPI):** use `argon2-cffi` with the same PHC strings (already in `requirements.txt`):
 
 ```python
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
-ph = PasswordHasher()  # defaults differ — for verify-only, use:
+ph = PasswordHasher()  # defaults differ; for verify-only, use:
 
 from argon2.low_level import Type
 import argon2
@@ -152,7 +152,7 @@ def verify_password(plain: str, stored_hash: str) -> bool:
 
 For **registration**, either call Node once (`hashPassword`) or configure `argon2-cffi` to match `cryptoEngine.ts` (`memory_cost=65536`, `time_cost=3`, `parallelism=4`, `hash_len=32`, type Argon2id). Easiest path: small Node script or subprocess on register only.
 
-**Option B — Node helper:** `"@epic-messaging/cryptography": "file:../cryptography"` and invoke `hashPassword` / `verifyPassword` from a thin Node service or CLI.
+**Option B, Node helper:** `"@epic-messaging/cryptography": "file:../cryptography"` and invoke `hashPassword` / `verifyPassword` from a thin Node service or CLI.
 
 Never log passwords or hashes in application logs.
 
@@ -212,11 +212,11 @@ Field names can be camelCase in JSON if documented; DB columns follow `storageSc
 
 The server does not call Signal APIs. Clients do:
 
-1. **Register / login** — password via API only.
-2. **Generate keys** — `generateDevice(userId, deviceId)` → `deviceToDbRows()` → upload public parts.
-3. **First message to a contact** — `GET` bundle → `establishSession()` → `encryptForRecipient()` → `serializeWireMessage()` → `POST /messages`; mark OPK `used_at` when `type === 3`.
-4. **Reply** — `decryptFromSender` / `encryptForRecipient` with local `InMemoryProtocolStore` session state → POST next wire payload.
-5. **TOFU** — before trusting a bundle, `verifyIdentityTofu`; on `key_changed`, reject send.
+1. Register / login: password via API only.
+2. Generate keys: `generateDevice(userId, deviceId)` → `deviceToDbRows()` → upload public parts.
+3. First message: `GET` bundle → `establishSession()` → `encryptForRecipient()` → `serializeWireMessage()` → `POST /messages`; mark OPK `used_at` when `type === 3`.
+4. Reply: `decryptFromSender` / `encryptForRecipient` with local session state → POST next wire payload.
+5. TOFU: before trusting a bundle, `verifyIdentityTofu`; on `key_changed`, reject send.
 
 Ratchet state and encrypted private keys: **local files only** (`encryptPrivateKeyForStorage`).
 
@@ -302,7 +302,7 @@ Export surface: `cryptography/src/index.ts`.
 
 ## Verification checklist (crypto owner)
 
-Run these in order to confirm the contract between `cryptography/` and this backend:
+Run these to confirm the contract between `cryptography/` and this backend:
 
 | Step | Command | Proves |
 |------|---------|--------|

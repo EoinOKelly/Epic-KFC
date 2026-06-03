@@ -1,9 +1,4 @@
-/**
- * Interactive-style demo: shows what smoke:signal does, step by step.
- *
- * Run:  npm run demo:signal
- *       npm run demo:signal -- --save-wire   (writes wire JSON files to /tmp)
- */
+// npm run demo:signal  (--save-wire writes demo-output/*.json)
 
 const fs = require("node:fs");
 const path = require("node:path");
@@ -52,29 +47,25 @@ function previewJson(label, obj) {
 }
 
 async function main() {
-  section("Epic Messaging — Signal E2EE demo (local only, no server)");
-  console.log("This script runs entirely on your machine. Nothing is sent over the network.");
+  section("Signal E2EE demo (local)");
   kv("Protocol stack", SIGNAL_PROTOCOL.implementation);
   kv("Session setup", SIGNAL_PROTOCOL.keyAgreement);
   kv("Ratchet", SIGNAL_PROTOCOL.ratchet);
-  kv("Your message bytes (brief)", SIGNAL_PROTOCOL.applicationPayload);
+  kv("Application payload", SIGNAL_PROTOCOL.applicationPayload);
   kv("Library transport (inner)", SIGNAL_PROTOCOL.transportPayload);
 
-  // --- Alice & Bob devices ---
   section("1) Generate devices (identity + pre-keys)");
   step(1, "Alice: generateDevice('alice', 1)");
   const alice = await generateDevice("alice", 1);
   kv("registrationId", alice.registrationId);
   kv("signedPreKeyId", alice.signedPreKeyId);
   kv("oneTimePreKeyId", alice.oneTimePreKeyId);
-  console.log("    → Creates Curve25519 identity key, signed pre-key, one OPK, in-memory store.");
 
   step(2, "Bob: generateDevice('bob', 1)");
   const bob = await generateDevice("bob", 1);
   kv("registrationId", bob.registrationId);
 
-  // --- TOFU ---
-  section("2) TOFU — trust on first use (client-only)");
+  section("2) TOFU (client-only)");
   const tofu = new Map();
   const bobBundle = deviceToPublicBundle(bob);
   const bobIdentityB64 = Buffer.from(bobBundle.identityKey).toString("base64");
@@ -85,24 +76,15 @@ async function main() {
   kv("TOFU result", tofuResult.status);
   if (tofuResult.status === "first_use") {
     pinIdentity(tofu, tofuResult.record);
-    console.log("    → First time seeing Bob: pinned identity locally (server does not do this).");
   }
 
-  // --- Session ---
-  section("3) Session setup — X3DH (Alice → Bob)");
+  section("3) Session setup (X3DH)");
   step(4, "establishSession(alice, bobBundle, 'bob', 1)");
-  console.log("    → Alice runs X3DH using Bob's public bundle (as if fetched from your API).");
-  console.log("    → Session state saved in alice.store only.");
   await establishSession(alice, bobBundle, "bob", 1);
-  console.log("    ✓ Session ready on Alice's side.");
 
-  // --- Encrypt message 1 ---
-  section("4) Alice encrypts → Bob decrypts (first message)");
+  section("4) Alice encrypts, Bob decrypts");
   const plaintext1 = "hello bob";
   step(5, `encryptForRecipient(alice → bob, "${plaintext1}")`);
-  console.log("    Inside encryptForRecipient:");
-  console.log("      a) Plaintext → AES-256-GCM envelope (random key + AAD) — brief compliance");
-  console.log("      b) Envelope JSON → libsignal SessionCipher.encrypt → PreKeyWhisperMessage (type 3)");
   const wire1 = await encryptForRecipient(alice, "bob", 1, plaintext1);
   kv("wire.format", wire1.format);
   kv("wire.type", wire1.type + " (3 = first message / establishes Bob's session on decrypt)");
@@ -120,13 +102,11 @@ async function main() {
   }
 
   step(6, "decryptFromSender(bob, from alice, wire1)");
-  console.log("    → Bob decrypts Signal layer, then unwraps GCM envelope → plaintext.");
   const plain1 = await decryptFromSender(bob, "alice", 1, wire1);
   kv("Bob decrypted plaintext", plain1.toString("utf8"));
   if (plain1.toString("utf8") !== plaintext1) throw new Error("decrypt mismatch");
 
-  // --- Reply ---
-  section("5) Bob replies → Alice decrypts (ratchet message)");
+  section("5) Bob reply (ratchet)");
   const plaintext2 = "hello alice";
   step(7, `encryptForRecipient(bob → alice, "${plaintext2}")`);
   const wire2 = await encryptForRecipient(bob, "alice", 1, plaintext2);
@@ -134,15 +114,11 @@ async function main() {
   const plain2 = await decryptFromSender(alice, "bob", 1, wire2);
   kv("Alice decrypted plaintext", plain2.toString("utf8"));
 
-  // --- Round-trip wire serialize ---
-  section("6) Wire format round-trip");
+  section("6) Wire round-trip");
   step(8, "serializeWireMessage → deserializeWireMessage");
   const roundTrip = deserializeWireMessage(serializeWireMessage(wire1));
   if (roundTrip.bodyB64 !== wire1.bodyB64) throw new Error("wire round-trip failed");
-  console.log("    ✓ JSON wire blob survives serialize/deserialize unchanged.");
-
-  // --- DB mapping smoke ---
-  section("7) DB row mapping (what you'd upload to FastAPI)");
+  section("7) DB row mapping");
   step(9, "deviceToDbRows(bob) + preKeyBundleFromDb");
   const { deviceKeys, oneTimePreKeys } = await deviceToDbRows(bob);
   kv("device_keys.identity_key_public_b64 (preview)", deviceKeys.identity_key_public_b64.slice(0, 40) + "…");
@@ -152,13 +128,8 @@ async function main() {
     one_time_prekey_id: oneTimePreKeys[0]?.prekey_id ?? null,
     one_time_prekey_public_b64: oneTimePreKeys[0]?.prekey_public_b64 ?? null,
   });
-  console.log("    ✓ Can rebuild libsignal bundle from DB-shaped rows.");
-
-  section("DONE — all local checks passed");
-  console.log("\nNext: connect to backend with Step 2 (wire validator) + e2e script.");
-  console.log("Quick check only:  npm run smoke:signal");
-  console.log("This verbose demo: npm run demo:signal");
-  console.log("Save wire files:   npm run demo:signal -- --save-wire\n");
+  section("DONE");
+  console.log("smoke: npm run smoke:signal | e2e: npm run e2e:backend\n");
 }
 
 main().catch((e) => {

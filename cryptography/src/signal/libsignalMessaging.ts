@@ -17,8 +17,7 @@ export const SIGNAL_PROTOCOL = {
   keyAgreement: "X3DH",
   ratchet: "Double Ratchet (library implementation)",
   transportPayload: "AES-256-CBC + HMAC-SHA256 (library internal transport)",
-  applicationPayload: "AES-256-GCM (CS4455 brief compliance envelope)",
-  note: "Uses vetted TS port for session setup/ratcheting, with explicit GCM envelope for user message payloads.",
+  applicationPayload: "AES-256-GCM envelope",
 } as const;
 
 export interface LibSignalWireMessage {

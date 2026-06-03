@@ -1,46 +1,208 @@
-# Cryptography module
+# Cryptographic design (CS4455)
 
-Package: `cryptography/` (`@epic-messaging/cryptography`).
+Team **kfc**. Code in `cryptography/` (`@epic-messaging/cryptography`). Threat model, flows, primitives, limits.
 
-## Library-first policy
+Related: [threat-model.md](./threat-model.md) (summary table), [backend-crypto-integration.md](./backend-crypto-integration.md) (API and DB wiring), [architecture.md](./architecture.md).
 
-**Default:** use a standard, audited library for anything security-critical.
+---
 
-| Area | Preferred | Current repo |
-|------|-----------|--------------|
-| Password hashing | `argon2` | `argon2` |
-| HKDF, AES-GCM, X25519, Ed25519 | Node `crypto` | Node `crypto` |
-| E2EE session (X3DH + ratchet) | `@signalapp/libsignal-client` or maintained TS port | `@privacyresearch/libsignal-protocol-typescript` via `signal/` |
-| HPKE (if required literally) | `hpke-js` / `@hpke/core` | X3DH used for same role |
-| C++ client | OpenSSL 3 / libsodium | Team to align with wire format |
+## 1. Goals
 
-**In this repo:** session setup and ratcheting are delegated to the TS port. **We keep:** Argon2 / HKDF / at-rest GCM (`cryptoEngine.ts`), wire format + DB types, TOFU helpers. **We do not** maintain a hand-rolled double ratchet.
+The messaging app must give **confidentiality**, **integrity**, and **authenticity** for message bodies between users. The server stores ciphertext and public keys only. It must not be able to read plaintext or change ciphertext without the recipient noticing.
 
-**Cipher note:** the privacyresearch port uses Signal’s default **AES-256-CBC + HMAC** for transport internals. To keep CS4455 AEAD compliance, `encryptForRecipient` wraps the user message payload in an explicit **AES-256-GCM** envelope before passing bytes into the ratchet.
+Passwords must survive a database leak. Long-term private keys on disk must not be readable without the user's passphrase.
 
-## Two layers
+---
 
-### 1. `cryptoEngine.ts` — primitives (server + client)
+## 2. Threat model
+
+We use the four attacker classes from the CS4455 brief.
+
+| Class | What they can do |
+|-------|------------------|
+| **A. Passive network** | Read traffic between client and server |
+| **B. Active network** | Read, modify, drop, replay, or inject traffic |
+| **C. Honest-but-curious server** | Runs our API correctly but logs everything it sees |
+| **D. Compromised server** | Full database access and arbitrary API responses |
+
+### Properties by attacker
+
+| Property | A | B | C | D |
+|----------|---|---|---|---|
+| Confidentiality of past ciphertext | Yes | Yes | Yes | Yes* |
+| Integrity of ciphertext (detect tamper) | n/a | Yes (AEAD) | Yes | Yes |
+| Cryptographic sender authenticity | n/a | Partial** | Partial** | Partial** |
+| Hide who messaged whom (metadata) | No | No | No | No |
+| Forward secrecy after ratchet step | Yes | Yes | Yes | Yes† |
+| Stop server dropping messages | No | No | No | No |
+| Stop MITM on first contact without user check | No | No | No | No |
+
+\*Assumes clients never uploaded private keys and the server was not given message keys.  
+\**Signed pre-keys plus TOFU on identity keys; not a full PKI.  
+†If an attacker steals current ratchet state from a device, older messages may still be protected; break-in recovery depends on how far the ratchet has moved.
+
+### What a compromised server (D) can still do
+
+- Refuse to deliver messages or delete rows (availability / delivery, not confidentiality of old ciphertext).
+- Serve a fake pre-key bundle to a **new** conversation (MITM) unless the client pins the identity key (TOFU).
+- Learn metadata: usernames, message times, sizes, who talked to whom.
+
+### What a compromised server cannot do (if clients follow the protocol)
+
+- Decrypt `wire_payload_json` without stealing client keys.
+- Forge a valid AEAD ciphertext that decrypts to chosen plaintext without the session keys.
+- Undetectably alter anchored Merkle roots already written to Sepolia (separate blockchain module).
+
+---
+
+## 3. Protocol flows
+
+### 3.1 Registration and login
+
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant S as Server
+  participant DB as Database
+
+  C->>C: generateDevice() X25519 + Ed25519
+  C->>S: POST /register (username, password) over TLS
+  S->>S: hashPassword() Argon2id PHC string
+  S->>DB: users.password_hash
+  C->>S: PUT device keys + one-time prekeys (public only)
+  S->>DB: device_keys, one_time_prekeys
+```
+
+- Password never stored in plaintext. Only a PHC-encoded Argon2id string (see §4.1).
+- Private key material stays on the client, optionally wrapped with `encryptPrivateKeyForStorage`.
+
+### 3.2 Key publication
+
+The server holds **public** pre-key bundles (`identityKey`, signed pre-key, one-time pre-keys). Clients fetch a bundle before the first message to a device.
+
+Trust: **TOFU with pinning** (`verifyIdentityTofu`, `pinIdentity`). On first use the user should confirm the identity fingerprint out of band. On `key_changed`, sending stops until the user accepts the new key. We do not run a CA or web-of-trust.
+
+### 3.3 Send and receive (1:1)
+
+```mermaid
+sequenceDiagram
+  participant A as Alice
+  participant S as Server
+  participant B as Bob
+
+  A->>S: GET Bob pre-key bundle
+  S-->>A: public keys only
+  Note over A: establishSession (X3DH)
+  Note over A: encryptForRecipient (GCM envelope + ratchet)
+  A->>S: POST wire_payload_json
+  S->>DB: opaque blob
+  B->>S: GET inbox
+  S-->>B: wire_payload_json
+  Note over B: decryptFromSender
+```
+
+Wire format: JSON `format: "libsignal-v1"` with base64 body (`serializeWireMessage` / `deserializeWireMessage`). First message uses type 3 (PreKeyWhisperMessage); later messages use type 1 (WhisperMessage). Server validation is structural only (valid JSON and base64), not decryption.
+
+### 3.4 Storage at rest (client)
+
+| Secret | Where | Protection |
+|--------|-------|------------|
+| Password | Server DB | Argon2id hash only |
+| Identity / pre-key private keys | Client disk | `deriveKeys` + AES-256-GCM via `encryptPrivateKeyForStorage` |
+| Ratchet session state | Client memory / local store | Not in Postgres |
+
+HKDF labels separate purposes: `epic-messaging/v1/local-storage-key` vs `epic-messaging/v1/session-key` (see `cryptoEngine.ts`).
+
+---
+
+## 4. Primitives and parameters
+
+Standard libraries only: Node `crypto`, `argon2`, and `@privacyresearch/libsignal-protocol-typescript` for X3DH and the double ratchet. No hand-rolled AES, Argon2, or ratchet math.
+
+### 4.1 Password hashing: Argon2id
+
+| Parameter | Value | Source |
+|-----------|-------|--------|
+| Type | Argon2id | RFC 9106; resists side-channel and GPU cracking |
+| memoryCost | 65536 KiB (64 MiB) | OWASP Password Storage Cheat Sheet (2024), "strong" interactive tier |
+| timeCost | 3 | Same |
+| parallelism | 4 | Same |
+| hashLength | 32 bytes | Matches AES-256 key size for downstream KDF input |
+
+Registration returns a PHC-encoded string stored in `users.password_hash`. Verification uses `argon2.verify` on the stored string.
+
+### 4.2 HKDF-SHA256
+
+| Use | salt | info string |
+|-----|------|-------------|
+| Split master secret into storage + session keys | Per-user random salt (≥8 bytes) | `epic-messaging/v1/local-storage-key` and `epic-messaging/v1/session-key` |
+
+RFC 5869: distinct `info` values give domain separation so the same input key material cannot be swapped between storage encryption and another purpose.
+
+### 4.3 Message payload AEAD: AES-256-GCM
+
+| Parameter | Value | Justification |
+|-----------|-------|---------------|
+| Key | 256 bits | NIST SP 800-57: 256-bit symmetric keys target 128-bit security under Grover |
+| IV / nonce | 96 bits (12 bytes), random per encryption | NIST SP 800-38D: must be unique per key; reuse breaks confidentiality and integrity |
+| Tag | 128 bits | Default GCM authentication tag |
+
+Used in `encryptMessage` / `decryptMessage` and in the outer envelope before bytes enter the Signal session cipher.
+
+The privacyresearch port uses AES-CBC + HMAC inside the ratchet transport. `encryptForRecipient` wraps user plaintext in a GCM envelope (AAD: `epic-messaging/libsignal-v1/aead-envelope`) before `SessionCipher.encrypt`.
+
+### 4.4 Key agreement and signing
+
+| Role | Algorithm | Notes |
+|------|-----------|-------|
+| DH / KEM-style agreement | X25519 | RFC 7748; 32-byte keys; used in X3DH and DH ratchet steps |
+| Signatures on signed pre-keys | Ed25519 | RFC 8032; proves possession of identity key |
+
+### 4.5 Session setup: X3DH (not HPKE byte-for-byte)
+
+The brief cites HPKE Mode_Auth (RFC 9180) as an example. We implement **X3DH** from the Signal specification because it matches async messaging with pre-key bundles on the server.
+
+| Topic | Our choice |
+|-------|------------|
+| Offline recipient | One-time pre-keys uploaded to server |
+| Authenticated setup | Signed pre-key + Ed25519 signature over pre-key |
+| Shared secret | X3DH DH outputs combined per Signal X3DH spec |
+| Forward secrecy | Double ratchet after setup |
+
+HPKE and X3DH solve the same architectural role (authenticated key establishment without giving the server the message keys). A future refactor could expose the same X25519 keys through `hpke-js`; the trust model would stay TOFU.
+
+References: Signal "X3DH Key Agreement Protocol" (2016); Signal "Double Ratchet Algorithm" (2016); simplified to the fields we store in `storageSchema.ts`.
+
+### 4.6 Nonce strategy
+
+- GCM: fresh 12-byte IV from `crypto.randomBytes` on every `encryptMessage` call.
+- Ratchet: new message key per message from the double ratchet chain.
+
+**Consequence of nonce reuse under the same key:** GCM leaks the XOR of plaintexts and forgeries become possible. We avoid reuse by random IVs and ratchet-derived keys.
+
+---
+
+## 5. Code layout
+
+### `cryptoEngine.ts` (primitives)
 
 | API | Use |
 |-----|-----|
-| `hashPassword` / `verifyPassword` | Server registration/login only |
-| `deriveKeys` | Split one master secret → storage key + session key (HKDF, separate `info`) |
+| `hashPassword` / `verifyPassword` | Server registration and login |
+| `deriveKeys` | HKDF split for local key encryption |
 | `encryptMessage` / `decryptMessage` | AES-256-GCM (+ optional AAD) |
-| `generateKeyPair` | X25519 (DH) + Ed25519 (signing) at registration |
-| `encryptPrivateKeyForStorage` | Wrap identity/pre-key private material on disk |
+| `generateKeyPair` | X25519 + Ed25519 at registration |
+| `encryptPrivateKeyForStorage` | Wrap private key blobs on disk |
 
-Uses **Node `crypto`** and **`argon2`** — not custom implementations of AES or Argon2.
-
-### 2. `signal/` — E2EE sessions (library-backed)
+### `signal/` (E2EE sessions)
 
 | Piece | Implementation |
 |-------|----------------|
-| X3DH + Double Ratchet | `@privacyresearch/libsignal-protocol-typescript` |
-| Wire envelope | `libsignal-v1` JSON (`LibSignalWireMessage`) |
+| X3DH + double ratchet | `@privacyresearch/libsignal-protocol-typescript` |
+| Wire envelope | `libsignal-v1` JSON |
 | TOFU | `verifyIdentityTofu` / `pinIdentity` (our code) |
 
-High-level API:
+Example imports:
 
 ```typescript
 import {
@@ -50,60 +212,58 @@ import {
   encryptForRecipient,
   decryptFromSender,
   serializeWireMessage,
-  deserializeWireMessage,
   verifyIdentityTofu,
   pinIdentity,
 } from "@epic-messaging/cryptography";
 ```
 
-Smoke test: `cd cryptography && npm run smoke:signal`.
+Smoke test: `cd cryptography && npm run smoke:signal`. Full backend round-trip: `npm run e2e:backend`.
 
-## X3DH + ratchet (conceptual)
+---
 
-```mermaid
-flowchart LR
-  subgraph setup [Session setup - once]
-    BUNDLE[Bob pre-key bundle on server]
-    X3DH[X3DH → shared secret SK]
-    BUNDLE --> X3DH
-  end
+## 6. Differences from production Signal
 
-  subgraph ratchet [Every message]
-    CK[Chain keys via KDF_CK]
-    MK[Message key]
-    ENC[Library message cipher]
-    CK --> MK --> ENC
-    DH[DH ratchet steps]
-    DH --> CK
-  end
+| Production Signal | This project |
+|-------------------|--------------|
+| `@signalapp/libsignal-client` | TypeScript port for Node and demos |
+| PQXDH (Kyber) optional | Classical X25519 only; `kyber_prekey_*` columns reserved |
+| AES-CBC + HMAC in transport | GCM envelope around user payload |
 
-  X3DH --> ratchet
-```
+Migration path: official libsignal client for C++ and Node when the team needs PQXDH and audit parity.
 
-- **X** in X3DH = **extended** (signed + one-time pre-keys for offline recipients).
-- **Double ratchet** = symmetric chain ratchet + periodic DH ratchet (forward secrecy).
+---
 
-## Wire format
+## 7. Post-quantum note
 
-Store/transmit messages with `serializeWireMessage` → JSON with base64 fields.  
-Types: `storageSchema.ts`, `wireFormat.ts`.
+AES-256 remains a reasonable symmetric choice if Grover-style attacks are considered (effective strength about 128 bits). X25519 and Ed25519 are **not** post-quantum. Recorded ciphertext could be decrypted in future if session keys are ever broken by a large quantum computer. Signal's PQXDH (Kyber) is not enabled here.
 
-## Algorithm choices (design doc)
+---
 
-| Choice | Why |
-|--------|-----|
-| Argon2id, 64 MiB, t=3, p=4 | OWASP-aligned memory-hard password hashing |
-| HKDF-SHA256 + `info` labels | Domain separation (storage vs session keys) |
-| AES-256-GCM | Brief-mandated AEAD; 256-bit keys ≈ 128-bit strength under Grover |
-| X25519 | Signal / HPKE-style DH; 32-byte keys easy for C++ FFI |
-| Ed25519 | Sign signed pre-keys; sender authenticity |
-| X3DH not HPKE byte-for-byte | Async pre-key bundles match messaging model; HPKE is equivalent *role* |
+## 8. Blockchain (integrity only)
 
-## Post-quantum honesty
+E2EE keys are unrelated to on-chain anchoring. The `blockchain/` module hashes conversation content with **keccak256**, stores a Merkle root on Sepolia, and verifies single messages via Merkle proofs. See [blockchain/GUIDE.md](../blockchain/GUIDE.md).
 
-- **AES-256**: acceptable symmetric layer for PQ threat models (with Grover caveat).
-- **X25519 / Ed25519**: **not** post-quantum; PQXDH would be needed for PQ session setup (Signal roadmap).
+On-chain digests are **public**. Anchoring proves "this hash was recorded at time T", not secrecy of the message.
 
-## Future: `@signalapp/libsignal-client`
+---
 
-Official libsignal adds **PQXDH (Kyber)** and matches production Signal. `DeviceKeysRow` reserves optional `kyber_prekey_*` columns for that migration. Classic X3DH in the current port does not populate them.
+## 9. Known limitations
+
+- No full PKI: first-message MITM if users skip TOFU verification.
+- Metadata (participants, timing, sizes) visible to server and network observer.
+- No message revocation cryptography in this package (policy feature would be app-layer).
+- TypeScript port is less audited than official libsignal.
+- C++ client must implement the same wire format and algorithms (or call this package in a documented bridge) for end-to-end guarantees on that client.
+- Blockchain anchoring is manual / script-driven in demos; full product integration may lag E2EE.
+
+---
+
+## 10. Validation performed
+
+| Check | Command |
+|-------|---------|
+| Local E2EE round-trip | `cd cryptography && npm run smoke:signal` |
+| HTTP relay with backend | `npm run e2e:backend` (API + Postgres running) |
+| Wire JSON accepted by server | `pytest` on `test_wire_payload_validation.py` |
+
+Record exact pass/fail in your cover document before submission; do not claim tests you did not run.

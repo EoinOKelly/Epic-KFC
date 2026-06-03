@@ -1,6 +1,4 @@
-/**
- * Fast regression check (no verbose logs). For step-by-step output: npm run demo:signal
- */
+// quick regression; npm run demo:signal for verbose
 const {
   generateDevice,
   establishSession,

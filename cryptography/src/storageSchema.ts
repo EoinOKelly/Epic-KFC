@@ -1,7 +1,3 @@
-/**
- * Server DB columns for the crypto layer (libsignal public material only).
- */
-
 export interface UserAuthRow {
   user_id: string;
   password_hash: string;
@@ -16,13 +12,11 @@ export interface DeviceKeysRow {
   signed_prekey_public_b64: string;
   signed_prekey_signature_b64: string;
   signed_prekey_created_at: string;
-  /** Reserved for @signalapp/libsignal-client (PQXDH); null with classic X3DH port. */
-  kyber_prekey_id?: number | null;
+  kyber_prekey_id?: number | null; // PQXDH placeholder
   kyber_prekey_public_b64?: string | null;
   kyber_prekey_signature_b64?: string | null;
 }
 
-/** Device row plus optional one-time pre-key for bundle reconstruction. */
 export type StoredDeviceKeysRow = DeviceKeysRow & {
   one_time_prekey_id?: number | null;
   one_time_prekey_public_b64?: string | null;

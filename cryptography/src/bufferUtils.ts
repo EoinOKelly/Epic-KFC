@@ -8,7 +8,7 @@ export function fromBase64(encoded: string): Buffer {
   return Buffer.from(encoded, B64);
 }
 
-/** Copy exact bytes — avoid Node Buffer.pool `.buffer` oversize ArrayBuffer. */
+// exact byte slice (Buffer.pool quirk)
 export function toArrayBuffer(buf: Buffer): ArrayBuffer {
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
 }

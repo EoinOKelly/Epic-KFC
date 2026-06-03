@@ -22,7 +22,7 @@ native crypto, slash commands, and cross-platform C++ design.
 ## Corrections Made During Implementation
 
 - Replaced earlier mock/fallback crypto behaviour with a separate
-  `MockCryptoProvider` so real mode cannot silently use non-vetted crypto.
+  `MockCryptoProvider` so real mode cannot silently use mock crypto paths.
 - Added command argument validation after review found known commands could be
   silently ignored.
 - Tightened real startup validation so localhost HTTP is rejected in real mode.

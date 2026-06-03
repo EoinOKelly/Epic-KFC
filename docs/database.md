@@ -71,7 +71,7 @@ Rotate `signed_prekey_*` periodically; old clients may need a bundle refresh.
 
 | Column | Content |
 |--------|---------|
-| `wire_payload_json` | Output of `serializeWireMessage(encryptForRecipient(...))` — `format: "libsignal-v1"` |
+| `wire_payload_json` | `serializeWireMessage(encryptForRecipient(...))`, `format: "libsignal-v1"` |
 
 Server cannot decrypt without client private state. Index `recipient_*` for inbox queries.
 

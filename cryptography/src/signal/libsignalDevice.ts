@@ -111,7 +111,6 @@ export function publicBundleFromDb(row: StoredDeviceKeysRow): DeviceType {
   return bundle;
 }
 
-/** JSON shape from GET /api/v1/keys/users/{id}/devices/{id}/prekey-bundle */
 export interface ApiPreKeyBundleResponse {
   registrationId: number;
   deviceId: number;
@@ -138,7 +137,6 @@ export function preKeyBundleFromApiResponse(api: ApiPreKeyBundleResponse): Devic
   });
 }
 
-/** Maps deviceToDbRows output to PUT /api/v1/keys/devices/{device_id} body. */
 export function deviceKeyUploadPayloadFromRow(deviceKeys: DeviceKeysRow): {
   device_id: number;
   registration_id: number;

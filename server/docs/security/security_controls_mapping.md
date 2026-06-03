@@ -40,4 +40,4 @@ This document maps the backend implementation to the cybersecurity brief areas a
 | Dependency scan evidence can go stale | Vulnerable packages may be missed after dependency changes | Re-run `pip-audit` immediately before submission |
 | No admin audit viewer | Audit records require DB/operator access | Add RBAC-protected audit viewer if needed |
 | No blockchain confirmation worker in backend package | Pending anchors remain pending until a separate process writes to Sepolia and updates DB status | Implement a worker that reads pending anchors, calls the contract, and records transaction metadata |
-| Demo Solidity contract permits unrestricted writes/updates | Anyone could write/update records if deployed as-is | Restrict writes to a worker wallet and consider write-once records for final deployment |
+| Sepolia contract may predate hardened Solidity | Live `0x69d3…c404` demo allowed any writer and overwrites; repo source is owner-only and write-once | Redeploy `MessageFidelity`, update `MESSAGE_FIDELITY_ADDRESS`, run worker with deployer/owner key |

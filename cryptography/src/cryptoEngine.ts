@@ -28,9 +28,7 @@ export const CRYPTO_ALGORITHMS = {
 } as const;
 
 export interface PasswordHashResult {
-  /** PHC-encoded Argon2id string — this is the only column required for login. */
   hash: string;
-  /** Duplicate of salt embedded in `hash`; optional separate DB column. */
   salt: string;
 }
 
