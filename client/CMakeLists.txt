@@ -48,6 +48,12 @@ if(NOT OpenSSL_FOUND AND MINGW AND EXISTS "C:/Qt/Tools/mingw1310_64/opt")
     find_package(OpenSSL QUIET COMPONENTS Crypto)
 endif()
 
+set(CLIENT_LOCAL_VCPKG_OPENSSL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/out/vcpkg_installed/x64-windows")
+if(NOT OpenSSL_FOUND AND MSVC AND EXISTS "${CLIENT_LOCAL_VCPKG_OPENSSL_ROOT}")
+    set(OPENSSL_ROOT_DIR "${CLIENT_LOCAL_VCPKG_OPENSSL_ROOT}" CACHE PATH "OpenSSL root directory")
+    find_package(OpenSSL QUIET COMPONENTS Crypto)
+endif()
+
 if(CLIENT_REQUIRE_OPENSSL AND NOT OpenSSL_FOUND)
     message(FATAL_ERROR
         "OpenSSL Crypto was not found. Real mode requires OpenSSL-backed native crypto. "
