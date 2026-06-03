@@ -9,6 +9,7 @@ CS4455 secure messaging app. This folder holds **cross-cutting** submission evid
 | [../cryptography/docs/security/threat-model.md](../cryptography/docs/security/threat-model.md) | Crypto, interview prep | Attacker classes A–D, guarantees, limits |
 | [network_docs/network_deployment_threat_model.pdf](./network_docs/network_deployment_threat_model.pdf) | Networks minor | Deployment and edge threat model |
 | [network_docs/network_architecture.pdf](./network_docs/network_architecture.pdf) | Networks minor | Network architecture diagram |
+| [../client/docs/client_rubric_documentation.pdf](../client/docs/client_rubric_documentation.pdf) | C++ minor | Client architecture, class design, ownership, STL use, validation, and interview notes |
 | [security/vulnerability_report.md](./security/vulnerability_report.md) | All minors | **Canonical** full-project vulnerability report |
 | [security/penetration_testing_plan.md](./security/penetration_testing_plan.md) | Security review | Integrated pentest scope |
 | [architecture.md](./architecture.md) | Everyone | System diagram, modules, data flow |

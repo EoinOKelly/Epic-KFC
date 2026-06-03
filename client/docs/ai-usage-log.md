@@ -14,6 +14,24 @@ Application for the secure messaging project.
 
 ## Prompts And Outcomes
 
+### Rubric Documentation
+
+- Prompt summary: create documentation for the C++ client in line with the
+  assessment rubric, using the other project docs as examples.
+- Accepted output:
+  - created `client/docs/client_rubric_documentation.md`.
+  - generated `client/docs/client_rubric_documentation.pdf` for the submission
+    evidence pack.
+  - mapped the client to C++ rubric criteria: project integration, code
+    organisation, functions/classes/OOP design, modern C++, memory safety,
+    documentation, and interview understanding.
+  - linked the document from `client/README.md` and `docs/README.md`.
+- Corrections made after review:
+  - kept the document focused on evidence the student can defend rather than
+    generic C++ explanation.
+  - explicitly documented known limitations so the submission does not overclaim
+    full ratchet/session support.
+
 ### Initial Client Architecture
 
 - Prompt summary: review the existing `client/` directory and propose an
