@@ -11,6 +11,18 @@ CS4455 secure messaging app. This folder holds **cross-cutting** submission evid
 | [network_docs/network_architecture.pdf](./network_docs/network_architecture.pdf) | Networks minor | Network architecture diagram |
 | [security/vulnerability_report.md](./security/vulnerability_report.md) | All minors | **Canonical** full-project vulnerability report |
 | [security/penetration_testing_plan.md](./security/penetration_testing_plan.md) | Security review | Integrated pentest scope |
+| [architecture.md](./architecture.md) | Everyone | System diagram, modules, data flow |
+| [Cryptographic-Design-kfc.docx](./Cryptographic-Design-kfc.docx) | Submission / crypto minor | **Canonical** crypto design doc (regenerate with `python docs/scripts/build_crypto_design_docx.py`) |
+| [network_deployment_threat_model.pdf](./network_deployment_threat_model.pdf) | Networks minor (Burkley) | Separate from crypto; deployment and network threat model |
+| [cryptography.md](./cryptography.md) | Crypto, backend, clients | Markdown copy of design + implementation notes |
+| [security/crypto_cpp_threat_model.pdf](./security/crypto_cpp_threat_model.pdf) | Crypto / C++ / interview prep | Client-side E2EE and C++ client threat model mapped to the rubric |
+| [database.md](./database.md) | Backend / DB | Tables, columns, what never goes on server |
+| [backend-crypto-integration.md](./backend-crypto-integration.md) | Backend | Schema, API, and wiring to `cryptography/` |
+| [integration.md](./integration.md) | All devs | How each minor connects to `cryptography/` |
+| [threat-model.md](./threat-model.md) | Crypto, interview prep | Attackers, guarantees, limitations |
+| [interview-prep.md](./interview-prep.md) | Crypto lead | Likely viva questions and short answers |
+| [AI_PROMPTS.md](./AI_PROMPTS.md) | Module leads / report | Key AI prompts used during development |
+| [security/vulnerability_report.md](./security/vulnerability_report.md) | Submission / all minors | **Canonical** vulnerability assessment (backend, crypto, client, blockchain) |
 | [security/README.md](./security/README.md) | Security review | Index for project-wide security docs |
 | [AI_Prompts/eoin_AI_PROMPTS.md](./AI_Prompts/eoin_AI_PROMPTS.md) | Crypto / AI artefact | AI prompt log (crypto, blockchain, VM, submission) |
 | [blockchain/README.md](./blockchain/README.md) | Blockchain minor | Index for Sepolia integrity docs |
