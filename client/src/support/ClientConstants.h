@@ -68,6 +68,7 @@ inline const QString AnchorFailed = "Blockchain anchor for %1 failed on %2. Fide
 inline const QString AnchorVerified = "Blockchain anchor verified for %1 on %2. Status: %3.";
 inline const QString AnchorVerifiedWithTransaction = "Blockchain anchor verified for %1 on %2. Status: %3. Transaction: %4";
 inline const QString AnchorMismatch = "Blockchain anchor check failed for %1. Fidelity could not be verified.";
+inline const QString AnchorLookupRequiresLogin = "Log in to verify %1. The backend protects message anchor lookup so only the sender or recipient can see it.";
 inline const QString NotLoggedIn = "Not logged in.";
 inline const QString LoggedInAs = "Logged in as %1 (%2).";
 inline const QString RegisteredUser = "Registered %1. Use /login to start a session.";

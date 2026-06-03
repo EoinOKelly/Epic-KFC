@@ -601,6 +601,18 @@ void testBlockchainVerificationFlow() {
     }
 
     {
+        auto fixture = createVerificationFixture("client-test-verify-logged-out-auth-required.json", false);
+        fixture->messageGateway.anchorResult = Result<BlockchainAnchor>::failure({ErrorCode::AuthRequired, "HTTP 401: Invalid authentication credentials"});
+        fixture->messageService.verify(messageId);
+        const bool authRequiredExplained = fixture->messageGateway.fetchCalled
+            && !fixture->messageGateway.verifyCalled
+            && !fixture->commandError.has_value()
+            && fixture->fidelityStatus.contains("Log in", Qt::CaseInsensitive);
+        expect(authRequiredExplained, "verify explains protected anchor lookup when logged out");
+        QFile::remove(fixture->statePath);
+    }
+
+    {
         auto fixture = createVerificationFixture("client-test-verify-confirmed.json");
         fixture->messageGateway.anchorResult = Result<BlockchainAnchor>::success(testAnchor("confirmed"));
         fixture->messageGateway.verificationResult = Result<BlockchainVerification>::success(testVerification(true));
