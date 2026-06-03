@@ -129,7 +129,7 @@ inline const QString Help =
     "  /forward <messageId> <username>\n"
     "  /revoke <messageId>\n"
     "  /delete <messageId>\n"
-    "  /download <messageId> <path>\n"
+    "  /download <messageId>\n"
     "  /trust <username>\n"
     "  /verify <messageId>\n"
     "  /sync\n"
@@ -221,12 +221,24 @@ inline const QString RecipientDeviceId = "recipientDeviceId";
 inline const QString WirePayloadJson = "wirePayloadJson";
 inline const QString ConsumedOneTimePreKeyId = "consumedOneTimePreKeyId";
 inline const QString CreatedAt = "createdAt";
+inline const QString CreatedAtRaw = "createdAtRaw";
 inline const QString AccessRevokedAt = "accessRevokedAt";
 inline const QString SenderDeletedAt = "senderDeletedAt";
 inline const QString RecipientDeletedAt = "recipientDeletedAt";
 inline const QString DeletedAt = "deletedAt";
 inline const QString ReadAt = "readAt";
 inline const QString LocalSenderCopyWirePayloadJson = "localSenderCopyWirePayloadJson";
+inline const QString CachedAnchor = "cachedAnchor";
+inline const QString AnchorId = "anchorId";
+inline const QString AnchorMessageId = "messageId";
+inline const QString AnchorRecordId = "recordId";
+inline const QString AnchorDigest = "digest";
+inline const QString AnchorMerkleRoot = "merkleRoot";
+inline const QString AnchorTransactionHash = "transactionHash";
+inline const QString AnchorContractAddress = "contractAddress";
+inline const QString AnchorChain = "chain";
+inline const QString AnchorStatus = "status";
+inline const QString AnchorAnchoredAt = "anchoredAt";
 }
 
 namespace CryptoText {

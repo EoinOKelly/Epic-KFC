@@ -89,6 +89,8 @@ set(CLIENT_CORE_SOURCES
     src/storage/JsonLocalStore.cpp
     src/storage/JsonLocalStore.h
     src/support/ClientConstants.h
+    src/support/EthereumHash.cpp
+    src/support/EthereumHash.h
     src/support/Result.h
 )
 

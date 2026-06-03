@@ -2,11 +2,13 @@
 
 #include "support/ClientConstants.h"
 
+#include <QDir>
 #include <QFile>
 #include <QRegularExpression>
 #include <QTextStream>
 
 #include <algorithm>
+#include <set>
 
 namespace {
 constexpr int ConflictStatusCode = 409;
@@ -24,6 +26,12 @@ bool isAlreadyUploadedPreKeyError(const ClientError& error) {
 bool isValidEthereumTransactionHash(const QString& value) {
     static const QRegularExpression pattern(QStringLiteral("^0x[0-9a-fA-F]{64}$"));
     return pattern.match(value).hasMatch();
+}
+
+QString downloadPathForMessage(const QString& messageId) {
+    QString safeMessageId = messageId;
+    safeMessageId.replace(QRegularExpression("[^A-Za-z0-9_-]"), "_");
+    return QDir::current().filePath(QString("message-%1.txt").arg(safeMessageId));
 }
 }
 
@@ -340,7 +348,8 @@ void MessageService::listReceived() {
             emit m_events.commandFailed(result.error());
             return;
         }
-        saveAndEmitList(result.value());
+        saveAndReconcileMessages(result.value(), MessageDirection::Received);
+        emit m_events.messageListUpdated(result.value());
     });
 }
 
@@ -353,7 +362,8 @@ void MessageService::listSent() {
             emit m_events.commandFailed(result.error());
             return;
         }
-        saveAndEmitList(result.value());
+        saveAndReconcileMessages(result.value(), MessageDirection::Sent);
+        emit m_events.messageListUpdated(result.value());
     });
 }
 
@@ -366,13 +376,13 @@ void MessageService::listConversations() {
             emit m_events.commandFailed(receivedResult.error());
             return;
         }
-        saveMessages(receivedResult.value());
+        saveAndReconcileMessages(receivedResult.value(), MessageDirection::Received);
         m_messageGateway.listSent(m_sessionService.accessToken(), [this](Result<MessageList> sentResult) {
             if (sentResult.failed()) {
                 emit m_events.commandFailed(sentResult.error());
                 return;
             }
-            saveMessages(sentResult.value());
+            saveAndReconcileMessages(sentResult.value(), MessageDirection::Sent);
             const auto conversations = m_store.conversationsFor(m_sessionService.currentUserId());
             if (conversations.failed()) {
                 emit m_events.commandFailed(conversations.error());
@@ -392,7 +402,7 @@ void MessageService::listUnreadSenders() {
             emit m_events.commandFailed(result.error());
             return;
         }
-        saveMessages(result.value());
+        saveAndReconcileMessages(result.value(), MessageDirection::Received);
         const auto unread = m_store.unreadConversationsFor(m_sessionService.currentUserId());
         if (unread.failed()) {
             emit m_events.commandFailed(unread.error());
@@ -483,13 +493,13 @@ void MessageService::readConversation(const QString& username, int page) {
                 emit m_events.commandFailed(receivedResult.error());
                 return;
             }
-            saveMessages(receivedResult.value());
+            saveAndReconcileMessages(receivedResult.value(), MessageDirection::Received);
             m_messageGateway.listSent(m_sessionService.accessToken(), [this, address, username, page](Result<MessageList> sentResult) {
                 if (sentResult.failed()) {
                     emit m_events.commandFailed(sentResult.error());
                     return;
                 }
-                saveMessages(sentResult.value());
+                saveAndReconcileMessages(sentResult.value(), MessageDirection::Sent);
                 openConversationFromCache(address, username, page);
             });
         });
@@ -585,11 +595,16 @@ void MessageService::deleteMessage(const QString& messageId) {
             emit m_events.commandFailed(result.error());
             return;
         }
+        const auto markedDeleted = m_store.markMessageDeletedFor(m_sessionService.currentUserId(), messageId);
+        if (markedDeleted.failed()) {
+            emit m_events.commandFailed(markedDeleted.error());
+            return;
+        }
         emit m_events.messageDeleted(messageId);
     });
 }
 
-void MessageService::download(const QString& messageId, const QString& path) {
+void MessageService::download(const QString& messageId) {
     const auto found = m_store.findMessage(messageId);
     if (found.failed() || !found.value().has_value()) {
         emit m_events.commandFailed({ErrorCode::NotFound, "Message must be cached before download. Use /read first."});
@@ -605,6 +620,7 @@ void MessageService::download(const QString& messageId, const QString& path) {
         emit m_events.cryptoOperationFailed(plaintext.error());
         return;
     }
+    const QString path = downloadPathForMessage(messageId);
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
         emit m_events.commandFailed({ErrorCode::StorageError, QString("Could not write %1.").arg(path)});
@@ -616,12 +632,18 @@ void MessageService::download(const QString& messageId, const QString& path) {
 }
 
 void MessageService::verify(const QString& messageId) {
-    const QString accessToken = m_sessionService.isLoggedIn() ? m_sessionService.accessToken() : QString();
+    const bool loggedIn = m_sessionService.isLoggedIn();
+    const QString accessToken = loggedIn ? m_sessionService.accessToken() : QString();
 
-    m_messageGateway.fetchMessageAnchor(accessToken, messageId, [this, accessToken, messageId](Result<BlockchainAnchor> anchorResult) {
+    m_messageGateway.fetchMessageAnchor(accessToken, messageId, [this, messageId](Result<BlockchainAnchor> anchorResult) {
         if (anchorResult.failed()) {
             if (anchorResult.error().code == ErrorCode::NotFound) {
                 emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorUnavailable).arg(messageId));
+                return;
+            }
+            const auto cached = m_store.findMessage(messageId);
+            if (cached.succeeded() && cached.value().has_value() && !cached.value()->cachedAnchor.digest.isEmpty()) {
+                verifyPublicAnchor(messageId, cached.value()->cachedAnchor);
                 return;
             }
             emit m_events.commandFailed(anchorResult.error());
@@ -629,6 +651,12 @@ void MessageService::verify(const QString& messageId) {
         }
 
         const BlockchainAnchor anchor = anchorResult.value();
+        const auto cached = m_store.findMessage(messageId);
+        if (cached.succeeded() && cached.value().has_value()) {
+            LocalMessage message = *cached.value();
+            message.cachedAnchor = anchor;
+            m_store.saveMessage(message);
+        }
         const QString status = anchor.status.toLower();
         if (status == "failed") {
             emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorFailed).arg(messageId, anchor.chain));
@@ -643,29 +671,38 @@ void MessageService::verify(const QString& messageId) {
             return;
         }
 
-        m_messageGateway.verifyAnchor(accessToken, anchor, [this, messageId](Result<BlockchainVerification> verificationResult) {
-            if (verificationResult.failed()) {
-                emit m_events.commandFailed(verificationResult.error());
-                return;
-            }
+        verifyPublicAnchor(messageId, anchor);
+    });
+}
 
-            const BlockchainVerification verification = verificationResult.value();
-            if (!verification.valid) {
-                emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorMismatch).arg(messageId));
-                return;
-            }
+void MessageService::verifyPublicAnchor(const QString& messageId, const BlockchainAnchor& anchor) {
+    m_messageGateway.verifyAnchor(QString(), anchor, [this, messageId](Result<BlockchainVerification> verificationResult) {
+        if (verificationResult.failed()) {
+            emit m_events.commandFailed(verificationResult.error());
+            return;
+        }
 
-            if (!verification.transactionHash.isEmpty()) {
-                emit m_events.fidelityStatusUpdated(
-                    messageId,
-                    QString(AppText::AnchorVerifiedWithTransaction).arg(messageId, verification.chain, verification.status, verification.transactionHash));
-                return;
-            }
+        const BlockchainVerification verification = verificationResult.value();
+        if (!verification.valid) {
+            emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorMismatch).arg(messageId));
+            return;
+        }
 
+        if (verification.status.compare("confirmed", Qt::CaseInsensitive) != 0) {
+            emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorPending).arg(messageId, verification.status, verification.chain));
+            return;
+        }
+
+        if (!verification.transactionHash.isEmpty()) {
             emit m_events.fidelityStatusUpdated(
                 messageId,
-                QString(AppText::AnchorVerified).arg(messageId, verification.chain, verification.status));
-        });
+                QString(AppText::AnchorVerifiedWithTransaction).arg(messageId, verification.chain, verification.status, verification.transactionHash));
+            return;
+        }
+
+        emit m_events.fidelityStatusUpdated(
+            messageId,
+            QString(AppText::AnchorVerified).arg(messageId, verification.chain, verification.status));
     });
 }
 
@@ -697,11 +734,6 @@ std::optional<OneTimePreKey> MessageService::oneTimePreKeyFor(const LocalMessage
     return *it;
 }
 
-void MessageService::saveAndEmitList(const MessageList& messages) {
-    saveMessages(messages);
-    emit m_events.messageListUpdated(messages);
-}
-
 void MessageService::saveMessages(const MessageList& messages) {
     for (const auto& message : messages) {
         const auto saved = m_store.saveMessage(message);
@@ -709,6 +741,19 @@ void MessageService::saveMessages(const MessageList& messages) {
             emit m_events.commandFailed(saved.error());
             return;
         }
+    }
+}
+
+void MessageService::saveAndReconcileMessages(const MessageList& messages, MessageDirection direction) {
+    saveMessages(messages);
+    std::set<QString> visibleMessageIds;
+    for (const auto& message : messages) {
+        visibleMessageIds.insert(message.id);
+    }
+
+    const auto reconciled = m_store.reconcileVisibleMessages(m_sessionService.currentUserId(), direction, visibleMessageIds);
+    if (reconciled.failed()) {
+        emit m_events.commandFailed(reconciled.error());
     }
 }
 

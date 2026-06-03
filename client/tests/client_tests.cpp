@@ -8,6 +8,7 @@
 #include "services/Services.h"
 #include "storage/JsonLocalStore.h"
 #include "support/ClientConstants.h"
+#include "support/EthereumHash.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -17,6 +18,7 @@
 
 #include <iostream>
 #include <memory>
+#include <set>
 
 namespace {
 int failures = 0;
@@ -83,6 +85,7 @@ public:
     Result<BlockchainVerification> verificationResult = Result<BlockchainVerification>::failure({ErrorCode::OperationFailed, "not configured"});
     bool fetchCalled{false};
     bool verifyCalled{false};
+    std::optional<BlockchainAnchor> verifiedAnchor;
 
     void sendMessage(const QString&, const LocalMessage&, std::optional<int>, GatewayCallback<LocalMessage> callback) override {
         callback(Result<LocalMessage>::failure({ErrorCode::OperationFailed, "not used"}));
@@ -117,8 +120,9 @@ public:
         callback(anchorResult);
     }
 
-    void verifyAnchor(const QString&, const BlockchainAnchor&, GatewayCallback<BlockchainVerification> callback) override {
+    void verifyAnchor(const QString&, const BlockchainAnchor& anchor, GatewayCallback<BlockchainVerification> callback) override {
         verifyCalled = true;
+        verifiedAnchor = anchor;
         callback(verificationResult);
     }
 };
@@ -183,6 +187,26 @@ BlockchainVerification testVerification(bool valid) {
     };
 }
 
+LocalMessage cachedVerifiableMessage(const QString& messageId) {
+    return {
+        messageId,
+        "fa963bc9-32f1-40ae-a330-cb2c2ecf2caf",
+        1,
+        "1d291623-8e18-46d3-ab76-ffa9f3954789",
+        1,
+        "{\"ciphertext\":\"abc\"}",
+        std::nullopt,
+        QDateTime::fromString("2026-06-03T12:00:00.000Z", Qt::ISODateWithMs),
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        MessageDirection::Received
+    };
+}
+
 std::unique_ptr<VerificationFixture> createVerificationFixture(const QString& fileName, bool seedSession = true) {
     const QString path = QDir::current().filePath(fileName);
     QFile::remove(path);
@@ -216,8 +240,8 @@ void testParser() {
     const auto back = parser.parse("/back");
     expect(back.succeeded() && back.value().type == CommandType::Back, "parser accepts back command");
 
-    const auto quoted = parser.parse("/download msg-1 \"C:/Temp/out file.txt\"");
-    expect(quoted.succeeded() && quoted.value().arguments.at(1) == "C:/Temp/out file.txt", "parser handles quoted arguments");
+    const auto quoted = parser.parse("/msg bob \"hello there\"");
+    expect(quoted.succeeded() && quoted.value().arguments.at(1) == "hello there", "parser handles quoted arguments");
 
     const auto rejected = parser.parse("login alice");
     expect(rejected.failed(), "parser rejects non-slash command");
@@ -574,8 +598,108 @@ void testEncryptedLocalStore() {
 #endif
 }
 
+void testLocalMessageVisibility() {
+    const QString path = QDir::current().filePath("client-test-message-visibility.json");
+    QFile::remove(path);
+
+    JsonLocalStore store(path, false);
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    const LocalMessage sent{
+        "visible-sent",
+        "user-1",
+        1,
+        "peer-1",
+        1,
+        "{}",
+        std::nullopt,
+        now,
+        {},
+        {},
+        {},
+        {},
+        {},
+        "sender-copy",
+        MessageDirection::Sent
+    };
+    const LocalMessage received{
+        "visible-received",
+        "peer-1",
+        1,
+        "user-1",
+        1,
+        "{}",
+        std::nullopt,
+        now.addSecs(1),
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        MessageDirection::Received
+    };
+
+    store.saveMessage(sent);
+    store.saveMessage(received);
+    const auto beforeDelete = store.messagesWithPeer("user-1", "peer-1");
+    expect(beforeDelete.succeeded() && beforeDelete.value().size() == 2, "store shows visible conversation messages");
+
+    store.markMessageDeletedFor("user-1", "visible-sent");
+    const auto afterDelete = store.messagesWithPeer("user-1", "peer-1");
+    expect(afterDelete.succeeded() && afterDelete.value().size() == 1 && afterDelete.value().front().id == "visible-received", "store hides locally deleted messages");
+
+    store.saveMessage(sent);
+    const auto afterStaleRefresh = store.messagesWithPeer("user-1", "peer-1");
+    expect(afterStaleRefresh.succeeded() && afterStaleRefresh.value().size() == 1, "store preserves local delete markers across stale refreshes");
+
+    LocalMessage revoked = received;
+    revoked.accessRevokedAt = now.addSecs(2).toString(Qt::ISODateWithMs);
+    store.saveMessage(revoked);
+    const auto afterRevoke = store.messagesWithPeer("user-1", "peer-1");
+    expect(afterRevoke.succeeded() && afterRevoke.value().empty(), "store hides revoked messages");
+
+    LocalMessage staleReceived = received;
+    staleReceived.accessRevokedAt.clear();
+    store.saveMessage(staleReceived);
+    const auto afterStaleRevokedRefresh = store.messagesWithPeer("user-1", "peer-1");
+    expect(afterStaleRevokedRefresh.succeeded() && afterStaleRevokedRefresh.value().empty(), "store preserves revoke markers across stale refreshes");
+
+    const LocalMessage externallyRevoked{
+        "externally-revoked",
+        "peer-1",
+        1,
+        "user-1",
+        1,
+        "{}",
+        std::nullopt,
+        now.addSecs(3),
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        MessageDirection::Received
+    };
+    store.saveMessage(externallyRevoked);
+    const auto beforeReconcile = store.messagesWithPeer("user-1", "peer-1");
+    const std::set<QString> visibleServerMessages;
+    store.reconcileVisibleMessages("user-1", MessageDirection::Received, visibleServerMessages);
+    const auto afterReconcile = store.messagesWithPeer("user-1", "peer-1");
+    expect(beforeReconcile.succeeded()
+            && beforeReconcile.value().size() == 1
+            && afterReconcile.succeeded()
+            && afterReconcile.value().empty(),
+        "store hides cached received messages missing from server refresh");
+
+    QFile::remove(path);
+}
+
 void testBlockchainVerificationFlow() {
     const QString messageId = "ccd07804-e033-4a7b-9ae9-24af64997c91";
+    expect(
+        EthereumHash::recordIdForMessage(messageId) == "0x739cdc61117c4850149f30482c7621d70143c4a0c886a860d791c4648aaecde7",
+        "ethereum hash derives backend message record id");
 
     {
         auto fixture = createVerificationFixture("client-test-verify-pending.json");
@@ -592,11 +716,11 @@ void testBlockchainVerificationFlow() {
         auto fixture = createVerificationFixture("client-test-verify-logged-out.json", false);
         fixture->messageGateway.anchorResult = Result<BlockchainAnchor>::success(testAnchor("pending"));
         fixture->messageService.verify(messageId);
-        const bool loggedOutVerifyAllowed = fixture->messageGateway.fetchCalled
+        const bool loggedOutVerifyUsesPublicAnchorLookup = fixture->messageGateway.fetchCalled
             && !fixture->messageGateway.verifyCalled
             && !fixture->commandError.has_value()
             && fixture->fidelityStatus.contains("pending", Qt::CaseInsensitive);
-        expect(loggedOutVerifyAllowed, "verify works without a logged-in session");
+        expect(loggedOutVerifyUsesPublicAnchorLookup, "logged-out verify uses public message anchor lookup");
         QFile::remove(fixture->statePath);
     }
 
@@ -659,6 +783,7 @@ int main(int argc, char* argv[]) {
     testCryptoWireShape();
     testMockCrypto();
     testEncryptedLocalStore();
+    testLocalMessageVisibility();
     testBlockchainVerificationFlow();
 
     return failures == 0 ? 0 : 1;
