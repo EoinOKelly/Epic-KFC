@@ -585,6 +585,11 @@ void MessageService::deleteMessage(const QString& messageId) {
             emit m_events.commandFailed(result.error());
             return;
         }
+        const auto markedDeleted = m_store.markMessageDeletedFor(m_sessionService.currentUserId(), messageId);
+        if (markedDeleted.failed()) {
+            emit m_events.commandFailed(markedDeleted.error());
+            return;
+        }
         emit m_events.messageDeleted(messageId);
     });
 }

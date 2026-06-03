@@ -34,6 +34,7 @@ public:
     Result<std::optional<TrustPin>> trustPin(const QString& userId, int deviceId) const;
 
     Result<bool> saveMessage(const LocalMessage& message);
+    Result<bool> markMessageDeletedFor(const QString& currentUserId, const QString& messageId);
     Result<std::optional<LocalMessage>> findMessage(const QString& messageId) const;
     Result<MessageList> allMessages() const;
     Result<MessageList> messagesWithPeer(const QString& currentUserId, const QString& peerUserId) const;

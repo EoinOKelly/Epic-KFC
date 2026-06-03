@@ -215,6 +215,20 @@ LocalMessage messageFromJson(const QJsonObject& object) {
     };
 }
 
+bool isMessageVisibleToUser(const LocalMessage& message, const QString& currentUserId) {
+    const bool globallyDeleted = !message.deletedAt.isEmpty();
+    const bool revoked = !message.accessRevokedAt.isEmpty();
+    const bool sentByCurrentUser = message.senderUserId == currentUserId;
+    const bool receivedByCurrentUser = message.recipientUserId == currentUserId;
+    const bool deletedBySender = sentByCurrentUser && !message.senderDeletedAt.isEmpty();
+    const bool deletedByRecipient = receivedByCurrentUser && !message.recipientDeletedAt.isEmpty();
+    return !globallyDeleted && !revoked && !deletedBySender && !deletedByRecipient;
+}
+
+QString firstNonEmpty(QString first, const QString& fallback) {
+    return first.isEmpty() ? fallback : first;
+}
+
 QByteArray base64ToBytes(const QString& value) {
     return QByteArray::fromBase64(value.toLatin1());
 }
@@ -569,6 +583,10 @@ Result<bool> JsonLocalStore::saveMessage(const LocalMessage& message) {
     } else {
         const QString previousReadAt = it->readAt;
         const QString previousLocalSenderCopy = it->localSenderCopyWirePayloadJson;
+        const QString previousAccessRevokedAt = it->accessRevokedAt;
+        const QString previousSenderDeletedAt = it->senderDeletedAt;
+        const QString previousRecipientDeletedAt = it->recipientDeletedAt;
+        const QString previousDeletedAt = it->deletedAt;
         *it = message;
         if (it->readAt.isEmpty()) {
             it->readAt = previousReadAt;
@@ -576,6 +594,31 @@ Result<bool> JsonLocalStore::saveMessage(const LocalMessage& message) {
         if (it->localSenderCopyWirePayloadJson.isEmpty()) {
             it->localSenderCopyWirePayloadJson = previousLocalSenderCopy;
         }
+        it->accessRevokedAt = firstNonEmpty(it->accessRevokedAt, previousAccessRevokedAt);
+        it->senderDeletedAt = firstNonEmpty(it->senderDeletedAt, previousSenderDeletedAt);
+        it->recipientDeletedAt = firstNonEmpty(it->recipientDeletedAt, previousRecipientDeletedAt);
+        it->deletedAt = firstNonEmpty(it->deletedAt, previousDeletedAt);
+    }
+    return save();
+}
+
+Result<bool> JsonLocalStore::markMessageDeletedFor(const QString& currentUserId, const QString& messageId) {
+    auto it = std::find_if(m_messages.begin(), m_messages.end(), [&messageId](const LocalMessage& message) {
+        return message.id == messageId;
+    });
+    if (it == m_messages.end()) {
+        return Result<bool>::success(true);
+    }
+
+    const QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+    if (it->senderUserId == currentUserId) {
+        it->senderDeletedAt = firstNonEmpty(it->senderDeletedAt, now);
+    }
+    if (it->recipientUserId == currentUserId) {
+        it->recipientDeletedAt = firstNonEmpty(it->recipientDeletedAt, now);
+    }
+    if (it->senderUserId != currentUserId && it->recipientUserId != currentUserId) {
+        it->deletedAt = firstNonEmpty(it->deletedAt, now);
     }
     return save();
 }
@@ -599,7 +642,7 @@ Result<MessageList> JsonLocalStore::messagesWithPeer(const QString& currentUserI
     std::copy_if(m_messages.cbegin(), m_messages.cend(), std::back_inserter(messages), [&currentUserId, &peerUserId](const LocalMessage& message) {
         const bool sentToPeer = message.senderUserId == currentUserId && message.recipientUserId == peerUserId;
         const bool receivedFromPeer = message.senderUserId == peerUserId && message.recipientUserId == currentUserId;
-        return sentToPeer || receivedFromPeer;
+        return (sentToPeer || receivedFromPeer) && isMessageVisibleToUser(message, currentUserId);
     });
     std::sort(messages.begin(), messages.end(), [](const LocalMessage& left, const LocalMessage& right) {
         return left.createdAt < right.createdAt;
@@ -610,6 +653,9 @@ Result<MessageList> JsonLocalStore::messagesWithPeer(const QString& currentUserI
 Result<ConversationList> JsonLocalStore::conversationsFor(const QString& currentUserId) const {
     std::map<QString, ConversationSummary> summaries;
     for (const auto& message : m_messages) {
+        if (!isMessageVisibleToUser(message, currentUserId)) {
+            continue;
+        }
         const bool sentByCurrentUser = message.senderUserId == currentUserId;
         const QString peerUserId = sentByCurrentUser ? message.recipientUserId : message.senderUserId;
         const int peerDeviceId = sentByCurrentUser ? message.recipientDeviceId : message.senderDeviceId;

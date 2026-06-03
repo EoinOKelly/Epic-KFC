@@ -574,6 +574,75 @@ void testEncryptedLocalStore() {
 #endif
 }
 
+void testLocalMessageVisibility() {
+    const QString path = QDir::current().filePath("client-test-message-visibility.json");
+    QFile::remove(path);
+
+    JsonLocalStore store(path, false);
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    const LocalMessage sent{
+        "visible-sent",
+        "user-1",
+        1,
+        "peer-1",
+        1,
+        "{}",
+        std::nullopt,
+        now,
+        {},
+        {},
+        {},
+        {},
+        {},
+        "sender-copy",
+        MessageDirection::Sent
+    };
+    const LocalMessage received{
+        "visible-received",
+        "peer-1",
+        1,
+        "user-1",
+        1,
+        "{}",
+        std::nullopt,
+        now.addSecs(1),
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        MessageDirection::Received
+    };
+
+    store.saveMessage(sent);
+    store.saveMessage(received);
+    const auto beforeDelete = store.messagesWithPeer("user-1", "peer-1");
+    expect(beforeDelete.succeeded() && beforeDelete.value().size() == 2, "store shows visible conversation messages");
+
+    store.markMessageDeletedFor("user-1", "visible-sent");
+    const auto afterDelete = store.messagesWithPeer("user-1", "peer-1");
+    expect(afterDelete.succeeded() && afterDelete.value().size() == 1 && afterDelete.value().front().id == "visible-received", "store hides locally deleted messages");
+
+    store.saveMessage(sent);
+    const auto afterStaleRefresh = store.messagesWithPeer("user-1", "peer-1");
+    expect(afterStaleRefresh.succeeded() && afterStaleRefresh.value().size() == 1, "store preserves local delete markers across stale refreshes");
+
+    LocalMessage revoked = received;
+    revoked.accessRevokedAt = now.addSecs(2).toString(Qt::ISODateWithMs);
+    store.saveMessage(revoked);
+    const auto afterRevoke = store.messagesWithPeer("user-1", "peer-1");
+    expect(afterRevoke.succeeded() && afterRevoke.value().empty(), "store hides revoked messages");
+
+    LocalMessage staleReceived = received;
+    staleReceived.accessRevokedAt.clear();
+    store.saveMessage(staleReceived);
+    const auto afterStaleRevokedRefresh = store.messagesWithPeer("user-1", "peer-1");
+    expect(afterStaleRevokedRefresh.succeeded() && afterStaleRevokedRefresh.value().empty(), "store preserves revoke markers across stale refreshes");
+
+    QFile::remove(path);
+}
+
 void testBlockchainVerificationFlow() {
     const QString messageId = "ccd07804-e033-4a7b-9ae9-24af64997c91";
 
@@ -671,6 +740,7 @@ int main(int argc, char* argv[]) {
     testCryptoWireShape();
     testMockCrypto();
     testEncryptedLocalStore();
+    testLocalMessageVisibility();
     testBlockchainVerificationFlow();
 
     return failures == 0 ? 0 : 1;
