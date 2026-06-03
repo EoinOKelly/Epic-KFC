@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import enforce_user_rate_limit, get_current_user, get_db
+from app.api.deps import enforce_ip_rate_limit, enforce_user_rate_limit, get_current_user, get_db
 from app.core import rate_limit
 from app.models.user import User
 from app.schemas.blockchain_anchor import (
@@ -120,12 +120,12 @@ async def get_blockchain_anchor(
 @router.post("/verify", response_model=BlockchainVerifyResponse)
 async def verify_blockchain_anchor(
     request: BlockchainVerifyRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    http_request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> BlockchainVerifyResponse:
     """Verify digest/root metadata against confirmed backend anchor records."""
-    await enforce_user_rate_limit(
-        current_user.id,
+    await enforce_ip_rate_limit(
+        http_request,
         "blockchain.verify",
         rate_limit.BLOCKCHAIN_READ_RATE_LIMIT,
     )

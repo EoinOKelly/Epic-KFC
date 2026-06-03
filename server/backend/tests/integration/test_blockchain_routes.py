@@ -259,7 +259,6 @@ async def test_verify_confirmed_anchor_metadata(
             "transaction_hash": TX_HASH,
             "chain": "sepolia",
         },
-        headers=_auth_headers(sender),
     )
 
     assert response.status_code == 200
@@ -277,7 +276,6 @@ async def test_verify_unknown_anchor_returns_false(
     response = await blockchain_client.post(
         "/api/v1/blockchain/verify",
         json={"digest": "0x" + "f" * 64, "chain": "sepolia"},
-        headers=_auth_headers(user),
     )
 
     assert response.status_code == 200
