@@ -239,7 +239,9 @@ Start with **[docs/README.md](./docs/README.md)** for the cross-cutting index. U
 | [docs/network_docs/network_architecture.pdf](./docs/network_docs/network_architecture.pdf) | Networks minor: network architecture |
 | [docs/security/vulnerability_report.md](./docs/security/vulnerability_report.md) | **Canonical** full-project vulnerability report |
 | [docs/security/penetration_testing_plan.md](./docs/security/penetration_testing_plan.md) | Integrated pentest scope |
-| [cryptography/docs/ai/eoin_AI_PROMPTS.md](./cryptography/docs/ai/eoin_AI_PROMPTS.md) | Sanitised crypto AI prompt log |
+| [docs/AI_Prompts/eoin_AI_PROMPTS.md](./docs/AI_Prompts/eoin_AI_PROMPTS.md) | AI prompt log (crypto, blockchain, deployment) |
+| [docs/blockchain/blockchain-design.md](./docs/blockchain/blockchain-design.md) | Blockchain minor: Sepolia anchoring, hashing, verification |
+| [docs/blockchain/README.md](./docs/blockchain/README.md) | Blockchain doc index (links to `blockchain/` module) |
 
 ### `server/docs/` — backend & networks evidence (PDFs + security)
 
@@ -276,8 +278,8 @@ Walk this repo in order:
 3. **C++ client** — `client/README.md`; real mode against deployed host or local API; demonstrate `/trust`, `/msg`, `/verify`.
 4. **Crypto design** — `cryptography/docs/security/cryptography.md` + Word doc; run `npm run smoke:signal` in `cryptography/`.
 5. **Threat models** — `cryptography/docs/security/threat-model.md`, `docs/network_docs/network_deployment_threat_model.pdf`, `server/docs/security/`.
-6. **Blockchain** — `blockchain/GUIDE.md`, open `fidelity-ui`, show pass/fail; optional Etherscan link for Sepolia contract.
-7. **AI oversight** — `cryptography/docs/ai/eoin_AI_PROMPTS.md`, `client/README.md`, `server/docs/ai/backend_prompts_daniel.md`.
+6. **Blockchain** — `docs/blockchain/blockchain-design.md`, `blockchain/GUIDE.md`, open `fidelity-ui`, show pass/fail; optional Etherscan link for Sepolia contract.
+7. **AI oversight** — `docs/AI_Prompts/eoin_AI_PROMPTS.md`, `client/README.md`, `docs/AI_Prompts/backend_prompts_daniel.md`.
 
 ---
 

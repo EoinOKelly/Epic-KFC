@@ -12,7 +12,9 @@ CS4455 secure messaging app. This folder holds **cross-cutting** submission evid
 | [security/vulnerability_report.md](./security/vulnerability_report.md) | All minors | **Canonical** full-project vulnerability report |
 | [security/penetration_testing_plan.md](./security/penetration_testing_plan.md) | Security review | Integrated pentest scope |
 | [security/README.md](./security/README.md) | Security review | Index for project-wide security docs |
-| [../cryptography/docs/ai/eoin_AI_PROMPTS.md](../cryptography/docs/ai/eoin_AI_PROMPTS.md) | Crypto / AI artefact | Sanitised crypto AI prompt log |
+| [AI_Prompts/eoin_AI_PROMPTS.md](./AI_Prompts/eoin_AI_PROMPTS.md) | Crypto / AI artefact | AI prompt log (crypto, blockchain, VM, submission) |
+| [blockchain/README.md](./blockchain/README.md) | Blockchain minor | Index for Sepolia integrity docs |
+| [blockchain/blockchain-design.md](./blockchain/blockchain-design.md) | Blockchain minor | Design summary: hashing, anchoring, verification |
 
 **Backend / DB (PDFs):** [server/docs/api/api_contract.pdf](../server/docs/api/api_contract.pdf), [server/docs/database/database_design.pdf](../server/docs/database/database_design.pdf), [server/docs/architecture/backend_architecture.pdf](../server/docs/architecture/backend_architecture.pdf).
 
@@ -28,7 +30,7 @@ Epic Messaging/
 │   ├── backend/         # FastAPI relay, PostgreSQL, blockchain worker
 │   └── docs/            # API contract, architecture, security PDFs
 ├── blockchain/          # Solidity + Sepolia + fidelity verification UI
-├── docs/                # this folder (Word crypto doc, network PDFs, security)
+├── docs/                # this folder (crypto, blockchain, network PDFs, security)
 └── README.md            # start here
 ```
 
