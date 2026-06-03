@@ -77,38 +77,36 @@ async def create_blockchain_anchor(
 async def get_blockchain_anchor(
     anchor_id: UUID,
     http_request: Request,
-    current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> BlockchainAnchorResponse:
-    """Return anchor status when the linked message is visible to the user."""
-    await enforce_user_rate_limit(
-        current_user.id,
+    """Return anchor status."""
+    await enforce_ip_rate_limit(
+        http_request,
         "blockchain.anchor_read",
         rate_limit.BLOCKCHAIN_READ_RATE_LIMIT,
     )
     try:
-        anchor = await blockchain_anchor_service.get_anchor_for_user(
+        anchor = await blockchain_anchor_service.get_anchor_public(
             db,
-            current_user,
             anchor_id,
         )
     except BlockchainAnchorNotFoundError as exc:
         await _record_audit_event(
             db,
             http_request,
-            actor_user_id=current_user.id,
+            actor_user_id=None,
             event_type="blockchain.anchor_fetch_denied",
             success=False,
             resource_type="blockchain_anchor",
             resource_id=anchor_id,
-            details={"reason": "not_found_or_inaccessible"},
+            details={"reason": "not_found"},
         )
         raise _anchor_not_found_error() from exc
 
     await _record_audit_event(
         db,
         http_request,
-        actor_user_id=current_user.id,
+        actor_user_id=None,
         event_type="blockchain.anchor_fetched",
         success=True,
         resource_type="blockchain_anchor",
@@ -155,7 +153,7 @@ def _get_user_agent(request: Request) -> str | None:
 async def _record_audit_event(
     db: AsyncSession,
     request: Request,
-    actor_user_id: UUID,
+    actor_user_id: UUID | None,
     event_type: str,
     success: bool,
     resource_type: str | None = None,
