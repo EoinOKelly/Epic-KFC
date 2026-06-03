@@ -17,6 +17,7 @@
 
 #include <iostream>
 #include <memory>
+#include <set>
 
 namespace {
 int failures = 0;
@@ -639,6 +640,34 @@ void testLocalMessageVisibility() {
     store.saveMessage(staleReceived);
     const auto afterStaleRevokedRefresh = store.messagesWithPeer("user-1", "peer-1");
     expect(afterStaleRevokedRefresh.succeeded() && afterStaleRevokedRefresh.value().empty(), "store preserves revoke markers across stale refreshes");
+
+    const LocalMessage externallyRevoked{
+        "externally-revoked",
+        "peer-1",
+        1,
+        "user-1",
+        1,
+        "{}",
+        std::nullopt,
+        now.addSecs(3),
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        MessageDirection::Received
+    };
+    store.saveMessage(externallyRevoked);
+    const auto beforeReconcile = store.messagesWithPeer("user-1", "peer-1");
+    const std::set<QString> visibleServerMessages;
+    store.reconcileVisibleMessages("user-1", MessageDirection::Received, visibleServerMessages);
+    const auto afterReconcile = store.messagesWithPeer("user-1", "peer-1");
+    expect(beforeReconcile.succeeded()
+            && beforeReconcile.value().size() == 1
+            && afterReconcile.succeeded()
+            && afterReconcile.value().empty(),
+        "store hides cached received messages missing from server refresh");
 
     QFile::remove(path);
 }

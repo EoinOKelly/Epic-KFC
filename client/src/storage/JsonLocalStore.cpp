@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <map>
 #include <optional>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -619,6 +620,28 @@ Result<bool> JsonLocalStore::markMessageDeletedFor(const QString& currentUserId,
     }
     if (it->senderUserId != currentUserId && it->recipientUserId != currentUserId) {
         it->deletedAt = firstNonEmpty(it->deletedAt, now);
+    }
+    return save();
+}
+
+Result<bool> JsonLocalStore::reconcileVisibleMessages(const QString& currentUserId, MessageDirection direction, const std::set<QString>& visibleMessageIds) {
+    const QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+    for (auto& message : m_messages) {
+        const bool relevantReceivedMessage = direction == MessageDirection::Received
+            && message.recipientUserId == currentUserId;
+        const bool relevantSentMessage = direction == MessageDirection::Sent
+            && message.senderUserId == currentUserId;
+        const bool relevantMessage = relevantReceivedMessage || relevantSentMessage;
+        const bool stillVisible = visibleMessageIds.contains(message.id);
+        if (!relevantMessage || stillVisible || !isMessageVisibleToUser(message, currentUserId)) {
+            continue;
+        }
+
+        if (relevantReceivedMessage) {
+            message.accessRevokedAt = firstNonEmpty(message.accessRevokedAt, now);
+        } else {
+            message.senderDeletedAt = firstNonEmpty(message.senderDeletedAt, now);
+        }
     }
     return save();
 }

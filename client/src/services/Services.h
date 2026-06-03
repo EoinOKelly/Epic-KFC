@@ -7,6 +7,8 @@
 
 #include <QObject>
 
+#include <set>
+
 class SessionService : public QObject {
     Q_OBJECT
 
@@ -77,8 +79,8 @@ public:
 private:
     bool requireSession();
     std::optional<OneTimePreKey> oneTimePreKeyFor(const LocalMessage& message) const;
-    void saveAndEmitList(const MessageList& messages);
     void saveMessages(const MessageList& messages);
+    void saveAndReconcileMessages(const MessageList& messages, MessageDirection direction);
     void openConversationFromCache(const UserAddress& address, const QString& username, int page);
     void sendToAddress(const UserAddress& recipientAddress, const QString& plaintext);
     void forwardToAddress(const QString& messageId, const UserAddress& recipientAddress);

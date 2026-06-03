@@ -7,6 +7,7 @@
 #include <QTextStream>
 
 #include <algorithm>
+#include <set>
 
 namespace {
 constexpr int ConflictStatusCode = 409;
@@ -340,7 +341,8 @@ void MessageService::listReceived() {
             emit m_events.commandFailed(result.error());
             return;
         }
-        saveAndEmitList(result.value());
+        saveAndReconcileMessages(result.value(), MessageDirection::Received);
+        emit m_events.messageListUpdated(result.value());
     });
 }
 
@@ -353,7 +355,8 @@ void MessageService::listSent() {
             emit m_events.commandFailed(result.error());
             return;
         }
-        saveAndEmitList(result.value());
+        saveAndReconcileMessages(result.value(), MessageDirection::Sent);
+        emit m_events.messageListUpdated(result.value());
     });
 }
 
@@ -366,13 +369,13 @@ void MessageService::listConversations() {
             emit m_events.commandFailed(receivedResult.error());
             return;
         }
-        saveMessages(receivedResult.value());
+        saveAndReconcileMessages(receivedResult.value(), MessageDirection::Received);
         m_messageGateway.listSent(m_sessionService.accessToken(), [this](Result<MessageList> sentResult) {
             if (sentResult.failed()) {
                 emit m_events.commandFailed(sentResult.error());
                 return;
             }
-            saveMessages(sentResult.value());
+            saveAndReconcileMessages(sentResult.value(), MessageDirection::Sent);
             const auto conversations = m_store.conversationsFor(m_sessionService.currentUserId());
             if (conversations.failed()) {
                 emit m_events.commandFailed(conversations.error());
@@ -392,7 +395,7 @@ void MessageService::listUnreadSenders() {
             emit m_events.commandFailed(result.error());
             return;
         }
-        saveMessages(result.value());
+        saveAndReconcileMessages(result.value(), MessageDirection::Received);
         const auto unread = m_store.unreadConversationsFor(m_sessionService.currentUserId());
         if (unread.failed()) {
             emit m_events.commandFailed(unread.error());
@@ -483,13 +486,13 @@ void MessageService::readConversation(const QString& username, int page) {
                 emit m_events.commandFailed(receivedResult.error());
                 return;
             }
-            saveMessages(receivedResult.value());
+            saveAndReconcileMessages(receivedResult.value(), MessageDirection::Received);
             m_messageGateway.listSent(m_sessionService.accessToken(), [this, address, username, page](Result<MessageList> sentResult) {
                 if (sentResult.failed()) {
                     emit m_events.commandFailed(sentResult.error());
                     return;
                 }
-                saveMessages(sentResult.value());
+                saveAndReconcileMessages(sentResult.value(), MessageDirection::Sent);
                 openConversationFromCache(address, username, page);
             });
         });
@@ -707,11 +710,6 @@ std::optional<OneTimePreKey> MessageService::oneTimePreKeyFor(const LocalMessage
     return *it;
 }
 
-void MessageService::saveAndEmitList(const MessageList& messages) {
-    saveMessages(messages);
-    emit m_events.messageListUpdated(messages);
-}
-
 void MessageService::saveMessages(const MessageList& messages) {
     for (const auto& message : messages) {
         const auto saved = m_store.saveMessage(message);
@@ -719,6 +717,19 @@ void MessageService::saveMessages(const MessageList& messages) {
             emit m_events.commandFailed(saved.error());
             return;
         }
+    }
+}
+
+void MessageService::saveAndReconcileMessages(const MessageList& messages, MessageDirection direction) {
+    saveMessages(messages);
+    std::set<QString> visibleMessageIds;
+    for (const auto& message : messages) {
+        visibleMessageIds.insert(message.id);
+    }
+
+    const auto reconciled = m_store.reconcileVisibleMessages(m_sessionService.currentUserId(), direction, visibleMessageIds);
+    if (reconciled.failed()) {
+        emit m_events.commandFailed(reconciled.error());
     }
 }
 

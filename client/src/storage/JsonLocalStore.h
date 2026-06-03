@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QString>
 
+#include <set>
 #include <vector>
 
 class JsonLocalStore {
@@ -35,6 +36,7 @@ public:
 
     Result<bool> saveMessage(const LocalMessage& message);
     Result<bool> markMessageDeletedFor(const QString& currentUserId, const QString& messageId);
+    Result<bool> reconcileVisibleMessages(const QString& currentUserId, MessageDirection direction, const std::set<QString>& visibleMessageIds);
     Result<std::optional<LocalMessage>> findMessage(const QString& messageId) const;
     Result<MessageList> allMessages() const;
     Result<MessageList> messagesWithPeer(const QString& currentUserId, const QString& peerUserId) const;
