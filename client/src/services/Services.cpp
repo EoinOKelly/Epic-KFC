@@ -3,6 +3,7 @@
 #include "support/ClientConstants.h"
 
 #include <QFile>
+#include <QRegularExpression>
 #include <QTextStream>
 
 #include <algorithm>
@@ -18,6 +19,11 @@ bool isAlreadyUploadedPreKeyError(const ClientError& error) {
     const bool mentionsExisting = error.message.contains("already", Qt::CaseInsensitive)
         || error.message.contains("exists", Qt::CaseInsensitive);
     return isHttpError && isConflict && mentionsPreKey && mentionsExisting;
+}
+
+bool isValidEthereumTransactionHash(const QString& value) {
+    static const QRegularExpression pattern(QStringLiteral("^0x[0-9a-fA-F]{64}$"));
+    return pattern.match(value).hasMatch();
 }
 }
 
@@ -610,11 +616,9 @@ void MessageService::download(const QString& messageId, const QString& path) {
 }
 
 void MessageService::verify(const QString& messageId) {
-    if (!requireSession()) {
-        return;
-    }
+    const QString accessToken = m_sessionService.isLoggedIn() ? m_sessionService.accessToken() : QString();
 
-    m_messageGateway.fetchMessageAnchor(m_sessionService.accessToken(), messageId, [this, messageId](Result<BlockchainAnchor> anchorResult) {
+    m_messageGateway.fetchMessageAnchor(accessToken, messageId, [this, accessToken, messageId](Result<BlockchainAnchor> anchorResult) {
         if (anchorResult.failed()) {
             if (anchorResult.error().code == ErrorCode::NotFound) {
                 emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorUnavailable).arg(messageId));
@@ -634,8 +638,12 @@ void MessageService::verify(const QString& messageId) {
             emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorPending).arg(messageId, anchor.status, anchor.chain));
             return;
         }
+        if (!isValidEthereumTransactionHash(anchor.transactionHash)) {
+            emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorPending).arg(messageId, "pending", anchor.chain));
+            return;
+        }
 
-        m_messageGateway.verifyAnchor(m_sessionService.accessToken(), anchor, [this, messageId](Result<BlockchainVerification> verificationResult) {
+        m_messageGateway.verifyAnchor(accessToken, anchor, [this, messageId](Result<BlockchainVerification> verificationResult) {
             if (verificationResult.failed()) {
                 emit m_events.commandFailed(verificationResult.error());
                 return;

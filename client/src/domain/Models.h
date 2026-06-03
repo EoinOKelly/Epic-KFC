@@ -43,6 +43,7 @@ enum class CommandType {
     Verify,
     Sync,
     Cancel,
+    Back,
     Exit
 };
 

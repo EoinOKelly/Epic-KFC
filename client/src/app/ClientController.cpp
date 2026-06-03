@@ -113,6 +113,10 @@ void ClientController::handleCommand(const SlashCommand& command) {
     case CommandType::Cancel:
         emit m_events.statusMessage(AppText::NoComposition);
         return;
+    case CommandType::Back:
+        emit m_events.conversationTargetChanged({});
+        emit m_events.statusMessage(AppText::ReturnedToMainMenu);
+        return;
     case CommandType::Exit:
         emit m_events.exitRequested();
         return;

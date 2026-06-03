@@ -72,6 +72,7 @@ inline const QString NotLoggedIn = "Not logged in.";
 inline const QString LoggedInAs = "Logged in as %1 (%2).";
 inline const QString RegisteredUser = "Registered %1. Use /login to start a session.";
 inline const QString SessionEnded = "Session ended.";
+inline const QString ReturnedToMainMenu = "Returned to the main menu.";
 inline const QString KeysUploaded = "Device keys uploaded for device %1.";
 inline const QString NativeCryptoUnavailable = "Real mode requires OpenSSL-backed native crypto. Install OpenSSL 3 development libraries and rebuild the client.";
 inline const QString CompositionStarted = "Composing message for %1. Type body lines, /send to submit, or /cancel.";
@@ -133,6 +134,7 @@ inline const QString Help =
     "  /verify <messageId>\n"
     "  /sync\n"
     "  /cancel\n"
+    "  /back\n"
     "  /exit";
 }
 
@@ -143,6 +145,7 @@ inline constexpr QChar Escape = '\\';
 inline constexpr QChar Space = ' ';
 inline const QString SubmitCommand = "/send";
 inline const QString CancelCommand = "/cancel";
+inline const QString BackCommand = "/back";
 inline const QString HelpPrompt = "Type /help to see available commands.";
 inline const QString EmptyIgnored = "Empty input is ignored. %1";
 inline const QString MissingSlash = "Commands must start with /. %1";
@@ -177,6 +180,7 @@ inline const QString Trust = "trust";
 inline const QString Verify = "verify";
 inline const QString Sync = "sync";
 inline const QString Cancel = "cancel";
+inline const QString Back = "back";
 inline const QString Exit = "exit";
 }
 
