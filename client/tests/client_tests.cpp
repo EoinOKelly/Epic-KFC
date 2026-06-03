@@ -312,6 +312,37 @@ void testCryptoWireShape() {
     const auto decrypted = crypto.decrypt("bob", bob.value(), received, std::nullopt);
     expect(decrypted.succeeded() && decrypted.value() == "hello", "crypto decrypts first X3DH message");
 
+    const auto secondEncrypted = crypto.encrypt("alice", alice.value(), bundle, "second hello");
+    const QJsonObject secondEnvelope = secondEncrypted.succeeded()
+        ? QJsonDocument::fromJson(secondEncrypted.value().wirePayloadJson.toUtf8()).object()
+        : QJsonObject{};
+    const QJsonObject secondWire = secondEncrypted.succeeded()
+        ? wireBodyFromEnvelope(secondEncrypted.value().wirePayloadJson)
+        : QJsonObject{};
+    LocalMessage secondReceived{
+        "message-1b",
+        "alice",
+        alice.value().deviceId,
+        "bob",
+        bob.value().deviceId,
+        secondEncrypted.succeeded() ? secondEncrypted.value().wirePayloadJson : QString{},
+        secondEncrypted.succeeded() ? secondEncrypted.value().consumedOneTimePreKeyId : std::nullopt,
+        QDateTime::currentDateTimeUtc(),
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        MessageDirection::Received
+    };
+    const auto secondDecrypted = secondEncrypted.succeeded()
+        ? crypto.decrypt("bob", bob.value(), secondReceived, std::nullopt)
+        : Result<QString>::failure({ErrorCode::CryptoError, "Second encryption failed."});
+    const bool secondMessageUsesPreKeyEnvelope = secondEnvelope.value(CryptoText::WireType).toInt() == CryptoText::WirePreKeyWhisperMessageType
+        && secondWire.value(CryptoText::WireX3dh).isObject();
+    expect(secondMessageUsesPreKeyEnvelope && secondDecrypted.succeeded() && secondDecrypted.value() == "second hello", "crypto decrypts second message without persisted ratchet state");
+
     PreKeyBundle selfBundle{
         "alice",
         alice.value().registrationId,

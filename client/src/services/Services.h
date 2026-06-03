@@ -84,6 +84,7 @@ private:
     void forwardToAddress(const QString& messageId, const UserAddress& recipientAddress);
     PreKeyBundle selfPreKeyBundleFor(const DeviceKeyMaterial& device) const;
     Result<QString> createLocalSenderCopy(const DeviceKeyMaterial& device, const QString& plaintext);
+    Result<QString> decryptForCurrentUser(const DeviceKeyMaterial& device, const LocalMessage& message);
     LocalMessage draftFor(const QString& recipientUserId, int recipientDeviceId, const QString& wirePayloadJson) const;
 
     EventBus& m_events;

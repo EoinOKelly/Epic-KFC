@@ -519,7 +519,7 @@ void MessageService::forwardToAddress(const QString& messageId, const UserAddres
         emit m_events.commandFailed(device.error());
         return;
     }
-    const auto plaintext = m_cryptoProvider.decrypt(m_sessionService.currentUserId(), device.value(), *found.value(), oneTimePreKeyFor(*found.value()));
+    const auto plaintext = decryptForCurrentUser(device.value(), *found.value());
     if (plaintext.failed()) {
         emit m_events.cryptoOperationFailed(plaintext.error());
         return;
@@ -594,7 +594,7 @@ void MessageService::download(const QString& messageId, const QString& path) {
         emit m_events.commandFailed(device.error());
         return;
     }
-    const auto plaintext = m_cryptoProvider.decrypt(m_sessionService.currentUserId(), device.value(), *found.value(), oneTimePreKeyFor(*found.value()));
+    const auto plaintext = decryptForCurrentUser(device.value(), *found.value());
     if (plaintext.failed()) {
         emit m_events.cryptoOperationFailed(plaintext.error());
         return;
@@ -787,6 +787,22 @@ Result<QString> MessageService::createLocalSenderCopy(const DeviceKeyMaterial& d
         return Result<QString>::failure(encrypted.error());
     }
     return Result<QString>::success(encrypted.value().wirePayloadJson);
+}
+
+Result<QString> MessageService::decryptForCurrentUser(const DeviceKeyMaterial& device, const LocalMessage& message) {
+    const bool sentByCurrentUser = message.senderUserId == m_sessionService.currentUserId();
+    if (!sentByCurrentUser) {
+        return m_cryptoProvider.decrypt(m_sessionService.currentUserId(), device, message, oneTimePreKeyFor(message));
+    }
+
+    if (message.localSenderCopyWirePayloadJson.isEmpty()) {
+        return Result<QString>::failure({ErrorCode::CryptoError, AppText::SentMessageLocalCopyUnavailable});
+    }
+
+    LocalMessage senderCopy = message;
+    senderCopy.wirePayloadJson = message.localSenderCopyWirePayloadJson;
+    senderCopy.consumedOneTimePreKeyId = std::nullopt;
+    return m_cryptoProvider.decrypt(m_sessionService.currentUserId(), device, senderCopy, std::nullopt);
 }
 
 LocalMessage MessageService::draftFor(const QString& recipientUserId, int recipientDeviceId, const QString& wirePayloadJson) const {
