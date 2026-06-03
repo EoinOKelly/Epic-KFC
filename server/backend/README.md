@@ -312,7 +312,7 @@ The full evidence record is in:
 | Document | Path |
 | --- | --- |
 | Backend architecture | `../docs/architecture/backend_architecture.pdf` |
-| Network architecture | `../docs/architecture/network_architecture.pdf` |
+| Network architecture | `../../docs/network_docs/network_architecture.pdf` |
 | API contract | `../docs/api/api_contract.pdf` |
 | Database design | `../docs/database/database_design.pdf` |
 | Security controls mapping | `../docs/security/security_controls_mapping.pdf` |

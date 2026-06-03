@@ -69,7 +69,7 @@ flowchart TB
 
 ### Typical message flow
 
-1. **Register / login** — Client calls `POST /api/v1/auth/register` and `POST /api/v1/auth/login` over TLS. The backend hashes passwords with **Argon2id** (`server/backend/app/services/password_service.py`), matching the parameters documented in `cryptography/` and [docs/cryptography.md](./docs/cryptography.md).
+1. **Register / login** — Client calls `POST /api/v1/auth/register` and `POST /api/v1/auth/login` over TLS. The backend hashes passwords with **Argon2id** (`server/backend/app/services/password_service.py`), matching the parameters documented in `cryptography/` and [cryptography/docs/security/cryptography.md](./cryptography/docs/security/cryptography.md).
 2. **Publish keys** — Client generates X25519/Ed25519 device material locally, uploads **public** pre-key bundles via `PUT /api/v1/keys/devices/{device_id}` and one-time pre-keys via `POST /api/v1/keys/devices/{device_id}/one-time-prekeys`.
 3. **Trust (TOFU)** — Before first send, the C++ client can pin a contact’s identity key (`/trust`). The TypeScript reference implementation exposes `verifyIdentityTofu` / `pinIdentity` in `cryptography/src/signal/tofu.ts`.
 4. **Send** — Sender fetches recipient bundle (`GET /api/v1/keys/users/{user_id}/bundle`), encrypts locally, posts opaque JSON to `POST /api/v1/messages`. The backend creates a **pending** `blockchain_anchors` row (Keccak digest of a canonical encrypted record — no plaintext).
@@ -136,7 +136,7 @@ npm run smoke:signal    # protocol smoke test
 npm run e2e:backend     # optional live API exercise
 ```
 
-**Design docs:** [docs/cryptography.md](./docs/cryptography.md) (markdown) and submission Word doc [docs/Cryptographic-Design-kfc.docx](./docs/Cryptographic-Design-kfc.docx) (regenerate: `python docs/scripts/build_crypto_design_docx.py`).
+**Design docs:** [cryptography/docs/security/cryptography.md](./cryptography/docs/security/cryptography.md) (markdown) and submission Word doc [docs/Cryptographic-Design-kfc.docx](./docs/Cryptographic-Design-kfc.docx) (regenerate: `python docs/scripts/build_crypto_design_docx.py`).
 
 ---
 
@@ -153,7 +153,7 @@ npm run e2e:backend     # optional live API exercise
 
 **Implemented slash commands:** `/register`, `/login`, `/logout`, `/whoami`, `/status`, `/conversations`, `/inbox`, `/sent`, `/msg`, `/send`, `/read`, `/forward`, `/revoke`, `/delete`, `/download`, `/trust`, `/verify`, `/sync`, `/exit`.
 
-**Known crypto integration gap (document honestly):** Native client covers first-message X3DH-style encryption/decryption and tamper rejection; **persisted Double Ratchet session state** and golden-vector parity with the TypeScript package are the next step. See [client/README.md](./client/README.md) and [docs/ai-cpp-client-notes.md](./docs/ai-cpp-client-notes.md).
+**Known crypto integration gap (document honestly):** Native client covers first-message X3DH-style encryption/decryption and tamper rejection; **persisted Double Ratchet session state** and golden-vector parity with the TypeScript package are the next step. See [client/README.md](./client/README.md).
 
 **Build & run:** [client/README.md](./client/README.md) (CMake, Qt 6/5, OpenSSL 3, Windows/Linux/macOS).
 
@@ -188,13 +188,13 @@ Full rationale: [blockchain/GUIDE.md](./blockchain/GUIDE.md).
 |-------------------|----------|
 | TLS + REST | OpenAPI at deployed `/docs`; all clients use `/api/v1` prefix |
 | Passwords | PHC Argon2id strings in `users.password_hash` |
-| Pre-keys | Base64 public fields in `device_keys` + `one_time_prekeys` — see [docs/database.md](./docs/database.md) |
+| Pre-keys | Base64 public fields in `device_keys` + `one_time_prekeys` — see [server/docs/database/database_design.pdf](./server/docs/database/database_design.pdf) |
 | Ciphertext | `messages.wire_payload_json` — opaque; shape from `cryptography/src/wireFormat.ts` |
 | OPK consumption | First message may reference `consumed_one_time_prekey_id`; server marks OPK used |
 | Blockchain | Backend computes canonical Keccak digest → pending row → worker → Sepolia; client `/verify` uses backend metadata; fidelity UI recomputes Merkle roots from content |
 | C++ ↔ TS crypto | C++ mirrors algorithms and wire JSON; TypeScript package is authoritative for reviews and smoke tests |
 
-Detailed wiring for backend developers: [docs/backend-crypto-integration.md](./docs/backend-crypto-integration.md). Cross-team overview: [docs/integration.md](./docs/integration.md).
+Detailed wiring for backend developers: [server/docs/api/api_contract.pdf](./server/docs/api/api_contract.pdf) and [cryptography/docs/security/cryptography.md](./cryptography/docs/security/cryptography.md). Cross-team security index: [docs/README.md](./docs/README.md).
 
 ---
 
@@ -226,40 +226,32 @@ cd server/backend && pytest tests/unit tests/integration tests/security -q
 
 ## Documentation map
 
-Start with **[docs/README.md](./docs/README.md)** for the shared crypto/integration index. Use this table to navigate submission evidence.
+Start with **[docs/README.md](./docs/README.md)** for the cross-cutting index. Use this table to navigate submission evidence.
 
 ### `docs/` — project-wide (all minors)
 
 | Document | Contents |
 |----------|----------|
-| [architecture.md](./docs/architecture.md) | System diagram, module ownership, E2EE vs TLS vs chain |
-| [cryptography.md](./docs/cryptography.md) | Full crypto design: primitives, flows, nonce strategy, limitations |
-| [Cryptographic-Design-kfc.docx](./docs/Cryptographic-Design-kfc.docx) | **Canonical** crypto submission (Word); built from markdown via `docs/scripts/build_crypto_design_docx.py` |
-| [threat-model.md](./docs/threat-model.md) | CS4455 attacker classes A–D; guarantees and honest limits |
-| [network_deployment_threat_model.pdf](./docs/network_deployment_threat_model.pdf) | Networks minor: deployment and edge threat model (Burkley) |
-| [database.md](./docs/database.md) | Crypto-related SQL shapes; what must never be stored server-side |
-| [backend-crypto-integration.md](./docs/backend-crypto-integration.md) | API endpoints ↔ crypto package fields |
-| [integration.md](./docs/integration.md) | How C++, backend, web, and blockchain consume `cryptography/` |
-| [interview-prep.md](./docs/interview-prep.md) | Likely viva Q&A for crypto |
-| [AI_PROMPTS.md](./docs/AI_PROMPTS.md) | Sanitised AI prompt log (submission artefact) |
-| [ai-cpp-client-notes.md](./docs/ai-cpp-client-notes.md) | C++ client AI decisions, corrections, limitations |
-| [security/vulnerability_report.md](./docs/security/vulnerability_report.md) | **Canonical** full-project vulnerability report (backend, cryptography, client, blockchain) |
+| [Cryptographic-Design-kfc.docx](./docs/Cryptographic-Design-kfc.docx) | **Canonical** crypto submission (Word); regenerate via `docs/scripts/build_crypto_design_docx.py` |
+| [cryptography/docs/security/cryptography.md](./cryptography/docs/security/cryptography.md) | Full crypto design: primitives, flows, nonce strategy, limitations |
+| [cryptography/docs/security/threat-model.md](./cryptography/docs/security/threat-model.md) | CS4455 attacker classes A–D; guarantees and honest limits |
+| [docs/network_docs/network_deployment_threat_model.pdf](./docs/network_docs/network_deployment_threat_model.pdf) | Networks minor: deployment and edge threat model |
+| [docs/network_docs/network_architecture.pdf](./docs/network_docs/network_architecture.pdf) | Networks minor: network architecture |
+| [docs/security/vulnerability_report.md](./docs/security/vulnerability_report.md) | **Canonical** full-project vulnerability report |
+| [docs/security/penetration_testing_plan.md](./docs/security/penetration_testing_plan.md) | Integrated pentest scope |
+| [cryptography/docs/ai/eoin_AI_PROMPTS.md](./cryptography/docs/ai/eoin_AI_PROMPTS.md) | Sanitised crypto AI prompt log |
 
-### `server/docs/` — backend & networks evidence
+### `server/docs/` — backend & networks evidence (PDFs + security)
 
 | Document | Contents |
 |----------|----------|
-| [server/docs/README.md](./server/docs/README.md) | Index into backend documentation |
-| [architecture/backend_architecture.md](./server/docs/architecture/backend_architecture.md) | Service layers, workers, data flow |
-| [architecture/network_architecture.md](./server/docs/architecture/network_architecture.md) | TLS termination, Nginx, VM layout |
-| [api/api_contract.md](./server/docs/api/api_contract.md) | REST contract for clients |
-| [database/database_design.md](./server/docs/database/database_design.md) | Full PostgreSQL schema |
-| [deployment/runbook.md](./server/docs/deployment/runbook.md) | Operations on the VM |
-| [security/threat_model.md](./server/docs/security/threat_model.md) | Backend-specific threats |
-| [security/penetration_testing_plan.md](./server/docs/security/penetration_testing_plan.md) | Pentest scope |
-| [security/security_test_results.md](./server/docs/security/security_test_results.md) | Automated/manual security test evidence |
+| [architecture/backend_architecture.pdf](./server/docs/architecture/backend_architecture.pdf) | Service layers, workers, data flow |
+| [api/api_contract.pdf](./server/docs/api/api_contract.pdf) | REST contract for clients |
+| [database/database_design.pdf](./server/docs/database/database_design.pdf) | Full PostgreSQL schema |
+| [security/backend_threat_model.pdf](./server/docs/security/backend_threat_model.pdf) | Backend-specific threats |
+| [security/security_test_results.pdf](./server/docs/security/security_test_results.pdf) | Automated/manual security test evidence |
 | [security/vulnerability_report.md](./server/docs/security/vulnerability_report.md) | Redirect to [docs/security/vulnerability_report.md](./docs/security/vulnerability_report.md) |
-| [security/security_controls_mapping.md](./server/docs/security/security_controls_mapping.pdf) | Controls ↔ implementation |
+| [security/security_controls_mapping.pdf](./server/docs/security/security_controls_mapping.pdf) | Controls ↔ implementation |
 | [ai/backend_prompts_daniel.md](./server/docs/ai/backend_prompts_daniel.md) | Backend/database AI prompt log |
 
 Operational entry point for running the API: **[server/backend/README.md](./server/backend/README.md)**.
@@ -282,10 +274,10 @@ Walk this repo in order:
 1. **README.md** (this file) — whole-system map.
 2. **Live or local API** — `server/backend` OpenAPI; show register → upload keys → send opaque message → receive.
 3. **C++ client** — `client/README.md`; real mode against deployed host or local API; demonstrate `/trust`, `/msg`, `/verify`.
-4. **Crypto design** — `docs/cryptography.md` + Word doc; run `npm run smoke:signal` in `cryptography/`.
-5. **Threat models** — `docs/threat-model.md`, `docs/network_deployment_threat_model.pdf`, `server/docs/security/`.
+4. **Crypto design** — `cryptography/docs/security/cryptography.md` + Word doc; run `npm run smoke:signal` in `cryptography/`.
+5. **Threat models** — `cryptography/docs/security/threat-model.md`, `docs/network_docs/network_deployment_threat_model.pdf`, `server/docs/security/`.
 6. **Blockchain** — `blockchain/GUIDE.md`, open `fidelity-ui`, show pass/fail; optional Etherscan link for Sepolia contract.
-7. **AI oversight** — `docs/AI_PROMPTS.md`, `docs/ai-cpp-client-notes.md`, `server/docs/ai/backend_prompts_daniel.md`.
+7. **AI oversight** — `cryptography/docs/ai/eoin_AI_PROMPTS.md`, `client/README.md`, `server/docs/ai/backend_prompts_daniel.md`.
 
 ---
 

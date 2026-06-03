@@ -54,5 +54,6 @@ pgdata/
 Thumbs.db
 *.swp
 *.swo
+~$*
 .idea/
 .vscode/

@@ -2,9 +2,9 @@
 
 Team **kfc**. Code in `cryptography/` (`@epic-messaging/cryptography`).
 
-**Submission (Word):** [Cryptographic-Design-kfc.docx](./Cryptographic-Design-kfc.docx) — `python docs/scripts/build_crypto_design_docx.py`
+**Submission (Word):** [Cryptographic-Design-kfc.docx](../../../docs/Cryptographic-Design-kfc.docx) — `python docs/scripts/build_crypto_design_docx.py` from repo root.
 
-Markdown copy below. Related: [threat-model.md](./threat-model.md), [backend-crypto-integration.md](./backend-crypto-integration.md), [architecture.md](./architecture.md).
+Markdown copy below. Related: [threat-model.md](./threat-model.md), [server API contract PDF](../../../server/docs/api/api_contract.pdf), [database design PDF](../../../server/docs/database/database_design.pdf).
 
 ---
 
@@ -251,7 +251,7 @@ AES-256 remains a reasonable symmetric choice if Grover-style attacks are consid
 
 ## 8. Blockchain (integrity only)
 
-E2EE keys are unrelated to on-chain anchoring. The `blockchain/` module hashes conversation content with **keccak256**, stores a Merkle root on Sepolia, and verifies single messages via Merkle proofs. See [blockchain/GUIDE.md](../blockchain/GUIDE.md).
+E2EE keys are unrelated to on-chain anchoring. The `blockchain/` module hashes conversation content with **keccak256**, stores a Merkle root on Sepolia, and verifies single messages via Merkle proofs. See [blockchain/GUIDE.md](../../../blockchain/GUIDE.md).
 
 On-chain digests are **public**. Anchoring proves "this hash was recorded at time T", not secrecy of the message.
 
