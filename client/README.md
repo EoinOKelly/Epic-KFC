@@ -182,6 +182,12 @@ accounts on the same machine does not try to decrypt another account's device
 keys. Supplying `--state-path` opts into one explicit state file, which should be
 unique per account unless the same local password is reused intentionally.
 
+If the same account is used on more than one computer, give each install a
+different device ID, for example `--device-id 1` on the first computer and
+`--device-id 2` on the second. Reusing the same device ID on different machines
+can replace that device's public keys on the backend, so messages may be encrypted
+for private keys that only exist on the other machine.
+
 ## Slash Commands
 
 All actions start with `/`.

@@ -39,9 +39,9 @@ void ClientController::handleCommand(const SlashCommand& command) {
         return;
     case CommandType::Status:
         if (m_config.mode == ClientMode::Real) {
-            emit m_events.statusMessage(QString(AppText::RealStatus).arg(m_config.apiUrl));
+            emit m_events.statusMessage(QString(AppText::RealStatus).arg(m_config.apiUrl).arg(m_config.deviceId));
         } else {
-            emit m_events.statusMessage(AppText::MockStatus);
+            emit m_events.statusMessage(QString(AppText::MockStatus).arg(m_config.deviceId));
         }
         return;
     case CommandType::Conversations:
