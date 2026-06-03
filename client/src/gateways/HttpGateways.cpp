@@ -17,6 +17,7 @@ namespace {
 constexpr int ConflictStatusCode = 409;
 constexpr int MessagePageLimit = 100;
 constexpr int InitialMessageOffset = 0;
+constexpr bool Http2AllowedForAuthenticatedRest = false;
 
 QString withoutTrailingSlash(QString value) {
     while (value.endsWith('/')) {
@@ -201,7 +202,7 @@ void HttpClient::send(const QString& method, const QString& path, const QString&
     });
 
     QObject::connect(reply, &QNetworkReply::finished, reply, [this, reply, method, path, accessToken, body, alreadyRetried, callback = std::move(callback)]() mutable {
-        const QByteArray responseBody = reply->readAll();
+        const QByteArray responseBody = reply->isOpen() ? reply->readAll() : QByteArray();
         if (reply->error() != QNetworkReply::NoError) {
             const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
             const bool canRefresh = statusCode == 401
@@ -280,6 +281,7 @@ QNetworkRequest HttpClient::requestFor(const QString& path, const QString& acces
     QNetworkRequest request(urlFor(path));
     request.setHeader(QNetworkRequest::ContentTypeHeader, AppText::JsonContentType);
     request.setTransferTimeout(AppText::HttpRequestTimeoutMilliseconds);
+    request.setAttribute(QNetworkRequest::Http2AllowedAttribute, Http2AllowedForAuthenticatedRest);
     const QString effectiveAccessToken = !accessToken.isEmpty() && !m_tokens.accessToken.isEmpty()
         ? m_tokens.accessToken
         : accessToken;
