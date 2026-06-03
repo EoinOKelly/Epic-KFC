@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import enforce_user_rate_limit, get_current_user, get_db
+from app.api.deps import enforce_ip_rate_limit, enforce_user_rate_limit, get_current_user, get_db
 from app.core import rate_limit
 from app.models.user import User
 from app.schemas.common import PaginationParams, SuccessResponse
@@ -158,32 +158,29 @@ async def get_message(
 async def get_message_anchor(
     message_id: UUID,
     http_request: Request,
-    current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> BlockchainAnchorResponse:
-    """Return the latest blockchain anchor for an accessible direct message."""
-    actor_user_id = current_user.id
-    await enforce_user_rate_limit(
-        actor_user_id,
+    """Return the latest blockchain anchor for a message."""
+    await enforce_ip_rate_limit(
+        http_request,
         "messages.anchor",
         rate_limit.BLOCKCHAIN_READ_RATE_LIMIT,
     )
     try:
-        anchor = await blockchain_anchor_service.get_latest_message_anchor_for_user(
+        anchor = await blockchain_anchor_service.get_latest_message_anchor_public(
             db,
-            current_user,
             message_id,
         )
     except BlockchainAnchorNotFoundError as exc:
         await _record_audit_event(
             db,
             http_request,
-            actor_user_id=actor_user_id,
+            actor_user_id=None,
             event_type="message.anchor_fetch_denied",
             success=False,
             resource_type="message",
             resource_id=message_id,
-            details={"reason": "not_found_or_inaccessible"},
+            details={"reason": "not_found"},
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -193,7 +190,7 @@ async def get_message_anchor(
     await _record_audit_event(
         db,
         http_request,
-        actor_user_id=actor_user_id,
+        actor_user_id=None,
         event_type="message.anchor_fetched",
         success=True,
         resource_type="blockchain_anchor",
@@ -411,7 +408,7 @@ def _get_user_agent(request: Request) -> str | None:
 async def _record_audit_event(
     db: AsyncSession,
     request: Request,
-    actor_user_id: UUID,
+    actor_user_id: UUID | None,
     event_type: str,
     success: bool,
     resource_type: str | None = None,

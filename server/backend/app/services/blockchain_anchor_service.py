@@ -114,6 +114,17 @@ async def get_latest_message_anchor_for_user(
     return anchor
 
 
+async def get_latest_message_anchor_public(
+    db: AsyncSession,
+    message_id: UUID,
+) -> BlockchainAnchor:
+    """Return the latest anchor for a message without requiring message access, used for public verification."""
+    anchor = await blockchain_anchor_repository.get_latest_for_message(db, message_id)
+    if anchor is None:
+        raise BlockchainAnchorNotFoundError("Anchor not found.")
+    return anchor
+
+
 async def verify_anchor_metadata(
     db: AsyncSession,
     request_data: BlockchainVerifyRequest,
