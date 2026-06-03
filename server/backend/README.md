@@ -20,6 +20,7 @@ https://kfc.theburkenator.com/docs
 - Argon2id password hashing through `argon2-cffi`
 - JWT access tokens through `PyJWT`
 - Ethereum Keccak hashing through `eth-hash[pycryptodome]`
+- Sepolia contract submission through `web3` in the separate blockchain worker
 - pytest, httpx ASGI transport, ruff, bandit, pip-audit
 
 ## Environment Variables
@@ -36,11 +37,11 @@ Required or important variables:
 ```dotenv
 APP_NAME=Secure Messaging API
 APP_ENV=development
-DATABASE_URL=postgresql+asyncpg://secure_app_user:change_me@localhost:5432/secure_messages
-TEST_DATABASE_URL=postgresql+asyncpg://secure_app_test_user:change_me@localhost:5432/secure_messages_test
+DATABASE_URL=postgresql+asyncpg://secure_app_user:<database-password>@localhost:5432/secure_messages
+TEST_DATABASE_URL=postgresql+asyncpg://secure_app_test_user:<test-database-password>@localhost:5432/secure_messages_test
 LOG_LEVEL=INFO
-JWT_SECRET_KEY=change_me_local_dev_only
-REFRESH_TOKEN_HASH_SECRET=change_me_refresh_hash_secret_local_only
+JWT_SECRET_KEY=<jwt-secret>
+REFRESH_TOKEN_HASH_SECRET=<refresh-token-hash-secret>
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=15
 REFRESH_TOKEN_EXPIRE_DAYS=7
@@ -53,9 +54,9 @@ HSTS_MAX_AGE_SECONDS=31536000
 ALLOWED_ORIGINS=["http://localhost:3000"]
 CORS_ALLOW_CREDENTIALS=false
 BLOCKCHAIN_WORKER_ENABLED=false
-SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY
-DEPLOYER_PRIVATE_KEY=0xYOUR_SEPOLIA_PRIVATE_KEY
-MESSAGE_FIDELITY_ADDRESS=0xYOUR_MESSAGE_FIDELITY_CONTRACT
+SEPOLIA_RPC_URL=<sepolia-rpc-url>
+DEPLOYER_PRIVATE_KEY=<sepolia-worker-private-key>
+MESSAGE_FIDELITY_ADDRESS=<message-fidelity-contract-address>
 BLOCKCHAIN_WORKER_POLL_INTERVAL_SECONDS=15
 BLOCKCHAIN_WORKER_BATCH_SIZE=10
 BLOCKCHAIN_WORKER_RECEIPT_TIMEOUT_SECONDS=180
@@ -74,7 +75,7 @@ The backend requires PostgreSQL and rejects non-PostgreSQL database URLs. A loca
 docker run --name epic-postgres \
   -e POSTGRES_DB=secure_messages \
   -e POSTGRES_USER=secure_app_user \
-  -e POSTGRES_PASSWORD=change_me \
+  -e POSTGRES_PASSWORD=<database-password> \
   -p 127.0.0.1:5432:5432 \
   -d postgres:16
 ```
@@ -89,11 +90,11 @@ Example SQL for local development:
 
 ```sql
 CREATE DATABASE secure_messages_test;
-CREATE USER secure_app_test_user WITH PASSWORD 'change_me';
+CREATE USER secure_app_test_user WITH PASSWORD '<test-database-password>';
 GRANT ALL PRIVILEGES ON DATABASE secure_messages_test TO secure_app_test_user;
 ```
 
-PostgreSQL should be bound to `127.0.0.1:5432` for the project deployment, not exposed on a public interface.
+PostgreSQL is bound to `127.0.0.1:5432` for the project deployment and is not exposed on a public interface.
 
 ## Local Setup
 
@@ -199,7 +200,7 @@ Run it continuously:
 python -m app.workers.blockchain_worker
 ```
 
-On the VM, install it as a systemd service after `.env` contains Sepolia credentials and `web3` is installed:
+On the VM, install it as a systemd service after `.env` contains Sepolia credentials:
 
 ```bash
 bash server/backend/deploy/install-blockchain-worker-service.sh
@@ -223,7 +224,6 @@ bash server/backend/deploy/install-blockchain-worker-service.sh
 - No MFA.
 - FastAPI in-memory rate limiting is single-process only; the provided Nginx config adds VM edge IP limits.
 - Refresh sessions are stored in PostgreSQL rather than Redis.
-- FastAPI does not currently terminate TLS itself; public HTTPS is provided by the gateway/proxy layer.
 - The backend stores and returns opaque encrypted `wire_payload_json` to authorized users, but cannot prove cryptographically that a payload used a claimed one-time prekey.
 - Blockchain anchoring requires the separate backend worker process to be running before pending anchors become confirmed Sepolia transactions.
 - There is no admin audit-log viewer route.

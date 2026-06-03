@@ -68,7 +68,7 @@ alembic current
 
 ## Manual Backend Restart
 
-Recommended when Nginx proxies to localhost:
+Manual restart command for the Nginx-to-localhost deployment:
 
 ```bash
 cd ~/epic_project/Epic-KFC/server/backend
@@ -195,7 +195,7 @@ Check database port binding:
 sudo ss -tulpn | grep ':5432'
 ```
 
-Recommended binding:
+Deployment binding:
 
 ```text
 127.0.0.1:5432
@@ -276,7 +276,7 @@ transaction_hash = NULL
 anchored_at = NULL
 ```
 
-A confirmed row after the worker runs should contain:
+A confirmed row after the worker runs contains:
 
 ```text
 status = confirmed
@@ -295,9 +295,9 @@ Configure `server/backend/.env` with:
 
 ```dotenv
 BLOCKCHAIN_WORKER_ENABLED=true
-SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY
-DEPLOYER_PRIVATE_KEY=0xYOUR_SEPOLIA_PRIVATE_KEY
-MESSAGE_FIDELITY_ADDRESS=0xYOUR_MESSAGE_FIDELITY_CONTRACT
+SEPOLIA_RPC_URL=<sepolia-rpc-url>
+DEPLOYER_PRIVATE_KEY=<sepolia-worker-private-key>
+MESSAGE_FIDELITY_ADDRESS=<message-fidelity-contract-address>
 ```
 
 Run one batch manually:
@@ -329,7 +329,7 @@ pytest tests/security -vv
 pytest tests/unit tests/integration tests/security -q
 ```
 
-Dependency scan before submission:
+Dependency scan command:
 
 ```bash
 pip-audit

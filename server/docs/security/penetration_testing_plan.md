@@ -2,13 +2,11 @@
 
 ## Scope
 
-This plan covers the FastAPI backend for the secure messaging project. The backend supports authenticated direct 1:1 encrypted message relay, public device key relay, one-time prekey relay, refresh-token rotation, audit logging, rate limiting, security headers, and CORS hardening.
+This plan covers the FastAPI backend for the secure messaging project. The backend supports authenticated direct 1:1 encrypted message relay, public device key relay, one-time prekey relay, refresh-token rotation, audit logging, rate limiting, security headers, CORS hardening, blockchain anchor metadata APIs, and a separate blockchain worker for Sepolia submission.
 
 ## Out Of Scope
 
 - Frontend testing
-- Blockchain worker implementation
-- Live blockchain transaction submission
 - Smart contract security testing
 - Message encryption or decryption
 - Signal library internals
@@ -23,7 +21,8 @@ This plan covers the FastAPI backend for the secure messaging project. The backe
 - Fake test users, fake devices, fake prekeys, and fake opaque encrypted payloads
 - Test JWT and refresh-token secrets monkeypatched for repeatability
 - In-memory rate limiter reset between tests
-- Optional VM/public endpoint checks against `https://kfc.theburkenator.com` only with permission
+- Backend blockchain worker logic tested with fake submitters; live Sepolia submission uses explicit deployment credentials and is documented separately when run
+- VM/public endpoint checks against `https://kfc.theburkenator.com` run only with permission
 
 ## Target Endpoints
 
@@ -47,16 +46,18 @@ This plan covers the FastAPI backend for the secure messaging project. The backe
 - `POST /api/v1/blockchain/anchors`
 - `GET /api/v1/blockchain/anchors/{anchor_id}`
 - `POST /api/v1/blockchain/verify`
+- `python -m app.workers.blockchain_worker --once`
 
 ## Tools
 
 - pytest security tests under `tests/security`
 - httpx ASGI transport for repeatable endpoint testing
-- curl or httpie for optional manual endpoint checks
+- curl or httpie for manual endpoint checks
 - Postman or Insomnia collections if manual demonstrations are needed
-- OWASP ZAP baseline scan as an optional manual check against a local running API
+- OWASP ZAP baseline scan as a manual check against a local running API
 - Manual review for sensitive data exposure in responses and audit logs
 - `backend/scripts/check_tls_connection.py` for hostname resolution and certificate-verified TLS evidence
+- `backend/app/workers/blockchain_worker.py` or `backend/scripts/run_blockchain_worker.py` for backend-owned Sepolia submission checks when credentials are configured
 - `ruff`, `bandit`, and `pip-audit` for static/dependency review
 
 ## Test Categories
@@ -69,6 +70,7 @@ This plan covers the FastAPI backend for the secure messaging project. The backe
 - Rate limiting and API abuse
 - Audit logging evidence
 - Blockchain anchor metadata access and verification
+- Blockchain worker configuration and pending-anchor processing
 - Network/TLS evidence
 - Vulnerable component scan evidence
 
@@ -85,6 +87,7 @@ This plan covers the FastAPI backend for the secure messaging project. The backe
 - Message send and forward create pending blockchain anchors without putting plaintext on chain.
 - Users cannot fetch anchor metadata for messages they cannot access.
 - Blockchain verification checks backend confirmation metadata and does not require FastAPI to contact Sepolia live.
+- The blockchain worker processes pending anchors only when configured with Sepolia RPC URL, wallet key, and contract address; FastAPI request handlers do not hold those credentials.
 - Repeated abusive requests return `429 Too Many Requests` with `Retry-After`.
 - Public TLS probe verifies hostname and certificate chain.
 - Dependency scan findings are recorded and remediated or accepted with rationale.
@@ -100,7 +103,7 @@ pytest tests/security -vv
 pytest tests/unit tests/integration tests/security -q
 ```
 
-Optional dependency/static scan commands:
+Dependency/static scan commands:
 
 ```bash
 bandit -r app
@@ -133,7 +136,7 @@ Check public TLS evidence if authorized:
 .venv/bin/python scripts/check_tls_connection.py kfc.theburkenator.com --port 443
 ```
 
-Optional ZAP baseline against local app only:
+ZAP baseline against local app only:
 
 ```bash
 docker run --rm -t ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://host.docker.internal:8000

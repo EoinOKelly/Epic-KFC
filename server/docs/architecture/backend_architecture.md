@@ -1,156 +1,325 @@
 # Backend Architecture
 
+Date updated: 2026-06-03
+
 ## Purpose
 
-The backend is a FastAPI server for authenticated API interaction and encrypted direct 1:1 message relay.
+The backend is the API and database layer for the secure messaging system. It authenticates users, validates requests, stores public key material, relays encrypted direct 1:1 message payloads, enforces message-level authorization, records audit events, creates blockchain fidelity anchor metadata, and exposes status/verification endpoints for those anchors.
 
-It authenticates users, validates requests, enforces object-level access control, stores public key material, stores encrypted relay payloads, rotates refresh tokens, creates pending blockchain integrity anchors, and records audit/security events.
+Backend boundaries:
 
-It does not decrypt messages, store plaintext messages, store private keys, store Signal ratchet/session state, perform Signal cryptographic operations, support group chats, or submit blockchain transactions from FastAPI request handlers.
+- Message plaintext stays on client devices.
+- Long-term private keys stay on client devices.
+- Signal/libsignal session state stays on client devices.
+- FastAPI request handlers create pending blockchain anchors but do not hold wallet credentials or submit Sepolia transactions.
+- The backend blockchain worker is the deployed process that reads pending anchors and submits them to Sepolia.
 
-## Runtime Layers
+## Assessed Backend Responsibilities
+
+| Responsibility from brief | Backend implementation |
+| --- | --- |
+| Backend service accepts and processes requests | FastAPI `/api/v1` routes for auth, users, keys, messages, and blockchain anchors. |
+| Secure client/server connectivity | Public HTTPS through the TLS gateway, Nginx proxy on VM, localhost Uvicorn, FastAPI HTTPS/HSTS controls. |
+| Server-side authentication | Argon2id password hashes, signed JWT access tokens, HMAC-hashed refresh tokens, refresh rotation, logout revocation. |
+| Server-side authorization | `get_current_user()` dependency and service-level object checks for message/key/anchor access. |
+| Secure database use | Async SQLAlchemy ORM with PostgreSQL, migrations, repository layer, no string-built request SQL. |
+| Input validation | Strict Pydantic schemas, UUID/positive ID/base64/wire-payload validation, sanitized validation errors. |
+| Sensitive data protection | No plaintext/private-key storage; response schemas omit password and refresh-session hashes; audit detail allowlist. |
+| Blockchain fidelity proof | Pending anchors from encrypted message metadata; worker submission to `MessageFidelity.storeHash` on Sepolia. |
+| Vulnerability evidence | Unit, integration, security, Bandit, pip-audit, and DB-backed test results recorded in security docs. |
+
+## Runtime Topology
+
+```mermaid
+flowchart LR
+    Client["C++ / Web / Test Client"] -->|"HTTPS\nJSON API"| Gateway["Public TLS Gateway\nkfc.theburkenator.com"]
+    Gateway -->|"internal HTTP"| Nginx["Nginx on VM\nrate limit + reverse proxy"]
+    Nginx -->|"localhost:8000"| Uvicorn["Uvicorn\nFastAPI app"]
+    Uvicorn --> Routes["/api/v1 Routers"]
+    Routes --> Deps["Dependencies\nDB session, Bearer auth, rate limits"]
+    Deps --> Services["Services\nauth, tokens, messages, anchors, audit"]
+    Services --> Repos["Repositories\nSQLAlchemy ORM queries"]
+    Repos --> Postgres[("PostgreSQL\nusers, keys, sessions, messages, anchors, audit")]
+    Worker["Blockchain Worker\nsystemd service"] -->|"SELECT FOR UPDATE SKIP LOCKED"| Postgres
+    Worker -->|"signed transaction"| Sepolia["Sepolia\nMessageFidelity contract"]
+```
+
+### Runtime Processes
+
+| Process | File/config | Role |
+| --- | --- | --- |
+| FastAPI app | `backend/app/main.py` | Creates app, installs CORS, security headers, HTTPS enforcement, validation sanitization, and `/api/v1` routing. |
+| Uvicorn API service | `backend/deploy/epic-messaging-api.service` | Runs the API on the VM, bound behind Nginx. |
+| Nginx reverse proxy | `backend/deploy/nginx/epic-messaging-api.conf` | Receives gateway traffic, applies public-edge rate limits, forwards to Uvicorn. |
+| PostgreSQL | Deployment/runbook | Stores application data and migration-created schema. |
+| Blockchain worker | `backend/deploy/epic-messaging-blockchain-worker.service` | Runs separately from FastAPI, reads pending anchor rows, submits contract transactions, records confirmations. |
+
+## Code Layering
 
 ```text
-FastAPI routes
-    -> Dependencies / current-user auth / rate limiting
-    -> Services
-    -> Repositories
-    -> Async SQLAlchemy
-    -> PostgreSQL
+HTTP request
+  -> FastAPI router
+  -> route dependencies
+  -> service workflow
+  -> repository query/persistence
+  -> AsyncSession transaction
+  -> PostgreSQL tables
 ```
 
 | Layer | Files | Responsibility |
 | --- | --- | --- |
-| App setup | `backend/app/main.py` | Creates FastAPI app, installs CORS, security headers, validation error sanitization, and `/api/v1` router |
-| Routes | `backend/app/api/v1/*.py` | HTTP contract, status codes, route-level dependencies, safe public errors |
-| Dependencies | `backend/app/api/deps.py` | DB session injection, Bearer token parsing, current-user authentication, rate-limit enforcement |
-| Services | `backend/app/services/*.py` | Business workflows for auth, tokens, passwords, messages, and audit logging |
-| Repositories | `backend/app/repositories/*.py` | SQLAlchemy query construction and persistence operations |
-| Models | `backend/app/models/*.py` | PostgreSQL schema mapped through SQLAlchemy ORM |
-| Schemas | `backend/app/schemas/*.py` | Pydantic request/response validation and serialization |
-| Migrations | `backend/alembic/*` | Database schema creation and evolution |
-| Tests | `backend/tests/*` | Unit, integration, and security evidence |
+| App setup | `backend/app/main.py` | CORS, HTTPS/security headers, validation sanitization, router registration. |
+| API routes | `backend/app/api/v1/*.py` | HTTP paths, status codes, request/response models, dependency wiring. |
+| Dependencies | `backend/app/api/deps.py` | Per-request DB session, Bearer token parsing, active-user loading, rate-limit checks. |
+| Services | `backend/app/services/*.py` | Business rules, transactions, authorization, audit calls, token workflows, anchor creation. |
+| Repositories | `backend/app/repositories/*.py` | SQLAlchemy query construction and persistence operations. |
+| Schemas | `backend/app/schemas/*.py` | Pydantic validation and serialization boundaries. |
+| Models | `backend/app/models/*.py` | PostgreSQL tables mapped through SQLAlchemy ORM. |
+| Migrations | `backend/alembic/versions/*.py` | Schema creation and evolution. |
+| Worker | `backend/app/workers/blockchain_worker.py` | Sepolia contract submission from pending anchor rows. |
+| Tests | `backend/tests/*` | Unit, integration, and security evidence. |
 
-## Request Flow
+## HTTP Request Lifecycle
+
+Every API request follows the same security order:
+
+1. The client sends JSON over HTTPS to the public hostname.
+2. The TLS gateway terminates the public certificate and forwards traffic to the VM.
+3. Nginx applies edge request limits and proxies to local Uvicorn.
+4. FastAPI middleware enforces HTTPS semantics when configured, adds security headers, and sanitizes validation errors.
+5. Route dependencies create an `AsyncSession`, parse Bearer credentials when required, and enforce route-specific rate limits.
+6. Pydantic validates body, path, and query input before service logic runs.
+7. Service functions apply business rules and object-level authorization.
+8. Repository functions build SQLAlchemy ORM queries against PostgreSQL.
+9. The service commits or rolls back the transaction.
+10. Response schemas serialize only the fields intended for the caller.
+
+This order matters because invalid input is rejected before DB workflows, authentication happens before protected service logic, and object authorization happens before message or anchor records are returned.
+
+## Authentication Lifecycle
 
 ```mermaid
-flowchart TD
-    Client["C++ / Web Client"] -->|HTTPS API request| Gateway["theburkenator SSL Gateway"]
-    Gateway -->|HTTP internal network| Nginx["Nginx on VM :80"]
-    Nginx -->|Proxy to localhost| FastAPI["FastAPI / Uvicorn :8000"]
+sequenceDiagram
+    participant C as Client
+    participant A as FastAPI auth route
+    participant S as Auth/token services
+    participant DB as PostgreSQL
 
-    FastAPI --> Routes["API Routers"]
-    Routes --> Deps["Auth Dependencies"]
-    Routes --> Services["Service Layer"]
-    Services --> Repos["Repository Layer"]
-    Repos --> DB[("PostgreSQL Docker Container")]
+    C->>A: POST /auth/register username/email/password
+    A->>S: validate request + hash password
+    S->>DB: insert user with Argon2id PHC hash
+    DB-->>S: committed user
+    S-->>A: safe user response
+    A-->>C: 201 Created
 
-    Services --> Audit["Audit Logging"]
-    Services --> Anchors["Pending Blockchain Anchors"]
-    DB --> Tables["Users, Refresh Sessions, Device Keys, Prekeys, Messages, Anchors, Audit Logs"]
+    C->>A: POST /auth/login username_or_email/password
+    A->>S: verify password and active user
+    S->>DB: load user by username/email
+    S->>DB: insert HMAC-hashed refresh session
+    S-->>A: JWT access token + raw refresh token
+    A-->>C: token response
 ```
 
-## Authentication Flow
+Important details:
 
-1. `POST /api/v1/auth/register` validates username, email, and password.
-2. `password_service.hash_password()` stores an Argon2id PHC password hash.
-3. `POST /api/v1/auth/login` checks the submitted password against the stored hash.
-4. `token_service.create_access_token()` issues a short-lived HS256 JWT access token.
-5. `token_service.create_refresh_token()` creates an opaque refresh token.
-6. `token_service.hash_refresh_token()` stores only an HMAC-SHA256 refresh-token hash in `refresh_sessions`.
-7. `POST /api/v1/auth/refresh` uses row locking to rotate the refresh token and revoke the old session.
-8. Protected routes call `get_current_user()`, which validates the Bearer access token and loads an active user from PostgreSQL.
+- Duplicate registration and login errors are generic.
+- Password hashes are Argon2id PHC strings.
+- Access tokens contain required signed claims and `type=access`.
+- Refresh-token DB rows contain HMAC hashes, not raw refresh tokens.
+- Refresh rotation revokes the old session and creates a new session under row lock.
+- Logout revokes the submitted refresh token without confirming whether it existed.
 
-Security-relevant behavior:
+Evidence: `backend/app/services/auth_service.py`, `backend/app/services/password_service.py`, `backend/app/services/token_service.py`, `backend/app/api/deps.py`, auth tests.
 
-- Login failures are generic: `Invalid credentials`.
-- Inactive users cannot log in or authenticate with an otherwise valid token.
-- Raw refresh tokens cannot be used as Bearer access tokens.
-- Refresh-token replay fails after rotation.
-- Logout returns success without revealing whether the submitted refresh token existed.
+## Public Key Relay Lifecycle
 
-## Public Key Relay Flow
+```mermaid
+sequenceDiagram
+    participant C as Authenticated client
+    participant K as Key routes/service
+    participant DB as PostgreSQL
 
-1. The authenticated user uploads public device key material with `PUT /api/v1/keys/devices/{device_id}`.
-2. Path `device_id` must match body `device_id`.
-3. Public key fields are validated as standard base64.
-4. Only public fields are stored: identity public key, identity signing public key, signed prekey, and signed prekey signature.
-5. The user uploads public one-time prekeys with `POST /api/v1/keys/devices/{device_id}/one-time-prekeys`.
-6. A requester fetches a target user's prekey bundle with `GET /api/v1/keys/users/{user_id}/devices/{device_id}/prekey-bundle`.
-7. If an unused one-time prekey exists, the backend marks it used inside the fetch workflow.
+    C->>K: PUT /keys/devices/{device_id}
+    K->>K: verify path/body device_id match
+    K->>K: validate public key fields as base64
+    K->>DB: upsert public device key
+    K-->>C: public device key response
 
-The backend never stores private keys or client-side Signal session state.
+    C->>K: POST /keys/devices/{device_id}/one-time-prekeys
+    K->>K: validate batch size and base64 public keys
+    K->>DB: store public one-time prekeys
+    K-->>C: created prekey records
 
-## Message Relay Flow
+    C->>K: GET /keys/users/{user_id}/devices/{device_id}/prekey-bundle
+    K->>DB: load active public device key + unused one-time prekey
+    K->>DB: mark one-time prekey used when present
+    K-->>C: public prekey bundle
+```
 
-1. The authenticated sender posts a direct message to `POST /api/v1/messages`.
-2. The request body contains `sender_device_id`, `recipient_user_id`, `recipient_device_id`, optional `consumed_one_time_prekey_id`, and `wire_payload_json`.
-3. The sender user ID is taken only from `current_user.id`; `sender_user_id` in the request body is rejected.
-4. The service verifies the recipient exists and is active.
-5. The service verifies sender and recipient devices are active.
-6. If `consumed_one_time_prekey_id` is provided, it must match a prekey already consumed for the recipient user/device.
-7. The backend stores `wire_payload_json` as an opaque encrypted payload.
-8. The backend derives a blockchain `record_id` and `digest` from encrypted/canonical message metadata and creates a pending anchor row.
-9. Sender/recipient list and fetch routes apply direct object-level access checks.
-10. Sender revocation hides the message from the recipient by setting `access_revoked_at`.
-11. Sender and recipient deletion are per-user visibility changes, not immediate hard deletion.
+Security properties:
 
-The backend validates the wire payload structure but does not decrypt it.
+- Only authenticated users upload keys.
+- Uploaded key material is public key/signature material only.
+- Private-key fields are not modeled or stored.
+- One-time prekey consumption is recorded in the backend database.
+- The backend cannot prove the encrypted payload used the consumed prekey; the client cryptography deliverable proves protocol correctness.
 
-Forwarding follows the same direct-message path after an extra access check on
-the original message. The forwarded row stores a new client-supplied
-`wire_payload_json` and server-controlled `forwarded_from_message_id`, so
-provenance is auditable without copying plaintext or decrypting the original.
+Evidence: `backend/app/api/v1/keys.py`, `backend/app/schemas/device_key.py`, `backend/app/schemas/one_time_prekey.py`, key route/repository tests.
 
-## Blockchain Anchor Flow
+## Message Send Lifecycle
 
-The backend provides integrity-evidence metadata for encrypted messages:
+```mermaid
+sequenceDiagram
+    participant C as Authenticated sender
+    participant M as Message route/service
+    participant DB as PostgreSQL
+    participant B as Anchor service
 
-1. Message send or forward stores a new encrypted direct message.
-2. In the same database transaction, the service computes `record_id = keccak256("message:" + message_id)`.
-3. The service computes `digest = keccak256(canonical encrypted message record)`, including forward lineage when present.
-4. The service creates or reuses a `blockchain_anchors` row with `status="pending"` and `chain="sepolia"`.
-5. The API returns quickly without contacting Sepolia.
-6. The backend blockchain worker reads pending anchors, calls the Solidity contract, and updates `transaction_hash`, `contract_address`, `status`, and `anchored_at`.
-7. Clients can check status through `GET /api/v1/messages/{message_id}/anchor` or `GET /api/v1/blockchain/anchors/{anchor_id}`.
+    C->>M: POST /messages encrypted wire_payload_json
+    M->>M: sender is current_user.id
+    M->>M: validate recipient active, devices active, prekey metadata valid
+    M->>DB: insert opaque encrypted message row
+    M->>B: create pending anchor for message
+    B->>DB: insert record_id + digest + status=pending
+    M->>DB: commit message and anchor atomically
+    M-->>C: 201 message response
+```
 
-`POST /api/v1/blockchain/anchors` is kept as a manual retry/demo endpoint. `POST /api/v1/blockchain/verify` checks submitted digest/root metadata against confirmed backend records; it does not perform a live chain query.
+Security properties:
 
-No plaintext message content is placed in the digest input or on chain. The current sibling blockchain folder contains the Solidity/demo side, while `app.workers.blockchain_worker` is the backend-owned process that submits pending anchors.
+- Request body cannot set `sender_user_id`.
+- Recipient user and sender/recipient devices must be active.
+- Optional `consumed_one_time_prekey_id` must match a recipient/device prekey that was already consumed by bundle fetch.
+- `wire_payload_json` is validated for structure and size, then stored as opaque encrypted data.
+- The backend does not decrypt or inspect plaintext.
+- A pending anchor is created in the same DB transaction as the message.
+
+Evidence: `backend/app/schemas/message.py`, `backend/app/services/message_service.py`, `backend/app/repositories/message_repository.py`, `backend/app/services/blockchain_anchor_service.py`, message and blockchain tests.
+
+## Message Read, Forward, Revoke, And Delete Lifecycles
+
+### Read And List
+
+- Inbox queries return messages visible to the authenticated recipient.
+- Sent queries return messages visible to the authenticated sender.
+- Direct message fetch uses sender/recipient visibility checks.
+- Inaccessible messages return safe not-found responses.
+
+### Forward
+
+1. The user requests a forward for an existing message ID.
+2. The service loads the original message only if visible to the current user.
+3. The request supplies a new encrypted `wire_payload_json` for the new recipient.
+4. The service creates a new message row with server-controlled `forwarded_from_message_id`.
+5. A new pending blockchain anchor is created for the forwarded message.
+
+Forwarding preserves auditable provenance without decrypting or copying plaintext.
+
+### Revoke
+
+- Only the sender can revoke recipient access.
+- Revocation sets `access_revoked_at`.
+- Recipient reads stop returning the revoked message.
+
+### Delete
+
+- Sender delete sets sender visibility state.
+- Recipient delete sets recipient visibility state.
+- Delete is not an immediate physical deletion because auditability and sender/recipient visibility are separate.
+
+Evidence: `backend/app/services/message_service.py`, `backend/app/repositories/message_repository.py`, message route/security tests.
+
+## Blockchain Anchor Lifecycle
+
+```mermaid
+sequenceDiagram
+    participant API as FastAPI message/anchor service
+    participant DB as PostgreSQL
+    participant W as Blockchain worker
+    participant E as Sepolia contract
+
+    API->>DB: insert pending anchor(record_id,digest,chain=sepolia)
+    W->>DB: SELECT pending anchor FOR UPDATE SKIP LOCKED
+    W->>W: choose merkle_root or digest as content hash
+    W->>E: storeHash(record_id, contentHash)
+    E-->>W: transaction receipt
+    W->>DB: update confirmed transaction_hash, contract_address, anchored_at
+```
+
+Backend hashing:
+
+- `derive_message_record_id(message_id)` returns `keccak256("message:" + message_id)`.
+- `derive_message_digest(message)` returns Keccak over canonical JSON containing message ID, sender/recipient IDs, device IDs, timestamp, encrypted `wire_payload_json`, and forwarding lineage.
+- Digest input excludes plaintext, private keys, and client ratchet/session state.
+
+Worker behaviour:
+
+- The worker imports `web3` lazily so normal API imports do not require blockchain runtime use.
+- `MessageFidelitySubmitter.from_settings()` requires Sepolia RPC URL, worker wallet private key, contract address, chain ID, gas limit, and receipt timeout.
+- Pending rows are locked with `FOR UPDATE SKIP LOCKED` to prevent duplicate submissions by parallel workers.
+- Successful receipts update `status="confirmed"`, `transaction_hash`, `contract_address`, `merkle_root`, and `anchored_at`.
+- Malformed anchors are marked failed; transient submission errors roll back unless configured to mark failed.
+
+Production deployment:
+
+- The production backend runs the blockchain worker as a separate service with required environment variables.
+- FastAPI keeps wallet credentials out of request handlers.
+- Sepolia/RPC/worker outages leave anchors pending; persisted pending rows are processed when the worker resumes.
+
+Evidence: `backend/app/core/blockchain_hashing.py`, `backend/app/services/blockchain_anchor_service.py`, `backend/app/workers/blockchain_worker.py`, `backend/deploy/epic-messaging-blockchain-worker.service`, blockchain tests.
+
+## Database Model Summary
+
+| Table/model | Purpose | Security notes |
+| --- | --- | --- |
+| `users` | Account identity and password hash | Stores Argon2id password hash, not plaintext password. |
+| `refresh_sessions` | Refresh-token session state | Stores HMAC hash, JTI, expiry, revocation time, IP/user-agent metadata. |
+| `device_keys` | Public device key bundle | Stores public identity/signing/signed-prekey material only. |
+| `one_time_prekeys` | Public one-time prekeys | Tracks consumption with `used_at`. |
+| `messages` | Opaque encrypted direct messages | Stores ciphertext payload and routing/visibility metadata. |
+| `blockchain_anchors` | Fidelity proof metadata | Stores record ID, digest/root, chain, status, tx hash, contract, anchor time. |
+| `audit_logs` | Security/audit events | Stores allowlisted event details. |
+
+Migrations:
+
+- `20260527_0001_create_initial_secure_messaging_schema.py`
+- `20260602_0002_extend_blockchain_anchor_metadata.py`
+- `20260602_0003_add_message_forwarding_lineage.py`
 
 ## Database Access Pattern
 
-The backend uses async SQLAlchemy 2.x with `asyncpg`. The database session dependency yields an `AsyncSession` per request. Services own transaction boundaries for business workflows; repositories build SQLAlchemy expressions and do not commit by themselves unless explicitly documented through service calls.
+- `backend/app/db/session.py` creates async SQLAlchemy engine/session handling.
+- Each request receives an `AsyncSession` from the dependency layer.
+- Services own commits and rollbacks.
+- Repositories build ORM statements and return models.
+- Refresh rotation and blockchain worker queue processing use row locking for concurrency-sensitive workflows.
+- The application expects a `postgresql+asyncpg://` database URL.
 
-The application refuses to start database sessions unless `DATABASE_URL` is set and uses the `postgresql+asyncpg://` scheme.
+## Security Controls In The Architecture
 
-## Security Controls
-
-- Argon2id password hashing.
-- Short-lived signed JWT access tokens.
-- HMAC-hashed refresh tokens with server-side rotation state.
-- Generic authentication failure responses.
-- Current-user dependency for protected routes.
-- Object-level access checks for messages and key ownership.
-- Strict Pydantic request models with `extra="forbid"`.
-- Base64 and UUID validation for key and path data.
-- LibSignal-style `wire_payload_json` structural validation.
-- Automatic pending blockchain anchors using Ethereum Keccak over canonical encrypted message records.
-- SQLAlchemy ORM expressions instead of string-built SQL.
-- Sanitized validation errors that avoid echoing secret inputs.
-- Security headers: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and `Cache-Control`.
-- Production CORS rejects wildcard origins.
-- Best-effort audit logging with allowlisted details.
-- In-memory fixed-window rate limiting.
+| Control | Where it sits |
+| --- | --- |
+| TLS/public certificate | Public gateway and client validation path |
+| Edge request limit | Nginx |
+| HTTPS/HSTS/security headers | FastAPI middleware |
+| CORS policy | FastAPI CORS setup and settings validation |
+| Request validation | Pydantic schemas before service logic |
+| Authentication | `get_current_user()` dependency and token service |
+| Authorization | Service/repository object predicates |
+| Password hashing | Auth/password service |
+| Refresh-token replay control | Auth service and refresh-session repository |
+| Injection prevention | SQLAlchemy repositories |
+| Sensitive data minimization | Schemas, audit service, validation sanitization |
+| Blockchain fidelity | Message service, anchor service, hashing helpers, worker |
 
 ## Explicit Non-Goals
 
-- No plaintext message storage.
-- No message decryption.
-- No private key storage.
-- No server-side Signal ratchet/session state.
-- No group chat or conversation model.
-- No direct Ethereum transaction submission from FastAPI request handlers.
-- Blockchain submission is asynchronous; pending anchors only become confirmed while the backend worker is running with valid Sepolia credentials.
-- No admin audit-log viewer.
-- No distributed rate limiter.
+- Plaintext message storage.
+- Message decryption.
+- Private key storage.
+- Server-side Signal ratchet/session state.
+- Group chat or conversation model.
+- Direct Ethereum transaction submission from FastAPI request handlers.
+- Admin audit-log viewer.
+- Distributed rate limiter.
+- MFA.

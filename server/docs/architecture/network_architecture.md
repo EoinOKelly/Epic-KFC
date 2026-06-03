@@ -26,7 +26,7 @@ flowchart LR
     FastAPI -->|"postgresql+asyncpg localhost"| Postgres[("PostgreSQL Docker :5432")]
 ```
 
-Public internet traffic to the gateway is encrypted. Traffic from the gateway to the VM is internal HTTP because SSL termination is handled by the provided gateway. Nginx is the public HTTP listener on the VM and proxies to FastAPI on `127.0.0.1:8000`. FastAPI should not be exposed directly to the public internet.
+Public internet traffic to the gateway is encrypted. Traffic from the gateway to the VM is internal HTTP because SSL termination is handled by the provided gateway. Nginx is the public HTTP listener on the VM and proxies to FastAPI on `127.0.0.1:8000`. FastAPI is not exposed directly to the public internet.
 
 ## Components
 
@@ -35,8 +35,8 @@ Public internet traffic to the gateway is encrypted. Traffic from the gateway to
 | Client | Browser, C++ client, or API client | HTTPS `443` to `kfc.theburkenator.com` | Client verifies gateway certificate through platform trust store |
 | Provided gateway | Public TLS termination and forwarding | HTTPS `443` public, HTTP to VM `:80` | Uses Let's Encrypt certificate for the public hostname |
 | Nginx on VM | Public HTTP listener on VM | `:80` | Proxies API/docs traffic to FastAPI |
-| FastAPI / Uvicorn | Backend application | Recommended `127.0.0.1:8000` | Authenticates users, validates API requests, enforces access control |
-| PostgreSQL Docker | Database | Recommended `127.0.0.1:5432` | Stores users, token-session hashes, public keys, encrypted payloads, audit logs |
+| FastAPI / Uvicorn | Backend application | `127.0.0.1:8000` | Authenticates users, validates API requests, enforces access control |
+| PostgreSQL Docker | Database | `127.0.0.1:5432` | Stores users, token-session hashes, public keys, encrypted payloads, audit logs |
 
 ## Request Flow
 
@@ -51,9 +51,9 @@ Public internet traffic to the gateway is encrypted. Traffic from the gateway to
 
 ## VM Ports
 
-Recommended exposed ports:
+Deployment port exposure:
 
-| Port | Should be public? | Purpose |
+| Port | Public exposure | Purpose |
 | --- | --- | --- |
 | `80/tcp` | Yes, to gateway/internal network as required | Nginx listener receiving gateway-forwarded traffic |
 | `8000/tcp` | No | FastAPI internal Uvicorn listener |
@@ -71,7 +71,7 @@ sudo ss -tulpn | grep ':5432'
 
 ## Nginx Role
 
-Nginx should be the public VM process that receives traffic from the gateway and forwards it to FastAPI:
+Nginx is the public VM process that receives traffic from the gateway and forwards it to FastAPI:
 
 ```nginx
 limit_req_zone $binary_remote_addr zone=epic_login_ip:10m rate=1r/m;
@@ -105,12 +105,12 @@ server {
 
 The repo includes a fuller Nginx config at `backend/deploy/nginx/epic-messaging-api.conf`. It applies IP-based limits to auth, refresh, prekey bundle, message send, and general API traffic.
 
-The exact VM config can differ, but the security requirements are:
+The deployed VM security requirements are:
 
 - Clients do not connect directly to Uvicorn.
 - Nginx rejects obvious IP-based floods before FastAPI work is spent.
 - FastAPI still applies authenticated per-user limits after `get_current_user`.
-- Proxy headers are set by Nginx. FastAPI should only trust forwarded scheme/IP headers from a trusted proxy.
+- Proxy headers are set by Nginx. FastAPI trusts forwarded scheme headers only when `TRUST_X_FORWARDED_PROTO=true` is set behind the trusted gateway.
 
 ## FastAPI Connectivity
 
@@ -120,7 +120,7 @@ Local development command:
 uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Recommended VM command behind Nginx:
+VM command behind Nginx:
 
 ```bash
 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
@@ -136,13 +136,13 @@ The backend uses:
 postgresql+asyncpg://...
 ```
 
-Recommended local Docker binding:
+Local Docker binding:
 
 ```bash
 docker run --name epic-postgres \
   -e POSTGRES_DB=secure_messages \
   -e POSTGRES_USER=secure_app_user \
-  -e POSTGRES_PASSWORD=change_me \
+  -e POSTGRES_PASSWORD=<database-password> \
   -p 127.0.0.1:5432:5432 \
   -d postgres:16
 ```
@@ -171,7 +171,7 @@ Implemented in code:
   - `Cache-Control: no-store`
   - `Permissions-Policy: geolocation=(), microphone=(), camera=()`
 
-The gateway/Nginx layer should still redirect HTTP to HTTPS and set its own HSTS policy for public traffic. The FastAPI controls provide defense in depth and testable evidence.
+The gateway/Nginx layer handles public HTTPS policy, while the FastAPI HTTPS/HSTS controls provide defense in depth and testable evidence.
 
 ## Layered Rate Limiting
 
@@ -184,7 +184,7 @@ The implemented design uses two layers:
 
 This is stronger than relying on FastAPI's in-memory limiter alone. Nginx protects the API before Python work is spent, while FastAPI can enforce limits that require knowing the authenticated user.
 
-Production note: if the provided gateway forwards many users through one source IP, Nginx may see the gateway IP instead of the true client IP. In that case, configure Nginx `real_ip_header` and `set_real_ip_from` only for trusted gateway addresses. Do not trust arbitrary client-supplied `X-Forwarded-For` values.
+Gateway note: when the provided gateway forwards many users through one source IP, Nginx sees the gateway IP instead of the true client IP. Nginx real-IP handling is restricted to trusted gateway addresses only. Arbitrary client-supplied `X-Forwarded-For` values are not trusted.
 
 ## External Services
 
@@ -194,7 +194,7 @@ The implemented backend depends on:
 - Nginx on the team VM
 - PostgreSQL
 
-No FastAPI request route currently calls an external blockchain node, email provider, cloud KMS, or third-party messaging service. Message send and forward create pending blockchain anchor rows in PostgreSQL, while the backend blockchain worker submits those rows to Sepolia. That worker should be the only backend component that holds blockchain wallet credentials and calls the Solidity contract.
+No FastAPI request route calls an external blockchain node, email provider, cloud KMS, or third-party messaging service. Message send and forward create pending blockchain anchor rows in PostgreSQL, while the backend blockchain worker submits those rows to Sepolia. The worker is the only backend component that holds blockchain wallet credentials and calls the Solidity contract.
 
 ## TLS Evidence Utility
 

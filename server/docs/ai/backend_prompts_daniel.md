@@ -849,8 +849,8 @@ Manual local PostgreSQL setup can be documented like:
 CREATE DATABASE secure_messages;
 CREATE DATABASE secure_messages_test;
 
-CREATE USER secure_app_user WITH PASSWORD 'local_dev_password';
-CREATE USER secure_app_test_user WITH PASSWORD 'local_test_password';
+CREATE USER secure_app_user WITH PASSWORD '<local-dev-password>';
+CREATE USER secure_app_test_user WITH PASSWORD '<local-test-password>';
 
 GRANT ALL PRIVILEGES ON DATABASE secure_messages TO secure_app_user;
 GRANT ALL PRIVILEGES ON DATABASE secure_messages_test TO secure_app_test_user;
@@ -5244,7 +5244,7 @@ REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 `.env.example` should include obvious local placeholders only:
 
 ```text
-JWT_SECRET_KEY=change_me_local_dev_only
+JWT_SECRET_KEY=<local-dev-jwt-secret>
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=15
 REFRESH_TOKEN_EXPIRE_DAYS=7
@@ -5465,8 +5465,8 @@ Step 6 should end with a standalone, tested token utility service only.
 >    - REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 >
 > 5. .env.example should include obvious local placeholders only:
->    - JWT_SECRET_KEY=change_me_local_dev_only
->    - REFRESH_TOKEN_HASH_SECRET=change_me_refresh_hash_secret_local_only
+>    - JWT_SECRET_KEY=<local-dev-jwt-secret>
+>    - REFRESH_TOKEN_HASH_SECRET=<local-dev-refresh-hash-secret>
 >    - JWT_ALGORITHM=HS256
 >    - ACCESS_TOKEN_EXPIRE_MINUTES=15
 >    - REFRESH_TOKEN_EXPIRE_DAYS=7

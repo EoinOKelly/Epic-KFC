@@ -229,7 +229,7 @@ Security relevance:
 
 - Public prekey material only.
 - `used_at` is set when the prekey bundle endpoint hands out a prekey.
-- The message send route may include `consumed_one_time_prekey_id`, but the backend cannot prove the ciphertext cryptographically used that prekey.
+- The message send route accepts `consumed_one_time_prekey_id`, but the backend cannot prove the ciphertext cryptographically used that prekey.
 
 Indexes/constraints:
 
@@ -348,7 +348,7 @@ Purpose: Alembic-managed migration tracking table.
 Security relevance:
 
 - Confirms the deployed database schema revision.
-- Should be checked before deployment to ensure code and database are aligned.
+- Final deployment validation checks this revision before the API starts.
 
 ## Sensitive Data Summary
 
@@ -383,7 +383,7 @@ alembic current
 alembic history
 ```
 
-Rollback should be used only in controlled local/test environments:
+Rollback is restricted to controlled local/test environments:
 
 ```bash
 alembic downgrade -1
