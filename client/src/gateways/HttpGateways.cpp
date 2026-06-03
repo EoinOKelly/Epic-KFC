@@ -649,7 +649,8 @@ QJsonObject HttpMessageGateway::sendBodyFor(const LocalMessage& draft, std::opti
 }
 
 LocalMessage HttpMessageGateway::messageFromJson(const QJsonObject& object, MessageDirection direction) const {
-    return {
+    const QString createdAt = object.value("created_at").toString();
+    LocalMessage message{
         object.value("id").toString(),
         object.value("sender_user_id").toString(),
         object.value("sender_device_id").toInt(),
@@ -659,7 +660,7 @@ LocalMessage HttpMessageGateway::messageFromJson(const QJsonObject& object, Mess
         object.value("consumed_one_time_prekey_id").isDouble()
             ? std::optional<int>(object.value("consumed_one_time_prekey_id").toInt())
             : std::nullopt,
-        QDateTime::fromString(object.value("created_at").toString(), Qt::ISODateWithMs),
+        QDateTime::fromString(createdAt, Qt::ISODateWithMs),
         object.value("access_revoked_at").toString(),
         object.value("sender_deleted_at").toString(),
         object.value("recipient_deleted_at").toString(),
@@ -668,6 +669,8 @@ LocalMessage HttpMessageGateway::messageFromJson(const QJsonObject& object, Mess
         {},
         direction
     };
+    message.createdAtRaw = createdAt;
+    return message;
 }
 
 MessageList HttpMessageGateway::messageListFromJson(const QJsonArray& array, MessageDirection direction) const {

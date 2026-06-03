@@ -172,6 +172,7 @@ struct LocalMessage {
     QString readAt;
     QString localSenderCopyWirePayloadJson;
     MessageDirection direction{MessageDirection::Received};
+    QString createdAtRaw;
 };
 
 struct BlockchainAnchor {

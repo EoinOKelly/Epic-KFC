@@ -1,6 +1,7 @@
 #include "services/Services.h"
 
 #include "support/ClientConstants.h"
+#include "support/EthereumHash.h"
 
 #include <QFile>
 #include <QRegularExpression>
@@ -626,6 +627,26 @@ void MessageService::download(const QString& messageId, const QString& path) {
 void MessageService::verify(const QString& messageId) {
     const bool loggedIn = m_sessionService.isLoggedIn();
     const QString accessToken = loggedIn ? m_sessionService.accessToken() : QString();
+    const auto cachedMessage = m_store.findMessage(messageId);
+    if (cachedMessage.succeeded() && cachedMessage.value().has_value()) {
+        const auto digest = EthereumHash::digestForMessage(*cachedMessage.value());
+        if (digest.failed()) {
+            emit m_events.commandFailed(digest.error());
+            return;
+        }
+
+        BlockchainAnchor publicAnchor;
+        publicAnchor.messageId = messageId;
+        publicAnchor.recordId = EthereumHash::recordIdForMessage(messageId);
+        publicAnchor.digest = digest.value();
+        publicAnchor.chain = "sepolia";
+        verifyPublicAnchor(messageId, publicAnchor);
+        return;
+    }
+    if (!loggedIn) {
+        emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorUnavailable).arg(messageId));
+        return;
+    }
 
     m_messageGateway.fetchMessageAnchor(accessToken, messageId, [this, accessToken, messageId](Result<BlockchainAnchor> anchorResult) {
         if (anchorResult.failed()) {
@@ -652,29 +673,38 @@ void MessageService::verify(const QString& messageId) {
             return;
         }
 
-        m_messageGateway.verifyAnchor(accessToken, anchor, [this, messageId](Result<BlockchainVerification> verificationResult) {
-            if (verificationResult.failed()) {
-                emit m_events.commandFailed(verificationResult.error());
-                return;
-            }
+        verifyPublicAnchor(messageId, anchor);
+    });
+}
 
-            const BlockchainVerification verification = verificationResult.value();
-            if (!verification.valid) {
-                emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorMismatch).arg(messageId));
-                return;
-            }
+void MessageService::verifyPublicAnchor(const QString& messageId, const BlockchainAnchor& anchor) {
+    m_messageGateway.verifyAnchor(QString(), anchor, [this, messageId](Result<BlockchainVerification> verificationResult) {
+        if (verificationResult.failed()) {
+            emit m_events.commandFailed(verificationResult.error());
+            return;
+        }
 
-            if (!verification.transactionHash.isEmpty()) {
-                emit m_events.fidelityStatusUpdated(
-                    messageId,
-                    QString(AppText::AnchorVerifiedWithTransaction).arg(messageId, verification.chain, verification.status, verification.transactionHash));
-                return;
-            }
+        const BlockchainVerification verification = verificationResult.value();
+        if (!verification.valid) {
+            emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorMismatch).arg(messageId));
+            return;
+        }
 
+        if (verification.status.compare("confirmed", Qt::CaseInsensitive) != 0) {
+            emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorPending).arg(messageId, verification.status, verification.chain));
+            return;
+        }
+
+        if (!verification.transactionHash.isEmpty()) {
             emit m_events.fidelityStatusUpdated(
                 messageId,
-                QString(AppText::AnchorVerified).arg(messageId, verification.chain, verification.status));
-        });
+                QString(AppText::AnchorVerifiedWithTransaction).arg(messageId, verification.chain, verification.status, verification.transactionHash));
+            return;
+        }
+
+        emit m_events.fidelityStatusUpdated(
+            messageId,
+            QString(AppText::AnchorVerified).arg(messageId, verification.chain, verification.status));
     });
 }
 

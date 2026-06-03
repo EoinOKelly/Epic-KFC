@@ -8,6 +8,7 @@
 #include "services/Services.h"
 #include "storage/JsonLocalStore.h"
 #include "support/ClientConstants.h"
+#include "support/EthereumHash.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -84,6 +85,7 @@ public:
     Result<BlockchainVerification> verificationResult = Result<BlockchainVerification>::failure({ErrorCode::OperationFailed, "not configured"});
     bool fetchCalled{false};
     bool verifyCalled{false};
+    std::optional<BlockchainAnchor> verifiedAnchor;
 
     void sendMessage(const QString&, const LocalMessage&, std::optional<int>, GatewayCallback<LocalMessage> callback) override {
         callback(Result<LocalMessage>::failure({ErrorCode::OperationFailed, "not used"}));
@@ -118,8 +120,9 @@ public:
         callback(anchorResult);
     }
 
-    void verifyAnchor(const QString&, const BlockchainAnchor&, GatewayCallback<BlockchainVerification> callback) override {
+    void verifyAnchor(const QString&, const BlockchainAnchor& anchor, GatewayCallback<BlockchainVerification> callback) override {
         verifyCalled = true;
+        verifiedAnchor = anchor;
         callback(verificationResult);
     }
 };
@@ -181,6 +184,26 @@ BlockchainVerification testVerification(bool valid) {
         "0x2222222222222222222222222222222222222222222222222222222222222222",
         "0x3333333333333333333333333333333333333333",
         "2026-06-03T12:00:00Z"
+    };
+}
+
+LocalMessage cachedVerifiableMessage(const QString& messageId) {
+    return {
+        messageId,
+        "fa963bc9-32f1-40ae-a330-cb2c2ecf2caf",
+        1,
+        "1d291623-8e18-46d3-ab76-ffa9f3954789",
+        1,
+        "{\"ciphertext\":\"abc\"}",
+        std::nullopt,
+        QDateTime::fromString("2026-06-03T12:00:00.000Z", Qt::ISODateWithMs),
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        MessageDirection::Received
     };
 }
 
@@ -674,6 +697,9 @@ void testLocalMessageVisibility() {
 
 void testBlockchainVerificationFlow() {
     const QString messageId = "ccd07804-e033-4a7b-9ae9-24af64997c91";
+    expect(
+        EthereumHash::recordIdForMessage(messageId) == "0x739cdc61117c4850149f30482c7621d70143c4a0c886a860d791c4648aaecde7",
+        "ethereum hash derives backend message record id");
 
     {
         auto fixture = createVerificationFixture("client-test-verify-pending.json");
@@ -690,11 +716,26 @@ void testBlockchainVerificationFlow() {
         auto fixture = createVerificationFixture("client-test-verify-logged-out.json", false);
         fixture->messageGateway.anchorResult = Result<BlockchainAnchor>::success(testAnchor("pending"));
         fixture->messageService.verify(messageId);
-        const bool loggedOutVerifyAllowed = fixture->messageGateway.fetchCalled
+        const bool loggedOutUncachedVerifyDoesNotUseProtectedLookup = !fixture->messageGateway.fetchCalled
             && !fixture->messageGateway.verifyCalled
             && !fixture->commandError.has_value()
-            && fixture->fidelityStatus.contains("pending", Qt::CaseInsensitive);
-        expect(loggedOutVerifyAllowed, "verify works without a logged-in session");
+            && fixture->fidelityStatus.contains("No blockchain anchor", Qt::CaseInsensitive);
+        expect(loggedOutUncachedVerifyDoesNotUseProtectedLookup, "logged-out uncached verify avoids protected message anchor lookup");
+        QFile::remove(fixture->statePath);
+    }
+
+    {
+        auto fixture = createVerificationFixture("client-test-verify-cached-logged-out.json", false);
+        fixture->store.saveMessage(cachedVerifiableMessage(messageId));
+        fixture->messageGateway.verificationResult = Result<BlockchainVerification>::success(testVerification(true));
+        fixture->messageService.verify(messageId);
+        const bool cachedVerifyUsedPublicPath = !fixture->messageGateway.fetchCalled
+            && fixture->messageGateway.verifyCalled
+            && fixture->messageGateway.verifiedAnchor.has_value()
+            && fixture->messageGateway.verifiedAnchor->recordId == EthereumHash::recordIdForMessage(messageId)
+            && fixture->messageGateway.verifiedAnchor->digest == "0xc57d3186dd4d7e03e3437697f65d2e73819a35c6d2a5985874c9759a4422355a"
+            && fixture->fidelityStatus.contains("verified", Qt::CaseInsensitive);
+        expect(cachedVerifyUsedPublicPath, "cached logged-out verify avoids protected message anchor lookup");
         QFile::remove(fixture->statePath);
     }
 

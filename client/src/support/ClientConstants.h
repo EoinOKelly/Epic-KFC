@@ -221,6 +221,7 @@ inline const QString RecipientDeviceId = "recipientDeviceId";
 inline const QString WirePayloadJson = "wirePayloadJson";
 inline const QString ConsumedOneTimePreKeyId = "consumedOneTimePreKeyId";
 inline const QString CreatedAt = "createdAt";
+inline const QString CreatedAtRaw = "createdAtRaw";
 inline const QString AccessRevokedAt = "accessRevokedAt";
 inline const QString SenderDeletedAt = "senderDeletedAt";
 inline const QString RecipientDeletedAt = "recipientDeletedAt";

@@ -184,6 +184,7 @@ QJsonObject messageToJson(const LocalMessage& message) {
         {StorageKeys::WirePayloadJson, message.wirePayloadJson},
         {StorageKeys::ConsumedOneTimePreKeyId, message.consumedOneTimePreKeyId.has_value() ? QJsonValue(*message.consumedOneTimePreKeyId) : QJsonValue::Null},
         {StorageKeys::CreatedAt, message.createdAt.toUTC().toString(Qt::ISODateWithMs)},
+        {StorageKeys::CreatedAtRaw, message.createdAtRaw},
         {StorageKeys::AccessRevokedAt, message.accessRevokedAt},
         {StorageKeys::SenderDeletedAt, message.senderDeletedAt},
         {StorageKeys::RecipientDeletedAt, message.recipientDeletedAt},
@@ -212,7 +213,8 @@ LocalMessage messageFromJson(const QJsonObject& object) {
         object.value(StorageKeys::DeletedAt).toString(),
         object.value(StorageKeys::ReadAt).toString(),
         object.value(StorageKeys::LocalSenderCopyWirePayloadJson).toString(),
-        object.value("direction").toString() == "sent" ? MessageDirection::Sent : MessageDirection::Received
+        object.value("direction").toString() == "sent" ? MessageDirection::Sent : MessageDirection::Received,
+        object.value(StorageKeys::CreatedAtRaw).toString()
     };
 }
 
