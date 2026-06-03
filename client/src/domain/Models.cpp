@@ -33,6 +33,7 @@ const CommandLookup& commandLookup() {
         {CommandNames::Verify.toStdString(), CommandType::Verify},
         {CommandNames::Sync.toStdString(), CommandType::Sync},
         {CommandNames::Cancel.toStdString(), CommandType::Cancel},
+        {CommandNames::Back.toStdString(), CommandType::Back},
         {CommandNames::Exit.toStdString(), CommandType::Exit},
     };
     return commands;

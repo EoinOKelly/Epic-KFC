@@ -3,6 +3,7 @@
 #include "support/ClientConstants.h"
 
 #include <QFile>
+#include <QRegularExpression>
 #include <QTextStream>
 
 #include <algorithm>
@@ -18,6 +19,11 @@ bool isAlreadyUploadedPreKeyError(const ClientError& error) {
     const bool mentionsExisting = error.message.contains("already", Qt::CaseInsensitive)
         || error.message.contains("exists", Qt::CaseInsensitive);
     return isHttpError && isConflict && mentionsPreKey && mentionsExisting;
+}
+
+bool isValidEthereumTransactionHash(const QString& value) {
+    static const QRegularExpression pattern(QStringLiteral("^0x[0-9a-fA-F]{64}$"));
+    return pattern.match(value).hasMatch();
 }
 }
 
@@ -519,7 +525,7 @@ void MessageService::forwardToAddress(const QString& messageId, const UserAddres
         emit m_events.commandFailed(device.error());
         return;
     }
-    const auto plaintext = m_cryptoProvider.decrypt(m_sessionService.currentUserId(), device.value(), *found.value(), oneTimePreKeyFor(*found.value()));
+    const auto plaintext = decryptForCurrentUser(device.value(), *found.value());
     if (plaintext.failed()) {
         emit m_events.cryptoOperationFailed(plaintext.error());
         return;
@@ -594,7 +600,7 @@ void MessageService::download(const QString& messageId, const QString& path) {
         emit m_events.commandFailed(device.error());
         return;
     }
-    const auto plaintext = m_cryptoProvider.decrypt(m_sessionService.currentUserId(), device.value(), *found.value(), oneTimePreKeyFor(*found.value()));
+    const auto plaintext = decryptForCurrentUser(device.value(), *found.value());
     if (plaintext.failed()) {
         emit m_events.cryptoOperationFailed(plaintext.error());
         return;
@@ -610,11 +616,9 @@ void MessageService::download(const QString& messageId, const QString& path) {
 }
 
 void MessageService::verify(const QString& messageId) {
-    if (!requireSession()) {
-        return;
-    }
+    const QString accessToken = m_sessionService.isLoggedIn() ? m_sessionService.accessToken() : QString();
 
-    m_messageGateway.fetchMessageAnchor(m_sessionService.accessToken(), messageId, [this, messageId](Result<BlockchainAnchor> anchorResult) {
+    m_messageGateway.fetchMessageAnchor(accessToken, messageId, [this, accessToken, messageId](Result<BlockchainAnchor> anchorResult) {
         if (anchorResult.failed()) {
             if (anchorResult.error().code == ErrorCode::NotFound) {
                 emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorUnavailable).arg(messageId));
@@ -634,8 +638,12 @@ void MessageService::verify(const QString& messageId) {
             emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorPending).arg(messageId, anchor.status, anchor.chain));
             return;
         }
+        if (!isValidEthereumTransactionHash(anchor.transactionHash)) {
+            emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorPending).arg(messageId, "pending", anchor.chain));
+            return;
+        }
 
-        m_messageGateway.verifyAnchor(m_sessionService.accessToken(), anchor, [this, messageId](Result<BlockchainVerification> verificationResult) {
+        m_messageGateway.verifyAnchor(accessToken, anchor, [this, messageId](Result<BlockchainVerification> verificationResult) {
             if (verificationResult.failed()) {
                 emit m_events.commandFailed(verificationResult.error());
                 return;
@@ -787,6 +795,22 @@ Result<QString> MessageService::createLocalSenderCopy(const DeviceKeyMaterial& d
         return Result<QString>::failure(encrypted.error());
     }
     return Result<QString>::success(encrypted.value().wirePayloadJson);
+}
+
+Result<QString> MessageService::decryptForCurrentUser(const DeviceKeyMaterial& device, const LocalMessage& message) {
+    const bool sentByCurrentUser = message.senderUserId == m_sessionService.currentUserId();
+    if (!sentByCurrentUser) {
+        return m_cryptoProvider.decrypt(m_sessionService.currentUserId(), device, message, oneTimePreKeyFor(message));
+    }
+
+    if (message.localSenderCopyWirePayloadJson.isEmpty()) {
+        return Result<QString>::failure({ErrorCode::CryptoError, AppText::SentMessageLocalCopyUnavailable});
+    }
+
+    LocalMessage senderCopy = message;
+    senderCopy.wirePayloadJson = message.localSenderCopyWirePayloadJson;
+    senderCopy.consumedOneTimePreKeyId = std::nullopt;
+    return m_cryptoProvider.decrypt(m_sessionService.currentUserId(), device, senderCopy, std::nullopt);
 }
 
 LocalMessage MessageService::draftFor(const QString& recipientUserId, int recipientDeviceId, const QString& wirePayloadJson) const {

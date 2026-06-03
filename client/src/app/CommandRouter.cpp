@@ -29,6 +29,33 @@ QString joinedArguments(const std::vector<QString>& arguments, std::size_t first
     return result;
 }
 
+QString withoutConversationPromptEcho(QString line, const QString& username) {
+    if (username.isEmpty()) {
+        return line;
+    }
+
+    const QString prompt = QString(AppText::ConversationPrompt).arg(username);
+    if (line.startsWith(prompt)) {
+        return line.mid(prompt.size()).trimmed();
+    }
+
+    const QString compactPrompt = QString("[%1] >").arg(username);
+    if (!line.startsWith(compactPrompt)) {
+        return line;
+    }
+
+    QString stripped = line.mid(compactPrompt.size()).trimmed();
+    constexpr ushort RightArrowCodePoint = 0x2192;
+    if (stripped.startsWith(QChar(RightArrowCodePoint))) {
+        stripped.remove(0, 1);
+    }
+    return stripped.trimmed();
+}
+
+bool isClientOutputEcho(const QString& line) {
+    return line.trimmed() == AppText::SendingMessage;
+}
+
 const std::set<CommandType>& zeroArgumentCommands() {
     static const std::set<CommandType> commands{
         CommandType::Help,
@@ -40,6 +67,7 @@ const std::set<CommandType>& zeroArgumentCommands() {
         CommandType::Sent,
         CommandType::Sync,
         CommandType::Cancel,
+        CommandType::Back,
         CommandType::Exit,
     };
     return commands;
@@ -160,7 +188,10 @@ void CommandRouter::handleCommandMode(const QString& line) {
     const bool activeConversationText = !m_activeConversationUsername.isEmpty()
         && !trimmed.startsWith(CommandText::SlashPrefix);
     if (activeConversationText) {
-        m_controller.sendMessage(m_activeConversationUsername, line);
+        const QString body = withoutConversationPromptEcho(line, m_activeConversationUsername);
+        if (!body.trimmed().isEmpty() && !isClientOutputEcho(body)) {
+            m_controller.sendMessage(m_activeConversationUsername, body);
+        }
         return;
     }
 
@@ -267,7 +298,20 @@ void CommandRouter::handleMessageComposition(const QString& line) {
         return;
     }
 
-    m_compositionLines.push_back(line);
+    const bool backRequested = trimmed.compare(CommandText::BackCommand, Qt::CaseInsensitive) == 0;
+    if (backRequested) {
+        m_inputMode = InputMode::Command;
+        m_compositionLines.clear();
+        m_controller.handleCommand({CommandType::Back, CommandNames::Back.toStdString(), {}, line});
+        return;
+    }
+
+    const QString bodyLine = withoutConversationPromptEcho(line, m_compositionRecipientUsername);
+    if (bodyLine.trimmed().isEmpty() || isClientOutputEcho(bodyLine)) {
+        return;
+    }
+
+    m_compositionLines.push_back(bodyLine);
     emit m_events.messagePrepared(
         m_compositionRecipientUsername,
         DefaultDeviceId,

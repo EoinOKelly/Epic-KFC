@@ -183,16 +183,18 @@ BlockchainVerification testVerification(bool valid) {
     };
 }
 
-std::unique_ptr<VerificationFixture> createVerificationFixture(const QString& fileName) {
+std::unique_ptr<VerificationFixture> createVerificationFixture(const QString& fileName, bool seedSession = true) {
     const QString path = QDir::current().filePath(fileName);
     QFile::remove(path);
 
-    JsonLocalStore seed(path, false);
-    const AuthSession session{
-        {"user-1", "alice", "alice@example.test"},
-        {"access-token", "refresh-token", "bearer", 3600}
-    };
-    seed.saveSession(session);
+    if (seedSession) {
+        JsonLocalStore seed(path, false);
+        const AuthSession session{
+            {"user-1", "alice", "alice@example.test"},
+            {"access-token", "refresh-token", "bearer", 3600}
+        };
+        seed.saveSession(session);
+    }
 
     return std::make_unique<VerificationFixture>(path);
 }
@@ -210,6 +212,9 @@ void testParser() {
 
     const auto msg = parser.parse("/msg bob");
     expect(msg.succeeded() && msg.value().type == CommandType::Msg && msg.value().arguments.at(0) == "bob", "parser accepts IRC-style username message command");
+
+    const auto back = parser.parse("/back");
+    expect(back.succeeded() && back.value().type == CommandType::Back, "parser accepts back command");
 
     const auto quoted = parser.parse("/download msg-1 \"C:/Temp/out file.txt\"");
     expect(quoted.succeeded() && quoted.value().arguments.at(1) == "C:/Temp/out file.txt", "parser handles quoted arguments");
@@ -311,6 +316,37 @@ void testCryptoWireShape() {
     };
     const auto decrypted = crypto.decrypt("bob", bob.value(), received, std::nullopt);
     expect(decrypted.succeeded() && decrypted.value() == "hello", "crypto decrypts first X3DH message");
+
+    const auto secondEncrypted = crypto.encrypt("alice", alice.value(), bundle, "second hello");
+    const QJsonObject secondEnvelope = secondEncrypted.succeeded()
+        ? QJsonDocument::fromJson(secondEncrypted.value().wirePayloadJson.toUtf8()).object()
+        : QJsonObject{};
+    const QJsonObject secondWire = secondEncrypted.succeeded()
+        ? wireBodyFromEnvelope(secondEncrypted.value().wirePayloadJson)
+        : QJsonObject{};
+    LocalMessage secondReceived{
+        "message-1b",
+        "alice",
+        alice.value().deviceId,
+        "bob",
+        bob.value().deviceId,
+        secondEncrypted.succeeded() ? secondEncrypted.value().wirePayloadJson : QString{},
+        secondEncrypted.succeeded() ? secondEncrypted.value().consumedOneTimePreKeyId : std::nullopt,
+        QDateTime::currentDateTimeUtc(),
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        MessageDirection::Received
+    };
+    const auto secondDecrypted = secondEncrypted.succeeded()
+        ? crypto.decrypt("bob", bob.value(), secondReceived, std::nullopt)
+        : Result<QString>::failure({ErrorCode::CryptoError, "Second encryption failed."});
+    const bool secondMessageUsesPreKeyEnvelope = secondEnvelope.value(CryptoText::WireType).toInt() == CryptoText::WirePreKeyWhisperMessageType
+        && secondWire.value(CryptoText::WireX3dh).isObject();
+    expect(secondMessageUsesPreKeyEnvelope && secondDecrypted.succeeded() && secondDecrypted.value() == "second hello", "crypto decrypts second message without persisted ratchet state");
 
     PreKeyBundle selfBundle{
         "alice",
@@ -553,6 +589,18 @@ void testBlockchainVerificationFlow() {
     }
 
     {
+        auto fixture = createVerificationFixture("client-test-verify-logged-out.json", false);
+        fixture->messageGateway.anchorResult = Result<BlockchainAnchor>::success(testAnchor("pending"));
+        fixture->messageService.verify(messageId);
+        const bool loggedOutVerifyAllowed = fixture->messageGateway.fetchCalled
+            && !fixture->messageGateway.verifyCalled
+            && !fixture->commandError.has_value()
+            && fixture->fidelityStatus.contains("pending", Qt::CaseInsensitive);
+        expect(loggedOutVerifyAllowed, "verify works without a logged-in session");
+        QFile::remove(fixture->statePath);
+    }
+
+    {
         auto fixture = createVerificationFixture("client-test-verify-confirmed.json");
         fixture->messageGateway.anchorResult = Result<BlockchainAnchor>::success(testAnchor("confirmed"));
         fixture->messageGateway.verificationResult = Result<BlockchainVerification>::success(testVerification(true));
@@ -562,6 +610,19 @@ void testBlockchainVerificationFlow() {
             && fixture->fidelityStatus.contains("verified", Qt::CaseInsensitive)
             && fixture->fidelityStatus.contains("0x2222", Qt::CaseInsensitive);
         expect(confirmedVerified, "verify checks confirmed anchors through blockchain endpoint");
+        QFile::remove(fixture->statePath);
+    }
+
+    {
+        auto fixture = createVerificationFixture("client-test-verify-invalid-transaction.json");
+        BlockchainAnchor anchor = testAnchor("confirmed");
+        anchor.transactionHash = "not-a-transaction";
+        fixture->messageGateway.anchorResult = Result<BlockchainAnchor>::success(anchor);
+        fixture->messageService.verify(messageId);
+        const bool invalidTransactionWaits = fixture->messageGateway.fetchCalled
+            && !fixture->messageGateway.verifyCalled
+            && fixture->fidelityStatus.contains("pending", Qt::CaseInsensitive);
+        expect(invalidTransactionWaits, "verify waits when anchor transaction hash is invalid");
         QFile::remove(fixture->statePath);
     }
 

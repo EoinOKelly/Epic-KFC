@@ -267,10 +267,7 @@ void MockMessageGateway::deleteMessage(const QString& accessToken, const QString
 
 void MockMessageGateway::fetchMessageAnchor(const QString& accessToken, const QString& messageId, GatewayCallback<BlockchainAnchor> callback) {
     later(this, [accessToken, messageId, callback = std::move(callback)]() mutable {
-        if (accessToken.isEmpty()) {
-            callback(Result<BlockchainAnchor>::failure({ErrorCode::AuthRequired, AppText::AuthRequired}));
-            return;
-        }
+        Q_UNUSED(accessToken)
         callback(Result<BlockchainAnchor>::success({
             QString("mock-anchor-%1").arg(messageId),
             messageId,
@@ -288,10 +285,7 @@ void MockMessageGateway::fetchMessageAnchor(const QString& accessToken, const QS
 
 void MockMessageGateway::verifyAnchor(const QString& accessToken, const BlockchainAnchor& anchor, GatewayCallback<BlockchainVerification> callback) {
     later(this, [accessToken, anchor, callback = std::move(callback)]() mutable {
-        if (accessToken.isEmpty()) {
-            callback(Result<BlockchainVerification>::failure({ErrorCode::AuthRequired, AppText::AuthRequired}));
-            return;
-        }
+        Q_UNUSED(accessToken)
         callback(Result<BlockchainVerification>::success({
             anchor.status == "confirmed",
             anchor.chain,

@@ -40,8 +40,8 @@ inline const QString ConversationPrompt = "[%1] > ";
 inline const QString PasswordPrompt = "password> ";
 inline const QString MessagePrompt = "message> ";
 inline const QString Greeting = "Epic KFC secure messaging client. Type /help to begin.";
-inline const QString MockStatus = "Mock mode is active. No backend is required.";
-inline const QString RealStatus = "Real mode is active. Backend API: %1";
+inline const QString MockStatus = "Mock mode is active. No backend is required. Device ID: %1";
+inline const QString RealStatus = "Real mode is active. Backend API: %1. Device ID: %2";
 inline const QString AuthRequired = "You must /login before using this command.";
 inline const QString UsernameResolveUnavailable = "Username lookup failed. Check the username and login state.";
 inline const QString EmptyUsername = "Username must not be empty.";
@@ -72,6 +72,7 @@ inline const QString NotLoggedIn = "Not logged in.";
 inline const QString LoggedInAs = "Logged in as %1 (%2).";
 inline const QString RegisteredUser = "Registered %1. Use /login to start a session.";
 inline const QString SessionEnded = "Session ended.";
+inline const QString ReturnedToMainMenu = "Returned to the main menu.";
 inline const QString KeysUploaded = "Device keys uploaded for device %1.";
 inline const QString NativeCryptoUnavailable = "Real mode requires OpenSSL-backed native crypto. Install OpenSSL 3 development libraries and rebuild the client.";
 inline const QString CompositionStarted = "Composing message for %1. Type body lines, /send to submit, or /cancel.";
@@ -95,6 +96,7 @@ inline const QString ConversationLogHeader = "Conversation with %1 (%2), page %3
 inline const QString ConversationLogLine = "  [%1] %2 %3: %4";
 inline const QString ConversationLogDecryptFailed = "  [%1] %2 %3: <could not decrypt: %4>";
 inline const QString SentMessageCiphertextOnly = "<sent message encrypted for recipient>";
+inline const QString SentMessageLocalCopyUnavailable = "This sent message was cached before local sender-copy encryption was available.";
 inline const QString MessageHeader = "Messages:";
 inline const QString ErrorPrefix = "Error [";
 inline const QString ErrorSeparator = "]: ";
@@ -132,6 +134,7 @@ inline const QString Help =
     "  /verify <messageId>\n"
     "  /sync\n"
     "  /cancel\n"
+    "  /back\n"
     "  /exit";
 }
 
@@ -142,6 +145,7 @@ inline constexpr QChar Escape = '\\';
 inline constexpr QChar Space = ' ';
 inline const QString SubmitCommand = "/send";
 inline const QString CancelCommand = "/cancel";
+inline const QString BackCommand = "/back";
 inline const QString HelpPrompt = "Type /help to see available commands.";
 inline const QString EmptyIgnored = "Empty input is ignored. %1";
 inline const QString MissingSlash = "Commands must start with /. %1";
@@ -176,6 +180,7 @@ inline const QString Trust = "trust";
 inline const QString Verify = "verify";
 inline const QString Sync = "sync";
 inline const QString Cancel = "cancel";
+inline const QString Back = "back";
 inline const QString Exit = "exit";
 }
 
