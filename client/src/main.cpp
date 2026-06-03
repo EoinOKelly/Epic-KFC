@@ -150,7 +150,7 @@ int main(int argc, char* argv[]) {
     ConsolePresenter presenter(events, config.showRawErrors);
     ConsoleInputWorker inputWorker;
 
-    QObject::connect(&inputWorker, &ConsoleInputWorker::lineRead, &router, &CommandRouter::handleLine);
+    QObject::connect(&inputWorker, &ConsoleInputWorker::lineRead, &router, &CommandRouter::handleLine, Qt::QueuedConnection);
     QObject::connect(&events, &EventBus::exitRequested, &app, &QCoreApplication::quit);
 
     inputWorker.start();
