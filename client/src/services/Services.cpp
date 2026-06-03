@@ -1,7 +1,6 @@
 #include "services/Services.h"
 
 #include "support/ClientConstants.h"
-#include "support/EthereumHash.h"
 
 #include <QFile>
 #include <QRegularExpression>
@@ -627,31 +626,16 @@ void MessageService::download(const QString& messageId, const QString& path) {
 void MessageService::verify(const QString& messageId) {
     const bool loggedIn = m_sessionService.isLoggedIn();
     const QString accessToken = loggedIn ? m_sessionService.accessToken() : QString();
-    const auto cachedMessage = m_store.findMessage(messageId);
-    if (cachedMessage.succeeded() && cachedMessage.value().has_value()) {
-        const auto digest = EthereumHash::digestForMessage(*cachedMessage.value());
-        if (digest.failed()) {
-            emit m_events.commandFailed(digest.error());
-            return;
-        }
 
-        BlockchainAnchor publicAnchor;
-        publicAnchor.messageId = messageId;
-        publicAnchor.recordId = EthereumHash::recordIdForMessage(messageId);
-        publicAnchor.digest = digest.value();
-        publicAnchor.chain = "sepolia";
-        verifyPublicAnchor(messageId, publicAnchor);
-        return;
-    }
-    if (!loggedIn) {
-        emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorUnavailable).arg(messageId));
-        return;
-    }
-
-    m_messageGateway.fetchMessageAnchor(accessToken, messageId, [this, accessToken, messageId](Result<BlockchainAnchor> anchorResult) {
+    m_messageGateway.fetchMessageAnchor(accessToken, messageId, [this, messageId](Result<BlockchainAnchor> anchorResult) {
         if (anchorResult.failed()) {
             if (anchorResult.error().code == ErrorCode::NotFound) {
                 emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorUnavailable).arg(messageId));
+                return;
+            }
+            const auto cached = m_store.findMessage(messageId);
+            if (cached.succeeded() && cached.value().has_value() && !cached.value()->cachedAnchor.digest.isEmpty()) {
+                verifyPublicAnchor(messageId, cached.value()->cachedAnchor);
                 return;
             }
             emit m_events.commandFailed(anchorResult.error());
@@ -659,6 +643,12 @@ void MessageService::verify(const QString& messageId) {
         }
 
         const BlockchainAnchor anchor = anchorResult.value();
+        const auto cached = m_store.findMessage(messageId);
+        if (cached.succeeded() && cached.value().has_value()) {
+            LocalMessage message = *cached.value();
+            message.cachedAnchor = anchor;
+            m_store.saveMessage(message);
+        }
         const QString status = anchor.status.toLower();
         if (status == "failed") {
             emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorFailed).arg(messageId, anchor.chain));

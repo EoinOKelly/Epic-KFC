@@ -716,26 +716,11 @@ void testBlockchainVerificationFlow() {
         auto fixture = createVerificationFixture("client-test-verify-logged-out.json", false);
         fixture->messageGateway.anchorResult = Result<BlockchainAnchor>::success(testAnchor("pending"));
         fixture->messageService.verify(messageId);
-        const bool loggedOutUncachedVerifyDoesNotUseProtectedLookup = !fixture->messageGateway.fetchCalled
+        const bool loggedOutVerifyUsesPublicAnchorLookup = fixture->messageGateway.fetchCalled
             && !fixture->messageGateway.verifyCalled
             && !fixture->commandError.has_value()
-            && fixture->fidelityStatus.contains("No blockchain anchor", Qt::CaseInsensitive);
-        expect(loggedOutUncachedVerifyDoesNotUseProtectedLookup, "logged-out uncached verify avoids protected message anchor lookup");
-        QFile::remove(fixture->statePath);
-    }
-
-    {
-        auto fixture = createVerificationFixture("client-test-verify-cached-logged-out.json", false);
-        fixture->store.saveMessage(cachedVerifiableMessage(messageId));
-        fixture->messageGateway.verificationResult = Result<BlockchainVerification>::success(testVerification(true));
-        fixture->messageService.verify(messageId);
-        const bool cachedVerifyUsedPublicPath = !fixture->messageGateway.fetchCalled
-            && fixture->messageGateway.verifyCalled
-            && fixture->messageGateway.verifiedAnchor.has_value()
-            && fixture->messageGateway.verifiedAnchor->recordId == EthereumHash::recordIdForMessage(messageId)
-            && fixture->messageGateway.verifiedAnchor->digest == "0xc57d3186dd4d7e03e3437697f65d2e73819a35c6d2a5985874c9759a4422355a"
-            && fixture->fidelityStatus.contains("verified", Qt::CaseInsensitive);
-        expect(cachedVerifyUsedPublicPath, "cached logged-out verify avoids protected message anchor lookup");
+            && fixture->fidelityStatus.contains("pending", Qt::CaseInsensitive);
+        expect(loggedOutVerifyUsesPublicAnchorLookup, "logged-out verify uses public message anchor lookup");
         QFile::remove(fixture->statePath);
     }
 

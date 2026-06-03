@@ -228,6 +228,17 @@ inline const QString RecipientDeletedAt = "recipientDeletedAt";
 inline const QString DeletedAt = "deletedAt";
 inline const QString ReadAt = "readAt";
 inline const QString LocalSenderCopyWirePayloadJson = "localSenderCopyWirePayloadJson";
+inline const QString CachedAnchor = "cachedAnchor";
+inline const QString AnchorId = "anchorId";
+inline const QString AnchorMessageId = "messageId";
+inline const QString AnchorRecordId = "recordId";
+inline const QString AnchorDigest = "digest";
+inline const QString AnchorMerkleRoot = "merkleRoot";
+inline const QString AnchorTransactionHash = "transactionHash";
+inline const QString AnchorContractAddress = "contractAddress";
+inline const QString AnchorChain = "chain";
+inline const QString AnchorStatus = "status";
+inline const QString AnchorAnchoredAt = "anchoredAt";
 }
 
 namespace CryptoText {

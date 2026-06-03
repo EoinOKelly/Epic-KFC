@@ -156,6 +156,19 @@ struct EncryptedPayload {
     std::optional<int> consumedOneTimePreKeyId;
 };
 
+struct BlockchainAnchor {
+    QString id;
+    QString messageId;
+    QString recordId;
+    QString digest;
+    QString merkleRoot;
+    QString transactionHash;
+    QString contractAddress;
+    QString chain;
+    QString status;
+    QString anchoredAt;
+};
+
 struct LocalMessage {
     QString id;
     QString senderUserId;
@@ -173,19 +186,7 @@ struct LocalMessage {
     QString localSenderCopyWirePayloadJson;
     MessageDirection direction{MessageDirection::Received};
     QString createdAtRaw;
-};
-
-struct BlockchainAnchor {
-    QString id;
-    QString messageId;
-    QString recordId;
-    QString digest;
-    QString merkleRoot;
-    QString transactionHash;
-    QString contractAddress;
-    QString chain;
-    QString status;
-    QString anchoredAt;
+    BlockchainAnchor cachedAnchor;
 };
 
 struct BlockchainVerification {

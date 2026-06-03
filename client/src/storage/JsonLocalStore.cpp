@@ -191,11 +191,24 @@ QJsonObject messageToJson(const LocalMessage& message) {
         {StorageKeys::DeletedAt, message.deletedAt},
         {StorageKeys::ReadAt, message.readAt},
         {StorageKeys::LocalSenderCopyWirePayloadJson, message.localSenderCopyWirePayloadJson},
-        {"direction", message.direction == MessageDirection::Sent ? "sent" : "received"}
+        {"direction", message.direction == MessageDirection::Sent ? "sent" : "received"},
+        {StorageKeys::CachedAnchor, QJsonObject{
+            {StorageKeys::AnchorId, message.cachedAnchor.id},
+            {StorageKeys::AnchorMessageId, message.cachedAnchor.messageId},
+            {StorageKeys::AnchorRecordId, message.cachedAnchor.recordId},
+            {StorageKeys::AnchorDigest, message.cachedAnchor.digest},
+            {StorageKeys::AnchorMerkleRoot, message.cachedAnchor.merkleRoot},
+            {StorageKeys::AnchorTransactionHash, message.cachedAnchor.transactionHash},
+            {StorageKeys::AnchorContractAddress, message.cachedAnchor.contractAddress},
+            {StorageKeys::AnchorChain, message.cachedAnchor.chain},
+            {StorageKeys::AnchorStatus, message.cachedAnchor.status},
+            {StorageKeys::AnchorAnchoredAt, message.cachedAnchor.anchoredAt}
+        }}
     };
 }
 
 LocalMessage messageFromJson(const QJsonObject& object) {
+    const QJsonObject anchorObject = object.value(StorageKeys::CachedAnchor).toObject();
     return {
         object.value(StorageKeys::Id).toString(),
         object.value(StorageKeys::SenderUserId).toString(),
@@ -214,7 +227,19 @@ LocalMessage messageFromJson(const QJsonObject& object) {
         object.value(StorageKeys::ReadAt).toString(),
         object.value(StorageKeys::LocalSenderCopyWirePayloadJson).toString(),
         object.value("direction").toString() == "sent" ? MessageDirection::Sent : MessageDirection::Received,
-        object.value(StorageKeys::CreatedAtRaw).toString()
+        object.value(StorageKeys::CreatedAtRaw).toString(),
+        {
+            anchorObject.value(StorageKeys::AnchorId).toString(),
+            anchorObject.value(StorageKeys::AnchorMessageId).toString(),
+            anchorObject.value(StorageKeys::AnchorRecordId).toString(),
+            anchorObject.value(StorageKeys::AnchorDigest).toString(),
+            anchorObject.value(StorageKeys::AnchorMerkleRoot).toString(),
+            anchorObject.value(StorageKeys::AnchorTransactionHash).toString(),
+            anchorObject.value(StorageKeys::AnchorContractAddress).toString(),
+            anchorObject.value(StorageKeys::AnchorChain).toString(),
+            anchorObject.value(StorageKeys::AnchorStatus).toString(),
+            anchorObject.value(StorageKeys::AnchorAnchoredAt).toString()
+        }
     };
 }
 
@@ -586,6 +611,7 @@ Result<bool> JsonLocalStore::saveMessage(const LocalMessage& message) {
     } else {
         const QString previousReadAt = it->readAt;
         const QString previousLocalSenderCopy = it->localSenderCopyWirePayloadJson;
+        const BlockchainAnchor previousCachedAnchor = it->cachedAnchor;
         const QString previousAccessRevokedAt = it->accessRevokedAt;
         const QString previousSenderDeletedAt = it->senderDeletedAt;
         const QString previousRecipientDeletedAt = it->recipientDeletedAt;
@@ -596,6 +622,9 @@ Result<bool> JsonLocalStore::saveMessage(const LocalMessage& message) {
         }
         if (it->localSenderCopyWirePayloadJson.isEmpty()) {
             it->localSenderCopyWirePayloadJson = previousLocalSenderCopy;
+        }
+        if (it->cachedAnchor.digest.isEmpty()) {
+            it->cachedAnchor = previousCachedAnchor;
         }
         it->accessRevokedAt = firstNonEmpty(it->accessRevokedAt, previousAccessRevokedAt);
         it->senderDeletedAt = firstNonEmpty(it->senderDeletedAt, previousSenderDeletedAt);

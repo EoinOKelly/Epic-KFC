@@ -131,7 +131,12 @@ QString canonicalDateTime(const QDateTime& value) {
 
 QString canonicalDateTime(const LocalMessage& message) {
     if (!message.createdAtRaw.isEmpty()) {
-        return message.createdAtRaw;
+        QString raw = message.createdAtRaw;
+        if (raw.endsWith('Z')) {
+            raw.chop(1);
+            raw.append("+00:00");
+        }
+        return raw;
     }
     return canonicalDateTime(message.createdAt);
 }
