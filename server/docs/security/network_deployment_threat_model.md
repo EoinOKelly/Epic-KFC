@@ -19,6 +19,7 @@ Network/deployment evidence for these requirements is:
 - Nginx reverse proxy and edge rate limits: `backend/deploy/nginx/epic-messaging-api.conf`.
 - API systemd service bound to localhost: `backend/deploy/epic-messaging-api.service`.
 - Blockchain worker systemd service: `backend/deploy/epic-messaging-blockchain-worker.service`.
+- C++ client HTTPS enforcement and Qt certificate validation: `client/src/app/StartupConfig.cpp`, `client/src/support/ClientConstants.h`, `client/src/gateways/HttpGateways.cpp`, `client/README.md`.
 - TLS verification utility: `backend/scripts/check_tls_connection.py`.
 - Security header and HTTPS tests: `backend/tests/integration/test_security_headers.py`.
 - Rate-limit tests: `backend/tests/security/test_rate_limit_security.py`, `backend/tests/integration/test_rate_limiting.py`.
@@ -52,6 +53,7 @@ Deployment boundaries:
 | Asset | Security property needed | Deployment location |
 | --- | --- | --- |
 | Public hostname | Authenticity and correct routing | DNS/gateway for `kfc.theburkenator.com` |
+| Subdomain ownership | Authenticity of project service endpoint | `kfc.theburkenator.com` assigned to the team deployment |
 | TLS certificate | Authenticity, validity, expiry control | Provided public gateway |
 | Client requests and responses | Confidentiality and integrity on public internet | HTTPS client to gateway |
 | Gateway-to-VM traffic | Integrity and availability inside provided infrastructure | Internal HTTP hop to VM port `80` |
@@ -95,6 +97,7 @@ Deployment boundaries:
 ## Network Attack Surfaces
 
 - DNS/hostname resolution for `kfc.theburkenator.com`.
+- Subdomain trust for the assigned `kfc.theburkenator.com` endpoint.
 - Public TLS certificate, expiry, and hostname validation.
 - Gateway forwarding to VM port `80`.
 - Nginx request parsing, proxy headers, client body size, and `limit_req` zones.
@@ -111,6 +114,7 @@ Deployment boundaries:
 | STRIDE category | Network/deployment threat | Control | Evidence |
 | --- | --- | --- | --- |
 | Spoofing | Attacker impersonates the backend with a fake hostname or certificate. | Clients connect to `https://kfc.theburkenator.com` and validate certificate chain and hostname. TLS probe verifies deployed certificate metadata. | `check_tls_connection.py`, network architecture doc |
+| Spoofing | Attacker points users at a lookalike domain or wrong subdomain. | The documented and default API base URL is exactly `https://kfc.theburkenator.com/api/v1`; real C++ client mode rejects non-HTTPS API URLs. | `ClientConstants.h`, `StartupConfig.cpp`, client README |
 | Spoofing | Client forges `X-Forwarded-For` or `X-Forwarded-Proto`. | Nginx sets proxy headers itself. Real-IP handling is restricted to trusted gateway addresses. FastAPI trusts forwarded proto only when deployment enables it behind the gateway. | Nginx config, `main.py`, runbook |
 | Tampering | Traffic modified on public internet. | Public HTTPS protects request/response integrity to the gateway. JWT signatures and backend validation detect token/request tampering after delivery. | TLS path docs, token tests, validation tests |
 | Tampering | Operator accidentally exposes Uvicorn or PostgreSQL publicly. | Systemd starts Uvicorn on `127.0.0.1:8000`; PostgreSQL runbook binds DB to `127.0.0.1:5432`; exposed-port checks are documented. | API service file, runbook |
@@ -121,6 +125,77 @@ Deployment boundaries:
 | Elevation of privilege | Direct scanner reaches FastAPI or PostgreSQL and bypasses Nginx controls. | Uvicorn and PostgreSQL bind to localhost; only Nginx is the VM public listener. | service file, runbook exposed-port checks |
 
 ## Detailed Threats
+
+### DNS And Subdomain Trust
+
+Threat: an attacker tricks users into connecting to the wrong host, a lookalike domain, stale DNS data, or an unassigned subdomain instead of the team backend.
+
+Controls:
+
+- The project backend endpoint is documented as `https://kfc.theburkenator.com`.
+- The C++ client default API URL is `https://kfc.theburkenator.com/api/v1`.
+- Real C++ client mode validates that the configured API URL uses the `https` scheme.
+- Certificate hostname validation binds the TLS connection to the hostname the client requested.
+- Deployment evidence uses the same hostname in the TLS probe, runbook smoke tests, and architecture docs.
+
+Evidence:
+
+- `client/src/support/ClientConstants.h`
+- `client/src/app/StartupConfig.cpp`
+- `client/README.md`
+- `backend/scripts/check_tls_connection.py`
+- `docs/architecture/network_architecture.md`
+
+Residual risk:
+
+- DNS and assignment of the `theburkenator.com` subdomain are operational dependencies outside the backend VM. The team evidence uses the exact assigned hostname, not a bare IP address or alternate domain.
+
+### TLS Gateway
+
+Threat: TLS is misconfigured, expired, issued for the wrong hostname, downgraded, or terminated somewhere other than the intended public gateway.
+
+Controls:
+
+- Public clients connect over HTTPS on port `443`.
+- The provided gateway terminates TLS for `kfc.theburkenator.com`.
+- The TLS probe verifies DNS resolution, TCP connection, certificate chain, hostname through SNI, TLS version, cipher suite, subject, issuer, and expiry.
+- FastAPI can enforce HTTPS semantics with `ENFORCE_HTTPS=true` and emits HSTS on HTTPS responses when enabled.
+- The runbook includes public `curl -I https://kfc.theburkenator.com/docs` and TLS probe checks.
+
+Evidence:
+
+- `backend/scripts/check_tls_connection.py`
+- `docs/deployment/runbook.md`
+- `docs/architecture/network_architecture.md`
+- `backend/tests/integration/test_security_headers.py`
+
+Residual risk:
+
+- Certificate renewal and gateway TLS configuration are handled by the provided gateway environment. The backend submission records verification evidence rather than storing certificates in this repository.
+
+### Certificate Verification From The Client
+
+Threat: a client accepts a self-signed, expired, wrong-hostname, or attacker-controlled certificate and sends credentials or tokens to an impostor service.
+
+Controls:
+
+- Real C++ client mode requires an HTTPS API URL and rejects non-HTTPS real-mode configuration.
+- The default client endpoint is `https://kfc.theburkenator.com/api/v1`.
+- The Qt `QNetworkAccessManager` path is used for real HTTP requests.
+- The client connects to `QNetworkReply::sslErrors` for reporting but does not call `ignoreSslErrors()`, so Qt's default certificate validation remains active.
+- TLS handshake failures are mapped to the client's `TlsError` path with the user-facing message that certificate validation or TLS setup needs attention.
+- The client README states that real mode requires HTTPS and does not disable Qt certificate validation.
+
+Evidence:
+
+- `client/src/app/StartupConfig.cpp`
+- `client/src/support/ClientConstants.h`
+- `client/src/gateways/HttpGateways.cpp`
+- `client/README.md`
+
+Residual risk:
+
+- Client certificate validation depends on the operating system and Qt trust store being up to date. A compromised client device can still override trust settings or capture plaintext before encryption.
 
 ### Passive Network Attacker
 
@@ -166,6 +241,53 @@ Evidence:
 Residual risk:
 
 - If the gateway is misconfigured or compromised, forwarded scheme and traffic integrity after TLS termination depend on the provided infrastructure. The runbook documents public TLS and VM-side checks separately.
+
+### Internal HTTP Gateway-To-VM Boundary
+
+Threat: after public TLS termination, traffic from the gateway to the VM travels as internal HTTP and can be exposed or modified if the provided infrastructure path is compromised.
+
+Controls:
+
+- The unencrypted hop is documented as a trust boundary, not hidden as end-to-end TLS.
+- Public internet traffic remains HTTPS up to the gateway.
+- Nginx is the only VM listener for gateway-forwarded traffic.
+- FastAPI treats the gateway/Nginx path as trusted only when `TRUST_X_FORWARDED_PROTO=true` is configured.
+- Application-layer JWT signatures, request validation, object authorization, and end-to-end message encryption still apply after the request reaches FastAPI.
+
+Evidence:
+
+- `docs/architecture/network_architecture.md`
+- `backend/deploy/nginx/epic-messaging-api.conf`
+- `backend/app/main.py`
+- `backend/tests/integration/test_security_headers.py`
+
+Residual risk:
+
+- Confidentiality and integrity on the gateway-to-VM segment depend on the provided internal infrastructure. The final docs state this boundary clearly for marking and interview defence.
+
+### Nginx To FastAPI Boundary
+
+Threat: users bypass Nginx, spoof proxy headers, overwhelm FastAPI directly, or exploit a mismatch between Nginx routing and FastAPI's HTTPS/auth/rate-limit assumptions.
+
+Controls:
+
+- Nginx proxies to the named upstream `127.0.0.1:8000`.
+- The API systemd service binds Uvicorn to `127.0.0.1:8000`.
+- Nginx sets `Host`, `X-Real-IP`, `X-Forwarded-For`, and `X-Forwarded-Proto`.
+- Nginx applies edge `limit_req` controls before Python request handling.
+- FastAPI applies authenticated per-user limits and validates `X-Forwarded-Proto` only when configured for the gateway deployment.
+- The runbook includes checks for Nginx config, Uvicorn local binding, and exposed ports.
+
+Evidence:
+
+- `backend/deploy/nginx/epic-messaging-api.conf`
+- `backend/deploy/epic-messaging-api.service`
+- `backend/app/main.py`
+- `docs/deployment/runbook.md`
+
+Residual risk:
+
+- If an operator starts Uvicorn on `0.0.0.0` or opens port `8000`, clients can bypass Nginx edge controls. The systemd service and deployment checks record the correct local-only state.
 
 ### Direct VM Port Exposure
 
@@ -311,6 +433,7 @@ These checks prove the network/deployment controls without exposing secrets:
 | Control | Evidence command |
 | --- | --- |
 | Public TLS certificate | `.venv/bin/python scripts/check_tls_connection.py kfc.theburkenator.com --port 443` |
+| C++ client HTTPS-only real mode | client startup with `--api-url http://...` fails with the TLS-required configuration error |
 | Nginx active config | `sudo nginx -T | grep -n "server_name\\|proxy_pass\\|listen\\|limit_req"` |
 | Nginx syntax | `sudo nginx -t` |
 | API service bound locally | `sudo systemctl status epic-messaging-api` and `sudo ss -tulpn | grep ':8000'` |

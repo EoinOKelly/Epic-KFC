@@ -150,7 +150,7 @@ class MessageFidelitySubmitter:
         block = self._web3.eth.get_block(receipt["blockNumber"])
         anchored_at = datetime.fromtimestamp(int(block["timestamp"]), UTC)
         return AnchorSubmission(
-            transaction_hash=receipt["transactionHash"].hex(),
+            transaction_hash=_to_0x_hex(receipt["transactionHash"]),
             contract_address=self._contract_address,
             anchored_at=anchored_at,
         )
@@ -258,6 +258,14 @@ def _submission_values(anchor: BlockchainAnchor) -> tuple[str, str]:
         raise ValueError("digest/merkle_root is missing.")
 
     return anchor.record_id, content_hash
+
+
+def _to_0x_hex(value: Any) -> str:
+    """Return a hex string with the Ethereum-style 0x prefix."""
+    hex_value = value.hex()
+    if not hex_value.startswith("0x"):
+        return f"0x{hex_value}"
+    return hex_value
 
 
 async def run_once(
