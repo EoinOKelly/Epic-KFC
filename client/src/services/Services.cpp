@@ -627,14 +627,10 @@ void MessageService::verify(const QString& messageId) {
     const bool loggedIn = m_sessionService.isLoggedIn();
     const QString accessToken = loggedIn ? m_sessionService.accessToken() : QString();
 
-    m_messageGateway.fetchMessageAnchor(accessToken, messageId, [this, accessToken, loggedIn, messageId](Result<BlockchainAnchor> anchorResult) {
+    m_messageGateway.fetchMessageAnchor(accessToken, messageId, [this, accessToken, messageId](Result<BlockchainAnchor> anchorResult) {
         if (anchorResult.failed()) {
             if (anchorResult.error().code == ErrorCode::NotFound) {
                 emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorUnavailable).arg(messageId));
-                return;
-            }
-            if (!loggedIn && anchorResult.error().code == ErrorCode::AuthRequired) {
-                emit m_events.fidelityStatusUpdated(messageId, QString(AppText::AnchorLookupRequiresLogin).arg(messageId));
                 return;
             }
             emit m_events.commandFailed(anchorResult.error());

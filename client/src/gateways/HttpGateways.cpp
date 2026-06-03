@@ -589,8 +589,8 @@ void HttpMessageGateway::deleteMessage(const QString& accessToken, const QString
     });
 }
 
-void HttpMessageGateway::fetchMessageAnchor(const QString& accessToken, const QString& messageId, GatewayCallback<BlockchainAnchor> callback) {
-    m_client.get(messagePath(QString("/%1/anchor").arg(messageId)), accessToken, [this, callback = std::move(callback)](Result<QJsonDocument> result) mutable {
+void HttpMessageGateway::fetchMessageAnchor(const QString&, const QString& messageId, GatewayCallback<BlockchainAnchor> callback) {
+    m_client.get(messagePath(QString("/%1/anchor").arg(messageId)), QString(), [this, callback = std::move(callback)](Result<QJsonDocument> result) mutable {
         if (result.failed()) {
             callback(Result<BlockchainAnchor>::failure(result.error()));
             return;
@@ -599,7 +599,7 @@ void HttpMessageGateway::fetchMessageAnchor(const QString& accessToken, const QS
     });
 }
 
-void HttpMessageGateway::verifyAnchor(const QString& accessToken, const BlockchainAnchor& anchor, GatewayCallback<BlockchainVerification> callback) {
+void HttpMessageGateway::verifyAnchor(const QString&, const BlockchainAnchor& anchor, GatewayCallback<BlockchainVerification> callback) {
     QJsonObject body{
         {"digest", anchor.digest},
         {"record_id", anchor.recordId},
@@ -607,7 +607,7 @@ void HttpMessageGateway::verifyAnchor(const QString& accessToken, const Blockcha
         {"transaction_hash", anchor.transactionHash.isEmpty() ? QJsonValue::Null : QJsonValue(anchor.transactionHash)},
         {"chain", anchor.chain}
     };
-    m_client.post(blockchainPath("/verify"), accessToken, body, [this, callback = std::move(callback)](Result<QJsonDocument> result) mutable {
+    m_client.post(blockchainPath("/verify"), QString(), body, [this, callback = std::move(callback)](Result<QJsonDocument> result) mutable {
         if (result.failed()) {
             callback(Result<BlockchainVerification>::failure(result.error()));
             return;
