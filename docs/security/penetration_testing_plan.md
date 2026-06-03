@@ -72,6 +72,157 @@ This plan tests the secure messaging project as an integrated system. The aim is
 | Dependency risk | Backend, client, blockchain | Run dependency scanners | Known vulnerabilities are fixed or documented |
 | Logging | Backend, worker, client | Trigger errors and inspect logs | Logs do not expose tokens, private keys, passwords, or plaintext messages |
 
+## Client-Driven End-To-End Demo Flow
+
+This is the primary evidence path for the demo. Drive the system from the C++ client and use screenshots from the client, database, worker logs, Sepolia transaction pages, and verification UI as proof.
+
+### Setup Checks
+
+Run these before recording evidence:
+
+```bash
+cd /home/student/epic_project/Epic-KFC/server/backend
+source .venv/bin/activate
+docker port epic-postgres 5432
+alembic current
+curl -I https://kfc.theburkenator.com/docs
+```
+
+Expected:
+
+- `docker port epic-postgres 5432` returns `127.0.0.1:5432`, not `0.0.0.0:5432`.
+- Alembic reports the latest migration.
+- The public `/docs` endpoint is reachable over HTTPS without certificate errors.
+
+### Client Flow
+
+Use two test users, for example `aliceDemo` and `bobDemo`, on the real HTTPS backend.
+
+1. Start the C++ client in real mode with the public HTTPS URL.
+2. Register or log in as `aliceDemo`.
+3. Confirm device keys upload successfully.
+4. Register or log in as `bobDemo` in a second client/session/device.
+5. Confirm device keys and one-time prekeys upload successfully.
+6. From `aliceDemo`, run `/trust bobDemo` if the client requires trust before sending.
+7. Send a message from `aliceDemo` to `bobDemo`.
+8. From `bobDemo`, run `/inbox` and `/read aliceDemo`; confirm the message decrypts.
+9. Reply from `bobDemo` to `aliceDemo`.
+10. Forward one accessible message to the other user with `/forward <messageId> <username>`.
+11. Run `/verify <messageId>` for at least one message after the worker confirms its anchor.
+12. Open the standalone verification UI and verify the same message/digest/transaction evidence.
+13. Logout and try an authenticated command; confirm the client/backend reject it.
+
+Expected:
+
+- Client uses `https://kfc.theburkenator.com/api/v1`.
+- HTTP URLs are rejected in real mode.
+- The backend returns `201` for send/forward and `200` for successful reads/verifications.
+- The receiver can decrypt; the server/database cannot show plaintext.
+- Blockchain anchor starts pending and later becomes confirmed with a Sepolia transaction hash.
+- Verification passes for matching evidence and fails for tampered content/digest.
+
+### Failure Checks From The Client
+
+Run these during or after the happy path:
+
+| Test | Client action | Expected result |
+| --- | --- | --- |
+| Invalid login | Wrong password | Clear auth failure, no token stored |
+| Missing auth | Logout then `/inbox` | Command fails or backend returns `401` |
+| Wrong user access | User A verifies/downloads/deletes User B-only message ID | `404` or `403`; no plaintext |
+| Invalid forward | Forward a non-existent or uncached message ID | Client shows failure; backend does not create a row |
+| Backend/DB outage | Stop backend or DB, then send/forward | Client shows network/server error, not silent success |
+| Bad transaction hash | Verification UI input with wrong length/non-hex hash | Validation failure |
+| Tampered verification | Change one character in verified content/digest | Verification reports mismatch |
+
+## Screenshot Evidence Pack
+
+Capture screenshots with timestamps or command prompts visible. Do not include private keys, wallet seed phrases, API keys, JWTs, refresh tokens, real passwords, or `.env` contents.
+
+| Screenshot | Evidence shown | Rubric value |
+| --- | --- | --- |
+| Client startup | Real mode uses `https://kfc.theburkenator.com/api/v1` | SSL/TLS protected frontend connection |
+| Browser or `curl -I` public URL | HTTPS virtual host reachable without certificate error | Secure connectivity and certificate validity |
+| Client register/login | Authenticated user flow | Server-side authentication |
+| Client send/read | Receiver decrypts, sender/receiver workflow works end to end | Functional secure messaging |
+| Client failed invalid auth/access | Invalid credentials or cross-user message blocked | Broken authentication/access control checked |
+| Client `/forward` result | Forward creates a new message ID or clear failure | Message workflow and error handling |
+| Client `/verify` result | Confirmed anchor verifies successfully | Blockchain fidelity proof |
+| Verification UI success/failure | Matching evidence passes and tampered evidence fails | Integrity verification |
+| PostgreSQL `messages` query | Message rows contain `wire_payload_json`, not plaintext body columns | Sensitive data exposure and confidentiality |
+| PostgreSQL `blockchain_anchors` query | `status`, `record_id`, `digest`, `transaction_hash`, `anchored_at` | Database evidence for blockchain anchor |
+| Sepolia explorer transaction | Same `0x...` transaction hash as DB | External transaction hash evidence |
+| Worker log | Pending anchor processed to confirmed or failed safely | Blockchain worker behaviour |
+| Backend unit test output | Unit tests passed | Implemented controls tested |
+| Backend security/static scan output | `ruff`, `bandit`, `pip-audit` results | Vulnerable components and secure coding evidence |
+
+Useful database screenshot queries:
+
+```bash
+docker exec -it epic-postgres psql -U secure_app_user -d secure_messages -c "SELECT id, sender_user_id, recipient_user_id, created_at, left(wire_payload_json, 80) AS encrypted_preview FROM messages ORDER BY created_at DESC LIMIT 10;"
+```
+
+```bash
+docker exec -it epic-postgres psql -U secure_app_user -d secure_messages -c "SELECT message_id, record_id, digest, status, transaction_hash, contract_address, chain_id, anchored_at FROM blockchain_anchors ORDER BY created_at DESC LIMIT 10;"
+```
+
+```bash
+docker exec -it epic-postgres psql -U secure_app_user -d secure_messages -c "SELECT message_id, transaction_hash FROM blockchain_anchors WHERE transaction_hash IS NOT NULL AND transaction_hash !~ '^0x[0-9a-fA-F]{64}$';"
+```
+
+Expected result for the final query: no rows.
+
+## Backend Unit Test Evidence
+
+Assume the backend unit tests pass and include the terminal screenshot/output in the final evidence pack. Do not re-run destructive database tests during the demo unless the test database is known-good.
+
+Run from `server/backend`:
+
+```bash
+source .venv/bin/activate
+pytest tests/unit -q
+```
+
+| Unit test file | Controls covered | Rubric points supported |
+| --- | --- | --- |
+| `tests/unit/test_password_service.py` | Argon2id PHC hashes, random salts, password verification, malformed hash safety, rehash detection | Secure coding, passwords not visible, hashes protected |
+| `tests/unit/test_token_service.py` | JWT claims, expiry, malformed/wrong-signature/wrong-type rejection, refresh-token entropy, HMAC refresh-token hashes, algorithm pinning | Broken authentication, cryptographic issues, sensitive data exposure |
+| `tests/unit/test_rate_limit.py` | Fixed-window limits, retry-after, per-user/per-IP key separation, disabled limiter behaviour, state clearing | API abuse, brute-force mitigation |
+| `tests/unit/test_wire_payload_validation.py` | LibSignal wire payload shape, missing body rejection, legacy payload rejection, forbidden plaintext key rejection | Improper input validation, sensitive data exposure, cryptographic boundary |
+| `tests/unit/test_tls_connection_probe.py` | Hostname resolution helper, duplicate address handling, empty resolution failure, certificate-name formatting | Network coding, host-name resolution, TLS evidence |
+| `tests/unit/test_blockchain_anchor_service.py` | Deterministic `bytes32` record IDs, stable digest derivation, digest changes on ciphertext/provenance changes | Blockchain integrity and tamper evidence |
+
+Additional backend evidence, assuming current suites pass:
+
+- `pytest tests/security -vv` covers auth attacks, access control, validation, injection, sensitive-data leakage, and rate limiting.
+- `pytest tests/integration/test_security_headers.py -q` covers security headers, HSTS, HTTPS enforcement, trusted proxy signalling, CORS hardening, and production secret validation.
+- `bandit -q -r app scripts` covers Python static security review.
+- `pip-audit` and `pip-audit -r requirements.txt` cover vulnerable Python components.
+
+## Rubric Coverage Matrix
+
+| Brief/rubric area | Evidence to show | Coverage level |
+| --- | --- | --- |
+| Secure connectivity between client and server | Client real mode HTTPS URL, public `/docs` HTTPS screenshot, TLS probe output | Covered |
+| Client verifies SSL certificate | Qt real mode without disabled certificate validation; browser/curl no certificate error; optional TLS probe | Covered, explain Qt uses platform CA validation |
+| Server-side security and authentication | Login/logout screenshots, JWT/auth unit tests, auth security tests | Covered |
+| Users authenticated and authorised | Cross-user access failure, `/auth/me`, message read/verify ownership checks | Covered |
+| Vulnerability/pentest report | This plan plus screenshots and test outputs | Covered |
+| Network architecture documentation | `docs/architecture/network_architecture.md`, DB binding screenshot, Nginx/gateway notes | Covered |
+| External services documented | PostgreSQL, Sepolia, worker, virtual host/gateway documented | Covered |
+| Frontend creates SSL protected connection to virtual host | Client startup and public HTTPS screenshots | Covered |
+| Backend accepts and processes requests | `/docs`, auth, send/read/forward/verify screenshots and backend logs | Covered |
+| Resolve host names/open socket connections | TLS probe unit test and script; C++ client uses Qt network stack | Partially covered; excellent answer should explain Qt/libcurl-style abstraction or show low-level socket demo |
+| Partial reads/writes/error return values | Client HTTP gateway error handling screenshots; code review of `QNetworkReply` paths | Partially covered unless a low-level socket demo is added |
+| Improper input validation | Invalid UUID/hash/payload screenshots; wire payload unit tests | Covered |
+| Broken authentication | Bad login, expired/wrong JWT tests | Covered |
+| Broken access control | Cross-user message/verify attempts rejected | Covered |
+| Cryptographic issues | Argon2id, HMAC refresh hashes, LibSignal payload validation, OpenSSL-backed client crypto tests | Covered |
+| Injection | Security tests and SQLAlchemy repository review | Covered |
+| Security misconfiguration | Localhost DB/backend bindings, CORS/HSTS/HTTPS config tests, dependency scans | Covered |
+| Sensitive data exposure | DB screenshots show ciphertext only; audit/log checks; no plaintext/private keys in screenshots | Covered |
+| Vulnerable components | `pip-audit`, `npm audit`, dependency screenshots | Covered if recorded immediately before submission |
+
 ## Backend Commands
 
 Run from `server/backend`:
@@ -224,4 +375,3 @@ The project passes this penetration testing plan when:
 - Verification succeeds only for matching content/digests.
 - Dependency and static-analysis issues are fixed or clearly documented.
 - Remaining limitations are stated honestly in the final submission material.
-

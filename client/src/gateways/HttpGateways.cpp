@@ -589,8 +589,8 @@ void HttpMessageGateway::deleteMessage(const QString& accessToken, const QString
     });
 }
 
-void HttpMessageGateway::fetchMessageAnchor(const QString& accessToken, const QString& messageId, GatewayCallback<BlockchainAnchor> callback) {
-    m_client.get(messagePath(QString("/%1/anchor").arg(messageId)), accessToken, [this, callback = std::move(callback)](Result<QJsonDocument> result) mutable {
+void HttpMessageGateway::fetchMessageAnchor(const QString&, const QString& messageId, GatewayCallback<BlockchainAnchor> callback) {
+    m_client.get(messagePath(QString("/%1/anchor").arg(messageId)), QString(), [this, callback = std::move(callback)](Result<QJsonDocument> result) mutable {
         if (result.failed()) {
             callback(Result<BlockchainAnchor>::failure(result.error()));
             return;
@@ -599,7 +599,7 @@ void HttpMessageGateway::fetchMessageAnchor(const QString& accessToken, const QS
     });
 }
 
-void HttpMessageGateway::verifyAnchor(const QString& accessToken, const BlockchainAnchor& anchor, GatewayCallback<BlockchainVerification> callback) {
+void HttpMessageGateway::verifyAnchor(const QString&, const BlockchainAnchor& anchor, GatewayCallback<BlockchainVerification> callback) {
     QJsonObject body{
         {"digest", anchor.digest},
         {"record_id", anchor.recordId},
@@ -607,7 +607,7 @@ void HttpMessageGateway::verifyAnchor(const QString& accessToken, const Blockcha
         {"transaction_hash", anchor.transactionHash.isEmpty() ? QJsonValue::Null : QJsonValue(anchor.transactionHash)},
         {"chain", anchor.chain}
     };
-    m_client.post(blockchainPath("/verify"), accessToken, body, [this, callback = std::move(callback)](Result<QJsonDocument> result) mutable {
+    m_client.post(blockchainPath("/verify"), QString(), body, [this, callback = std::move(callback)](Result<QJsonDocument> result) mutable {
         if (result.failed()) {
             callback(Result<BlockchainVerification>::failure(result.error()));
             return;
@@ -649,7 +649,8 @@ QJsonObject HttpMessageGateway::sendBodyFor(const LocalMessage& draft, std::opti
 }
 
 LocalMessage HttpMessageGateway::messageFromJson(const QJsonObject& object, MessageDirection direction) const {
-    return {
+    const QString createdAt = object.value("created_at").toString();
+    LocalMessage message{
         object.value("id").toString(),
         object.value("sender_user_id").toString(),
         object.value("sender_device_id").toInt(),
@@ -659,7 +660,7 @@ LocalMessage HttpMessageGateway::messageFromJson(const QJsonObject& object, Mess
         object.value("consumed_one_time_prekey_id").isDouble()
             ? std::optional<int>(object.value("consumed_one_time_prekey_id").toInt())
             : std::nullopt,
-        QDateTime::fromString(object.value("created_at").toString(), Qt::ISODateWithMs),
+        QDateTime::fromString(createdAt, Qt::ISODateWithMs),
         object.value("access_revoked_at").toString(),
         object.value("sender_deleted_at").toString(),
         object.value("recipient_deleted_at").toString(),
@@ -668,6 +669,8 @@ LocalMessage HttpMessageGateway::messageFromJson(const QJsonObject& object, Mess
         {},
         direction
     };
+    message.createdAtRaw = createdAt;
+    return message;
 }
 
 MessageList HttpMessageGateway::messageListFromJson(const QJsonArray& array, MessageDirection direction) const {

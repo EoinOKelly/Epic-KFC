@@ -7,6 +7,8 @@
 
 #include <QObject>
 
+#include <set>
+
 class SessionService : public QObject {
     Q_OBJECT
 
@@ -71,14 +73,14 @@ public:
     void forward(const QString& messageId, const QString& recipientUsername);
     void revoke(const QString& messageId);
     void deleteMessage(const QString& messageId);
-    void download(const QString& messageId, const QString& path);
+    void download(const QString& messageId);
     void verify(const QString& messageId);
 
 private:
     bool requireSession();
     std::optional<OneTimePreKey> oneTimePreKeyFor(const LocalMessage& message) const;
-    void saveAndEmitList(const MessageList& messages);
     void saveMessages(const MessageList& messages);
+    void saveAndReconcileMessages(const MessageList& messages, MessageDirection direction);
     void openConversationFromCache(const UserAddress& address, const QString& username, int page);
     void sendToAddress(const UserAddress& recipientAddress, const QString& plaintext);
     void forwardToAddress(const QString& messageId, const UserAddress& recipientAddress);
@@ -86,6 +88,7 @@ private:
     Result<QString> createLocalSenderCopy(const DeviceKeyMaterial& device, const QString& plaintext);
     Result<QString> decryptForCurrentUser(const DeviceKeyMaterial& device, const LocalMessage& message);
     LocalMessage draftFor(const QString& recipientUserId, int recipientDeviceId, const QString& wirePayloadJson) const;
+    void verifyPublicAnchor(const QString& messageId, const BlockchainAnchor& anchor);
 
     EventBus& m_events;
     IMessageGateway& m_messageGateway;
