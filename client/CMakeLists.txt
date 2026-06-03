@@ -135,6 +135,11 @@ target_link_libraries(${PROJECT_NAME}
         Qt::Network
 )
 
+set_target_properties(${PROJECT_NAME}
+    PROPERTIES
+        VS_DEBUGGER_COMMAND_ARGUMENTS "$<$<CONFIG:Debug>:--debug-errors>"
+)
+
 option(CLIENT_BUILD_TESTS "Build the Qt console client tests" ON)
 
 if(CLIENT_BUILD_TESTS)
