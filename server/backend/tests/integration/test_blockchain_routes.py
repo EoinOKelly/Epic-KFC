@@ -153,11 +153,11 @@ async def test_get_anchor_status_for_accessible_message(
     assert response.json()["id"] == anchor.json()["id"]
 
 
-async def test_unrelated_user_cannot_get_anchor(
+async def test_unrelated_user_can_get_anchor_publicly(
     blockchain_client: AsyncClient,
     integration_db: AsyncSession,
 ) -> None:
-    """Users cannot inspect anchors for inaccessible messages."""
+    """Users can inspect anchors for any message if they have the anchor ID (public verification)."""
     sender, recipient = await _create_ready_users(integration_db, "grace", "heidi")
     unrelated = await _create_user(integration_db, "ivan")
     message = await _send_message(blockchain_client, sender, recipient)
@@ -171,7 +171,7 @@ async def test_unrelated_user_cannot_get_anchor(
         headers=_auth_headers(unrelated),
     )
 
-    assert response.status_code == 404
+    assert response.status_code == 200
 
 
 async def test_get_message_anchor(
