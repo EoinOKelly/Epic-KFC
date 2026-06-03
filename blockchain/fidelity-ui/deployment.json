@@ -1,9 +1,11 @@
 {
   "network": "sepolia",
   "chainId": 11155111,
-  "contractAddress": "0x69d3D7D9E50141faef9AC957D6450a4ccb37c404",
-  "messageFidelityAddress": "0x69d3D7D9E50141faef9AC957D6450a4ccb37c404",
-  "deployedAt": "2026-06-01T19:11:25.780Z",
+  "contractAddress": "0xcB3EE0E96aCC28c1C606c7598Cf859E8FAD5Faaf",
+  "messageFidelityAddress": "0xcB3EE0E96aCC28c1C606c7598Cf859E8FAD5Faaf",
+  "deployedAt": "2026-06-03T11:04:37.461Z",
   "deployer": "0x925029Bab37aB27BE775A05524C58b619DE43899",
-  "envHint": "Set MESSAGE_FIDELITY_ADDRESS in blockchain/.env"
+  "owner": "0x925029Bab37aB27BE775A05524C58b619DE43899",
+  "contractVersion": "owner-write-once-v1",
+  "envHint": "MESSAGE_FIDELITY_ADDRESS in .env; anchors need owner DEPLOYER_PRIVATE_KEY"
 }

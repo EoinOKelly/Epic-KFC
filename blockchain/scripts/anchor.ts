@@ -1,6 +1,9 @@
 import { ethers } from "hardhat";
 import { hashMessageLeaf } from "../src/merkle";
-import { buildConversationMerkleTree, deriveConversationRecordId } from "../src/conversation";
+import {
+  buildConversationMerkleTree,
+  deriveConversationSegmentRecordId,
+} from "../src/conversation";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -21,10 +24,15 @@ async function main() {
     );
   }
 
-  const recordId = deriveConversationRecordId(userA, userB);
-  const tree = buildConversationMerkleTree([
+  const messages = [
     { messageId, plaintext: message, createdAt: new Date().toISOString() },
-  ]);
+  ];
+  const tree = buildConversationMerkleTree(messages);
+  const recordId = deriveConversationSegmentRecordId(
+    userA,
+    userB,
+    String(messages.length)
+  );
 
   const fidelity = await ethers.getContractAt("MessageFidelity", contractAddress);
   const tx = await fidelity.storeHash(recordId, tree.root);

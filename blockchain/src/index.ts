@@ -1,7 +1,7 @@
 import { anchorClientFromEnv, createAnchorClient, MessageFidelityClient } from "./anchorClient";
 import {
   buildConversationMerkleTree,
-  deriveConversationRecordId,
+  deriveConversationSegmentRecordId,
   type AnchoredMessage,
 } from "./conversation";
 import { hashMessageLeaf, verifyMerkleProof, type Hex32 } from "./merkle";
@@ -16,6 +16,7 @@ export {
 
 export {
   deriveConversationRecordId,
+  deriveConversationSegmentRecordId,
   buildConversationMerkleTree,
   type AnchoredMessage,
 } from "./conversation";
@@ -42,11 +43,12 @@ export async function anchorConversationOnChain(
   userIdA: string,
   userIdB: string,
   messages: AnchoredMessage[],
-  client?: MessageFidelityClient
+  options?: { segmentKey?: string; client?: MessageFidelityClient }
 ): Promise<AnchorConversationResult> {
-  const anchorClient = client ?? anchorClientFromEnv();
+  const anchorClient = options?.client ?? anchorClientFromEnv();
   const { root } = buildConversationMerkleTree(messages);
-  const recordId = deriveConversationRecordId(userIdA, userIdB);
+  const segmentKey = options?.segmentKey ?? String(messages.length);
+  const recordId = deriveConversationSegmentRecordId(userIdA, userIdB, segmentKey);
   const chain = await anchorClient.anchorMerkleRoot(recordId, root);
 
   return {
@@ -70,10 +72,12 @@ export async function verifyMessageOnChain(
   userIdB: string,
   allMessagesInConversation: AnchoredMessage[],
   messageIdToVerify: string,
-  client?: MessageFidelityClient
+  options?: { segmentKey?: string; client?: MessageFidelityClient }
 ): Promise<VerifyMessageResult> {
-  const anchorClient = client ?? anchorClientFromEnv();
-  const recordId = deriveConversationRecordId(userIdA, userIdB);
+  const anchorClient = options?.client ?? anchorClientFromEnv();
+  const segmentKey =
+    options?.segmentKey ?? String(allMessagesInConversation.length);
+  const recordId = deriveConversationSegmentRecordId(userIdA, userIdB, segmentKey);
   const tree = buildConversationMerkleTree(allMessagesInConversation);
   const target = allMessagesInConversation.find((m) => m.messageId === messageIdToVerify);
   if (!target) {

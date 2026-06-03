@@ -2,6 +2,7 @@ import { Contract, JsonRpcProvider, Wallet, type ContractTransactionResponse } f
 import type { Hex32 } from "./merkle";
 
 export const MESSAGE_FIDELITY_ABI = [
+  "function owner() view returns (address)",
   "function storeHash(bytes32 recordId, bytes32 contentHash)",
   "function getHash(bytes32 recordId) view returns (bytes32 contentHash, uint256 anchoredAt)",
   "function hasRecord(bytes32 recordId) view returns (bool)",

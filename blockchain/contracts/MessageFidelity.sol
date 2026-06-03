@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-// Stores Merkle roots of message digests — plaintext stays off-chain.
+// Merkle roots on-chain; owner write-once per recordId.
 contract MessageFidelity {
     struct FidelityRecord {
         bytes32 contentHash;
         uint256 anchoredAt;
     }
+
+    address public immutable owner;
 
     mapping(bytes32 => FidelityRecord) private _records;
 
@@ -17,8 +19,21 @@ contract MessageFidelity {
     );
 
     error RecordNotFound(bytes32 recordId);
+    error UnauthorizedWriter(address caller);
+    error RecordAlreadyAnchored(bytes32 recordId);
+
+    constructor() {
+        owner = msg.sender;
+    }
 
     function storeHash(bytes32 recordId, bytes32 contentHash) external {
+        if (msg.sender != owner) {
+            revert UnauthorizedWriter(msg.sender);
+        }
+        if (_records[recordId].anchoredAt != 0) {
+            revert RecordAlreadyAnchored(recordId);
+        }
+
         uint256 now_ = block.timestamp;
         _records[recordId] = FidelityRecord({
             contentHash: contentHash,

@@ -53,6 +53,11 @@ function deriveConversationRecordId(userIdA, userIdB) {
   return ethers.id(`direct:${sorted[0]}:${sorted[1]}`);
 }
 
+function deriveConversationSegmentRecordId(userIdA, userIdB, segmentKey) {
+  const sorted = [userIdA, userIdB].sort();
+  return ethers.id(`direct:${sorted[0]}:${sorted[1]}:segment:${segmentKey}`);
+}
+
 function buildConversationMerkleTree(messages) {
   const ordered = [...messages].sort((a, b) => {
     if (a.createdAt && b.createdAt && a.createdAt !== b.createdAt) {
@@ -80,4 +85,5 @@ window.MerkleBrowser = {
   hashMessageLeaf,
   buildConversationMerkleTree,
   deriveConversationRecordId,
+  deriveConversationSegmentRecordId,
 };

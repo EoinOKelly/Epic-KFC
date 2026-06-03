@@ -4,7 +4,7 @@ const crypto = require("../../cryptography/dist/signal");
 const wire = require("../../cryptography/dist/wireFormat");
 const {
   buildConversationMerkleTree,
-  deriveConversationRecordId,
+  deriveConversationSegmentRecordId,
   anchorConversationOnChain,
   verifyMessageOnChain,
   createAnchorClient,
@@ -114,7 +114,7 @@ async function main() {
 
   log("2", "Alice → Bob message");
   await crypto.establishSession(aliceDevice, bobBundle, bobUserId, DEVICE_ID);
-  const plaintext1 = "hello bob — merkle anchor test";
+  const plaintext1 = "hello bob merkle anchor test";
   const wire1 = await crypto.encryptForRecipient(aliceDevice, bobUserId, DEVICE_ID, plaintext1);
   const sent1 = await api("/messages", {
     method: "POST",
@@ -129,7 +129,7 @@ async function main() {
   });
 
   log("3", "Bob reply");
-  const replyText = "hello alice — reply for merkle tree";
+  const replyText = "hello alice reply for merkle tree";
   const replyWire = await crypto.encryptForRecipient(bobDevice, aliceUserId, DEVICE_ID, replyText);
   const sent2 = await api("/messages", {
     method: "POST",
@@ -149,7 +149,14 @@ async function main() {
 
   log("4", "Build Merkle tree (off-chain)");
   const tree = buildConversationMerkleTree(conversationMessages);
-  console.log("  recordId:", deriveConversationRecordId(aliceUserId, bobUserId));
+  console.log(
+    "  recordId:",
+    deriveConversationSegmentRecordId(
+      aliceUserId,
+      bobUserId,
+      String(conversationMessages.length)
+    )
+  );
   console.log("  merkleRoot:", tree.root);
   console.log("  leaves:", tree.leaves.length);
 
@@ -160,7 +167,7 @@ async function main() {
   log("merkle", "local proof OK for first message");
 
   if (SKIP_CHAIN) {
-    console.log("\nSKIP_BLOCKCHAIN=1 — skipping Sepolia tx");
+    console.log("\nSKIP_BLOCKCHAIN=1, skipping Sepolia tx");
     return;
   }
 
@@ -187,10 +194,10 @@ async function main() {
     client
   );
   if (!verify.pass) throw new Error("On-chain Merkle verification failed");
-  log("verify", "Pass — message proven in anchored history");
+  log("verify", "on-chain proof OK");
 
   console.log("\n" + "=".repeat(60));
-  console.log("E2E OK — Merkle root anchored + proof verified");
+  console.log("E2E OK: Merkle root anchored");
   console.log("=".repeat(60));
 }
 

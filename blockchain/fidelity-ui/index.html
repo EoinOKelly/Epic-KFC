@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Message Fidelity — Merkle</title>
+  <title>Message Fidelity (Merkle)</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -36,12 +36,18 @@
     </section>
 
     <section class="field">
+      <label for="segmentKey">Segment key</label>
+      <input id="segmentKey" type="text" placeholder="e.g. 2 (message count in anchored batch)" />
+      <span class="hint">Must match the segment used when anchoring. Defaults to the message count in the JSON list.</span>
+    </section>
+
+    <section class="field">
       <label for="messagesJson">Messages JSON</label>
       <textarea id="messagesJson" rows="8" spellcheck="false">[
   { "messageId": "uuid-1", "plaintext": "hello", "createdAt": "2026-01-01T00:00:00.000Z" },
   { "messageId": "uuid-2", "plaintext": "world", "createdAt": "2026-01-01T00:01:00.000Z" }
 ]</textarea>
-      <span class="hint">Array of <code>{ messageId, plaintext, createdAt? }</code> — same format as <code>anchorConversationOnChain</code>.</span>
+      <span class="hint">Same shape as <code>anchorConversationOnChain</code>: <code>{ messageId, plaintext, createdAt? }</code>.</span>
     </section>
 
     <section class="field">

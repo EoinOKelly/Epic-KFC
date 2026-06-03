@@ -14,7 +14,9 @@ async function main() {
   await contract.waitForDeployment();
 
   const address = await contract.getAddress();
+  const contractOwner = await contract.owner();
   console.log("MessageFidelity deployed to:", address);
+  console.log("Contract owner (only this address may storeHash):", contractOwner);
 
   const artifactPath = path.join(
     __dirname,
@@ -38,7 +40,9 @@ async function main() {
     messageFidelityAddress: address,
     deployedAt: new Date().toISOString(),
     deployer: deployer.address,
-    envHint: "Set MESSAGE_FIDELITY_ADDRESS in blockchain/.env",
+    owner: contractOwner,
+    contractVersion: "owner-write-once-v1",
+    envHint: "MESSAGE_FIDELITY_ADDRESS in .env; anchors need owner DEPLOYER_PRIVATE_KEY",
   };
 
   fs.writeFileSync(

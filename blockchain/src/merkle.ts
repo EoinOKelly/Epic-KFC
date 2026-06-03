@@ -9,7 +9,7 @@ export function hashMessageLeaf(messageId: string, plaintext: string): Hex32 {
   ) as Hex32;
 }
 
-// Sorted pair hash — must match MessageFidelity.sol
+// must match MessageFidelity.sol
 export function hashPair(left: Hex32, right: Hex32): Hex32 {
   const a = left.toLowerCase() as Hex32;
   const b = right.toLowerCase() as Hex32;

@@ -9,14 +9,14 @@ function setResult(pass, title, detail) {
   const el = $("result");
   el.classList.remove("hidden", "pass", "fail");
   el.classList.add(pass ? "pass" : "fail");
-  el.textContent = pass ? `Pass — ${title}` : `Fail — ${title}`;
+  el.textContent = pass ? `Pass: ${title}` : `Fail: ${title}`;
   if (detail) $("debugOut").textContent = detail;
 }
 
 async function loadDeploymentFile() {
   try {
     const res = await fetch("./deployment.json");
-    if (!res.ok) throw new Error("deployment.json not found — run npm run deploy:sepolia");
+    if (!res.ok) throw new Error("deployment.json not found; run npm run deploy:sepolia");
     const data = await res.json();
     $("contractAddress").value = data.contractAddress ?? "";
     const el = $("result");
@@ -24,7 +24,7 @@ async function loadDeploymentFile() {
     el.style.background = "rgba(61, 139, 253, 0.12)";
     el.style.border = "1px solid var(--accent)";
     el.style.color = "var(--text)";
-    el.textContent = "Deployment loaded — set RPC URL and verify.";
+    el.textContent = "Deployment loaded. Set RPC URL and verify.";
     $("debugOut").textContent = JSON.stringify(data, null, 2);
   } catch (err) {
     setResult(false, "Could not load deployment.json", String(err));
@@ -62,7 +62,12 @@ async function verifyMerkleFidelity() {
 
   try {
     const tree = MerkleBrowser.buildConversationMerkleTree(messages);
-    const recordId = MerkleBrowser.deriveConversationRecordId(userA, userB);
+    const segmentKey = $("segmentKey").value.trim() || String(messages.length);
+    const recordId = MerkleBrowser.deriveConversationSegmentRecordId(
+      userA,
+      userB,
+      segmentKey
+    );
     const leaf = MerkleBrowser.hashMessageLeaf(target.messageId, target.plaintext);
     const proof = tree.getProofForMessage(verifyMessageId);
 

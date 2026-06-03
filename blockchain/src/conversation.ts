@@ -15,6 +15,17 @@ export function deriveConversationRecordId(
   return ethers.id(`direct:${sorted[0]}:${sorted[1]}`) as Hex32;
 }
 
+export function deriveConversationSegmentRecordId(
+  userIdA: string,
+  userIdB: string,
+  segmentKey: string
+): Hex32 {
+  const sorted = [userIdA, userIdB].sort();
+  return ethers.id(
+    `direct:${sorted[0]}:${sorted[1]}:segment:${segmentKey}`
+  ) as Hex32;
+}
+
 export function buildConversationMerkleTree(messages: AnchoredMessage[]) {
   if (messages.length === 0) {
     throw new Error("Conversation must contain at least one message");
